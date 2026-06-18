@@ -30,6 +30,7 @@ class UsersRepository {
     required String email,
     required String phone,
     required String pixKey,
+    required String password,
     required bool admin,
   }) async {
     final response = await dio.post<Map<String, dynamic>>(
@@ -40,6 +41,7 @@ class UsersRepository {
         'email': email,
         'phone': phone,
         'pixKey': pixKey,
+        'password': password,
         'admin': admin,
       },
     );

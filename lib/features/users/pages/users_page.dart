@@ -37,7 +37,9 @@ class UsersPage extends ConsumerWidget {
               final user = users[index];
               return ListTile(
                 leading: CircleAvatar(
-                  child: Text(user.nickname.isEmpty ? '?' : user.nickname[0].toUpperCase()),
+                  child: Text(user.nickname.isEmpty
+                      ? '?'
+                      : user.nickname[0].toUpperCase()),
                 ),
                 title: Text(user.fullName),
                 subtitle: Text('${user.email} | PIX: ${user.pixKey}'),
@@ -53,7 +55,8 @@ class UsersPage extends ConsumerWidget {
                     ),
                     IconButton(
                       tooltip: 'Apagar usuario',
-                      onPressed: () => _confirmDeleteUser(context, ref, user.id, user.fullName),
+                      onPressed: () => _confirmDeleteUser(
+                          context, ref, user.id, user.fullName),
                       icon: const Icon(Icons.delete_outline),
                     ),
                   ],
@@ -63,18 +66,21 @@ class UsersPage extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Erro ao carregar usuarios: $error')),
+        error: (error, _) =>
+            Center(child: Text('Erro ao carregar usuarios: $error')),
       ),
     );
   }
 }
 
-Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? user]) async {
+Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
+    [UserModel? user]) async {
   final fullNameController = TextEditingController(text: user?.fullName ?? '');
   final nicknameController = TextEditingController(text: user?.nickname ?? '');
   final emailController = TextEditingController(text: user?.email ?? '');
   final phoneController = TextEditingController(text: user?.phone ?? '');
   final pixKeyController = TextEditingController(text: user?.pixKey ?? '');
+  final passwordController = TextEditingController();
   bool admin = user?.admin ?? false;
   bool active = user?.active ?? true;
 
@@ -94,7 +100,8 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
                   children: [
                     TextField(
                       controller: fullNameController,
-                      decoration: const InputDecoration(labelText: 'Nome completo'),
+                      decoration:
+                          const InputDecoration(labelText: 'Nome completo'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -118,6 +125,14 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
                       controller: pixKeyController,
                       decoration: const InputDecoration(labelText: 'Chave PIX'),
                     ),
+                    if (user == null) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(labelText: 'Senha'),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     SwitchListTile(
                       value: admin,
@@ -134,8 +149,12 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-              FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Salvar')),
+              TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancelar')),
+              FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Salvar')),
             ],
           );
         },
@@ -150,6 +169,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
       emailController,
       phoneController,
       pixKeyController,
+      passwordController,
     ]);
     return;
   }
@@ -161,6 +181,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
       emailController,
       phoneController,
       pixKeyController,
+      passwordController,
     ]);
     return;
   }
@@ -170,10 +191,15 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
   final email = emailController.text.trim();
   final phone = phoneController.text.trim();
   final pixKey = pixKeyController.text.trim();
+  final password = passwordController.text;
 
-  if ([fullName, nickname, email, phone, pixKey].any((value) => value.isEmpty)) {
+  if ([fullName, nickname, email, phone, pixKey]
+          .any((value) => value.isEmpty) ||
+      (user == null && password.length < 6)) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Preencha todos os campos.')),
+      const SnackBar(
+          content: Text(
+              'Preencha todos os campos. Senha deve ter ao menos 6 caracteres.')),
     );
     _disposeControllers([
       fullNameController,
@@ -181,6 +207,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
       emailController,
       phoneController,
       pixKeyController,
+      passwordController,
     ]);
     return;
   }
@@ -193,6 +220,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
             email: email,
             phone: phone,
             pixKey: pixKey,
+            password: password,
             admin: admin,
           );
     } else {
@@ -221,6 +249,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
       emailController,
       phoneController,
       pixKeyController,
+      passwordController,
     ]);
   }
 }
@@ -239,8 +268,12 @@ Future<void> _confirmDeleteUser(
         title: const Text('Apagar usuario'),
         content: Text('Deseja apagar $fullName?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-          FilledButton.tonal(onPressed: () => Navigator.of(context).pop(true), child: const Text('Apagar')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar')),
+          FilledButton.tonal(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Apagar')),
         ],
       );
     },
