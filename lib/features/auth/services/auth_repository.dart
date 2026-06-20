@@ -5,12 +5,22 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../core/network/dio_provider.dart';
 import '../models/auth_session.dart';
 import 'auth_storage.dart';
+import '../../users/models/user_model.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(
     ref.watch(dioProvider),
     ref.watch(secureStorageProvider),
   );
+});
+
+final currentUserProvider = FutureProvider<UserModel?>((ref) async {
+  final repository = ref.watch(authRepositoryProvider);
+  final token = await repository.token();
+  if (token == null || token.isEmpty) {
+    return null;
+  }
+  return repository.me();
 });
 
 class AuthRepository {
@@ -42,5 +52,10 @@ class AuthRepository {
 
   Future<String?> token() {
     return storage.read(key: authTokenKey);
+  }
+
+  Future<UserModel> me() async {
+    final response = await dio.get<Map<String, dynamic>>('/auth/me');
+    return UserModel.fromJson(response.data!);
   }
 }

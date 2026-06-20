@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../auth/services/auth_repository.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../models/user_model.dart';
 import '../services/users_repository.dart';
@@ -11,23 +12,24 @@ class UsersPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final usersAsync = ref.watch(usersProvider);
+    final currentUser = ref.watch(currentUserProvider).valueOrNull;
+    final isAdmin = currentUser?.admin ?? false;
 
     return AppScaffold(
       title: 'Usuarios',
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showUserDialog(context, ref),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: isAdmin
+          ? FloatingActionButton(
+              onPressed: () => _showUserDialog(context, ref),
+              child: const Icon(Icons.add),
+            )
+          : null,
       child: usersAsync.when(
         data: (users) {
           if (users.isEmpty) {
             return Center(
-              child: FilledButton.icon(
-                onPressed: () => _showUserDialog(context, ref),
-                icon: const Icon(Icons.person_add),
-                label: const Text('Cadastrar usuario'),
-              ),
-            );
+                child: Text(isAdmin
+                    ? 'Nenhum usuario cadastrado.'
+                    : 'Nenhum usuario disponivel.'));
           }
           return ListView.separated(
             padding: const EdgeInsets.all(16),
@@ -36,31 +38,27 @@ class UsersPage extends ConsumerWidget {
             itemBuilder: (context, index) {
               final user = users[index];
               return ListTile(
-                leading: CircleAvatar(
-                  child: Text(user.nickname.isEmpty
-                      ? '?'
-                      : user.nickname[0].toUpperCase()),
-                ),
                 title: Text(user.fullName),
-                subtitle: Text('${user.email} | PIX: ${user.pixKey}'),
-                trailing: Wrap(
-                  spacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (user.admin) const Chip(label: Text('Admin')),
-                    IconButton(
-                      tooltip: 'Editar usuario',
-                      onPressed: () => _showUserDialog(context, ref, user),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                    IconButton(
-                      tooltip: 'Apagar usuario',
-                      onPressed: () => _confirmDeleteUser(
-                          context, ref, user.id, user.fullName),
-                      icon: const Icon(Icons.delete_outline),
-                    ),
-                  ],
-                ),
+                onTap: () => _showUserDetailsDialog(context, user),
+                trailing: isAdmin
+                    ? Wrap(
+                        spacing: 8,
+                        children: [
+                          IconButton(
+                            tooltip: 'Editar usuario',
+                            onPressed: () =>
+                                _showUserDialog(context, ref, user),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                          IconButton(
+                            tooltip: 'Apagar usuario',
+                            onPressed: () => _confirmDeleteUser(
+                                context, ref, user.id, user.fullName),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      )
+                    : null,
               );
             },
           );
@@ -71,6 +69,32 @@ class UsersPage extends ConsumerWidget {
       ),
     );
   }
+}
+
+Future<void> _showUserDetailsDialog(BuildContext context, UserModel user) {
+  return showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(user.fullName),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Apelido: ${user.nickname}'),
+          Text('Email: ${user.email}'),
+          Text('Telefone: ${user.phone}'),
+          Text('Chave PIX: ${user.pixKey}'),
+          Text('Perfil: ${user.admin ? 'Administrador' : 'Usuario'}'),
+          Text('Status: ${user.active ? 'Ativo' : 'Inativo'}'),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Fechar')),
+      ],
+    ),
+  );
 }
 
 Future<void> _showUserDialog(BuildContext context, WidgetRef ref,

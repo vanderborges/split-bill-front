@@ -17,6 +17,7 @@ class EventsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final eventsAsync = ref.watch(eventsProvider);
     final groupsAsync = ref.watch(groupsProvider);
+    final selectedGroupId = ref.watch(selectedGroupIdProvider);
 
     return AppScaffold(
       title: 'Eventos',
@@ -24,61 +25,118 @@ class EventsPage extends ConsumerWidget {
         onPressed: () => _showCreateEventDialog(context, ref),
         child: const Icon(Icons.add),
       ),
-      child: eventsAsync.when(
-        data: (events) {
-          if (events.isEmpty) {
-            return const Center(child: Text('Nenhum evento cadastrado.'));
-          }
-          final groupsById = {
-            for (final group in groupsAsync.valueOrNull ?? []) group.id: group,
-          };
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: events.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final event = events[index];
-              final groupName = groupsById[event.groupId]?.name ?? 'Grupo';
-              return Card(
-                child: ListTile(
-                  title: Text(event.name),
-                  subtitle: Text('$groupName | ${event.typeLabel} | ${event.isClosed ? 'Fechado' : 'Aberto'}'),
-                  leading: Icon(event.isClosed ? Icons.lock_outline : Icons.event_available),
-                  onTap: () {
-                    ref.read(selectedEventIdProvider.notifier).state = event.id;
-                    context.go('/expenses');
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: groupsAsync.when(
+              data: (groups) {
+                if (groups.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                final value = groups.any((group) => group.id == selectedGroupId)
+                    ? selectedGroupId
+                    : null;
+                return DropdownButtonFormField<String>(
+                  key: ValueKey(value),
+                  initialValue: value,
+                  decoration:
+                      const InputDecoration(labelText: 'Filtrar por grupo'),
+                  hint: const Text('Todos os grupos'),
+                  items: [
+                    const DropdownMenuItem<String>(
+                        value: null, child: Text('Todos os grupos')),
+                    ...groups.map((group) => DropdownMenuItem(
+                        value: group.id, child: Text(group.name))),
+                  ],
+                  onChanged: (value) {
+                    ref.read(selectedGroupIdProvider.notifier).state = value;
+                    ref.read(selectedEventIdProvider.notifier).state = null;
+                    ref.invalidate(selectedEventProvider);
+                    ref.invalidate(selectedEventExpensesProvider);
+                    ref.invalidate(selectedEventReportProvider);
                   },
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      if (value == 'expenses') {
-                        ref.read(selectedEventIdProvider.notifier).state = event.id;
-                        context.go('/expenses');
-                      } else if (value == 'report') {
-                        ref.read(selectedEventIdProvider.notifier).state = event.id;
-                        context.go('/reports');
-                      } else if (value == 'close') {
-                        await _closeEvent(context, ref, event, events);
-                      } else if (value == 'reopen') {
-                        await _reopenEvent(context, ref, event);
-                      } else if (value == 'delete') {
-                        await _deleteEvent(context, ref, event);
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(value: 'expenses', child: Text('Ver despesas')),
-                      const PopupMenuItem(value: 'report', child: Text('Ver relatorio')),
-                      if (!event.isClosed) const PopupMenuItem(value: 'close', child: Text('Fechar')),
-                      if (event.isClosed) const PopupMenuItem(value: 'reopen', child: Text('Reabrir')),
-                      const PopupMenuItem(value: 'delete', child: Text('Deletar')),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Erro ao carregar eventos: $error')),
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) => Text('Erro ao carregar grupos: $error'),
+            ),
+          ),
+          Expanded(
+            child: eventsAsync.when(
+              data: (events) {
+                if (events.isEmpty) {
+                  return const Center(child: Text('Nenhum evento cadastrado.'));
+                }
+                final groupsById = {
+                  for (final group in groupsAsync.valueOrNull ?? [])
+                    group.id: group,
+                };
+                return ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: events.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final event = events[index];
+                    final groupName =
+                        groupsById[event.groupId]?.name ?? 'Grupo';
+                    return Card(
+                      child: ListTile(
+                        title: Text(event.name),
+                        subtitle: Text(
+                            '$groupName | ${event.typeLabel} | ${event.isClosed ? 'Fechado' : 'Aberto'}'),
+                        leading: Icon(event.isClosed
+                            ? Icons.lock_outline
+                            : Icons.event_available),
+                        onTap: () {
+                          ref.read(selectedEventIdProvider.notifier).state =
+                              event.id;
+                          context.go('/expenses');
+                        },
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (value) async {
+                            if (value == 'expenses') {
+                              ref.read(selectedEventIdProvider.notifier).state =
+                                  event.id;
+                              context.go('/expenses');
+                            } else if (value == 'report') {
+                              ref.read(selectedEventIdProvider.notifier).state =
+                                  event.id;
+                              context.go('/reports');
+                            } else if (value == 'close') {
+                              await _closeEvent(context, ref, event, events);
+                            } else if (value == 'reopen') {
+                              await _reopenEvent(context, ref, event);
+                            } else if (value == 'delete') {
+                              await _deleteEvent(context, ref, event);
+                            }
+                          },
+                          itemBuilder: (_) => [
+                            const PopupMenuItem(
+                                value: 'expenses', child: Text('Ver despesas')),
+                            const PopupMenuItem(
+                                value: 'report', child: Text('Ver relatorio')),
+                            if (!event.isClosed)
+                              const PopupMenuItem(
+                                  value: 'close', child: Text('Fechar')),
+                            if (event.isClosed)
+                              const PopupMenuItem(
+                                  value: 'reopen', child: Text('Reabrir')),
+                            const PopupMenuItem(
+                                value: 'delete', child: Text('Deletar')),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) =>
+                  Center(child: Text('Erro ao carregar eventos: $error')),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -111,15 +169,21 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                     builder: (context, snapshot) {
                       final groups = snapshot.data ?? [];
                       if (groups.isEmpty) {
-                        return const Text('Cadastre um grupo antes de criar eventos.');
+                        return const Text(
+                            'Cadastre um grupo antes de criar eventos.');
                       }
-                      if (selectedGroupId == null || groups.every((group) => group.id != selectedGroupId)) {
+                      if (selectedGroupId == null ||
+                          groups
+                              .every((group) => group.id != selectedGroupId)) {
                         selectedGroupId = groups.first.id;
                       }
                       return DropdownButtonFormField<String>(
                         value: selectedGroupId,
                         decoration: const InputDecoration(labelText: 'Grupo'),
-                        items: groups.map((group) => DropdownMenuItem(value: group.id, child: Text(group.name))).toList(),
+                        items: groups
+                            .map((group) => DropdownMenuItem(
+                                value: group.id, child: Text(group.name)))
+                            .toList(),
                         onChanged: (value) {
                           if (value != null) {
                             setState(() => selectedGroupId = value);
@@ -144,7 +208,8 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                     value: type,
                     decoration: const InputDecoration(labelText: 'Tipo'),
                     items: const [
-                      DropdownMenuItem(value: 'SPORADIC', child: Text('Esporadico')),
+                      DropdownMenuItem(
+                          value: 'SPORADIC', child: Text('Esporadico')),
                       DropdownMenuItem(value: 'MONTHLY', child: Text('Mensal')),
                     ],
                     onChanged: (value) {
@@ -179,8 +244,12 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-              FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Salvar')),
+              TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancelar')),
+              FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Salvar')),
             ],
           );
         },
@@ -200,7 +269,11 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
     if (type == 'MONTHLY') {
       final month = int.tryParse(monthController.text.trim());
       final year = int.tryParse(yearController.text.trim());
-      if (month == null || month < 1 || month > 12 || year == null || year < 2000) {
+      if (month == null ||
+          month < 1 ||
+          month > 12 ||
+          year == null ||
+          year < 2000) {
         throw Exception('Informe mes e ano validos');
       }
       final groups = await ref.read(groupsProvider.future);
@@ -208,7 +281,8 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
         throw Exception('Nenhum grupo cadastrado');
       }
       final groupId = selectedGroupId ?? groups.first.id;
-      final members = await ref.read(groupsRepositoryProvider).listMembers(groupId);
+      final members =
+          await ref.read(groupsRepositoryProvider).listMembers(groupId);
       final admins = members.where((member) => member.role == 'ADMIN').toList();
       if (admins.isEmpty) {
         throw Exception('Nenhum admin no grupo');
@@ -217,7 +291,9 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
             name: nameController.text.trim().isEmpty
                 ? '${month.toString().padLeft(2, '0')}/$year'
                 : nameController.text.trim(),
-            description: descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+            description: descriptionController.text.trim().isEmpty
+                ? null
+                : descriptionController.text.trim(),
             type: type,
             month: month,
             year: year,
@@ -232,14 +308,17 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
         throw Exception('Nenhum grupo cadastrado');
       }
       final groupId = selectedGroupId ?? groups.first.id;
-      final members = await ref.read(groupsRepositoryProvider).listMembers(groupId);
+      final members =
+          await ref.read(groupsRepositoryProvider).listMembers(groupId);
       final admins = members.where((member) => member.role == 'ADMIN').toList();
       if (admins.isEmpty) {
         throw Exception('Nenhum admin no grupo');
       }
       final event = await ref.read(eventsRepositoryProvider).create(
             name: nameController.text.trim(),
-            description: descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+            description: descriptionController.text.trim().isEmpty
+                ? null
+                : descriptionController.text.trim(),
             type: type,
             groupId: groupId,
             adminUserId: admins.first.userId,
@@ -250,7 +329,8 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
     _invalidateEventState(ref);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Nao foi possivel criar evento: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Nao foi possivel criar evento: $error')));
     }
   } finally {
     nameController.dispose();
@@ -267,7 +347,9 @@ Future<void> _closeEvent(
   List<EventModel> events,
 ) async {
   String? targetId;
-  final targets = events.where((item) => item.id != event.id && item.status == 'OPEN').toList();
+  final targets = events
+      .where((item) => item.id != event.id && item.status == 'OPEN')
+      .toList();
   final confirmed = await showDialog<bool>(
     barrierDismissible: false,
     context: context,
@@ -279,22 +361,29 @@ Future<void> _closeEvent(
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Voce pode fechar apenas ou consolidar o saldo como despesa em outro evento.'),
+                const Text(
+                    'Voce pode fechar apenas ou consolidar o saldo como despesa em outro evento.'),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String?>(
                   value: targetId,
                   decoration: const InputDecoration(labelText: 'Consolidar em'),
                   items: [
-                    const DropdownMenuItem<String?>(value: null, child: Text('Fechar apenas')),
-                    ...targets.map((target) => DropdownMenuItem<String?>(value: target.id, child: Text(target.name))),
+                    const DropdownMenuItem<String?>(
+                        value: null, child: Text('Fechar apenas')),
+                    ...targets.map((target) => DropdownMenuItem<String?>(
+                        value: target.id, child: Text(target.name))),
                   ],
                   onChanged: (value) => setState(() => targetId = value),
                 ),
               ],
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-              FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Fechar')),
+              TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancelar')),
+              FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Fechar')),
             ],
           );
         },
@@ -305,38 +394,46 @@ Future<void> _closeEvent(
     return;
   }
   try {
-    await ref.read(eventsRepositoryProvider).close(event.id, consolidateToEventId: targetId);
+    await ref
+        .read(eventsRepositoryProvider)
+        .close(event.id, consolidateToEventId: targetId);
     _invalidateEventState(ref);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Nao foi possivel fechar evento: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Nao foi possivel fechar evento: $error')));
     }
   }
 }
 
-Future<void> _reopenEvent(BuildContext context, WidgetRef ref, EventModel event) async {
+Future<void> _reopenEvent(
+    BuildContext context, WidgetRef ref, EventModel event) async {
   try {
     await ref.read(eventsRepositoryProvider).reopen(event.id);
     _invalidateEventState(ref);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Nao foi possivel reabrir evento: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Nao foi possivel reabrir evento: $error')));
     }
   }
 }
 
-Future<void> _deleteEvent(BuildContext context, WidgetRef ref, EventModel event) async {
+Future<void> _deleteEvent(
+    BuildContext context, WidgetRef ref, EventModel event) async {
   try {
     final adminId = await _groupAdminId(ref, event.groupId);
     if (adminId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Apenas admin do grupo pode deletar.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Apenas admin do grupo pode deletar.')));
       return;
     }
     await ref.read(eventsRepositoryProvider).delete(event.id, adminId);
     _invalidateEventState(ref);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Nao foi possivel deletar evento: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Nao foi possivel deletar evento: $error')));
     }
   }
 }

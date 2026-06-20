@@ -89,6 +89,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             email: email,
             password: password,
           );
+      ref.invalidate(currentUserProvider);
       if (mounted) {
         context.go('/');
       }
