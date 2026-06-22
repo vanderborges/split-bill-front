@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_provider.dart';
+import '../../auth/services/auth_repository.dart';
 import '../models/group_member_model.dart';
 import '../models/group_model.dart';
 
