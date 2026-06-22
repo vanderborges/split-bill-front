@@ -9,8 +9,28 @@ final groupsRepositoryProvider = Provider<GroupsRepository>((ref) {
   return GroupsRepository(ref.watch(dioProvider));
 });
 
-final groupsProvider = FutureProvider<List<GroupModel>>((ref) {
+final groupsProvider = FutureProvider<List<GroupModel>>((ref) async {
+  final user = await ref.watch(currentUserProvider.future);
+  if (user == null) {
+    return [];
+  }
   return ref.watch(groupsRepositoryProvider).list();
+});
+
+final groupRoleProvider =
+    FutureProvider.family<String?, String>((ref, groupId) async {
+  final user = await ref.watch(currentUserProvider.future);
+  if (user == null) {
+    return null;
+  }
+  final members =
+      await ref.watch(groupsRepositoryProvider).listMembers(groupId);
+  for (final member in members) {
+    if (member.userId == user.id) {
+      return member.role;
+    }
+  }
+  return null;
 });
 
 final selectedGroupIdProvider = StateProvider<String?>((ref) => null);
@@ -63,7 +83,8 @@ class GroupsRepository {
     return GroupModel.fromJson(response.data!);
   }
 
-  Future<List<GroupMemberModel>> listMembers(String groupId, {String? viewerUserId}) async {
+  Future<List<GroupMemberModel>> listMembers(String groupId,
+      {String? viewerUserId}) async {
     final response = await dio.get<List<dynamic>>(
       '/groups/$groupId/members',
       queryParameters: {

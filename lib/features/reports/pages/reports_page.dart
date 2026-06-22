@@ -20,14 +20,21 @@ class ReportsPage extends ConsumerWidget {
     final eventsAsync = ref.watch(eventsProvider);
     final reportAsync = ref.watch(selectedEventReportProvider);
     final settlementsAsync = ref.watch(selectedEventSettlementsProvider);
-    final groupsAsync = ref.watch(groupsProvider);
+    final isGroupAdmin = eventAsync.valueOrNull != null
+        ? ref
+                .watch(groupRoleProvider(eventAsync.valueOrNull!.groupId))
+                .valueOrNull ==
+            'ADMIN'
+        : false;
 
     return AppScaffold(
       title: 'Relatorios',
       child: reportAsync.when(
         data: (report) {
           if (report == null) {
-            return const Center(child: Text('Crie ou selecione um evento antes de visualizar o relatorio.'));
+            return const Center(
+                child: Text(
+                    'Crie ou selecione um evento antes de visualizar o relatorio.'));
           }
 
           return ListView(
@@ -39,7 +46,9 @@ class ReportsPage extends ConsumerWidget {
                     value: event?.id,
                     decoration: const InputDecoration(labelText: 'Evento'),
                     items: events
-                        .map((item) => DropdownMenuItem(value: item.id, child: Text('${item.name} - ${item.typeLabel}')))
+                        .map((item) => DropdownMenuItem(
+                            value: item.id,
+                            child: Text('${item.name} - ${item.typeLabel}')))
                         .toList(),
                     onChanged: (value) {
                       ref.read(selectedEventIdProvider.notifier).state = value;
@@ -56,14 +65,8 @@ class ReportsPage extends ConsumerWidget {
                 error: (_, __) => const SizedBox.shrink(),
               ),
               const SizedBox(height: 16),
-              eventAsync.when(
-                data: (event) => Text(
-                  event == null ? '' : '${_groupName(groupsAsync.valueOrNull, event.groupId)} | ${event.name}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
-              ),
+              Text('${report.groupName} | ${report.eventName ?? ''}',
+                  style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -73,11 +76,16 @@ class ReportsPage extends ConsumerWidget {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
-                  Chip(label: Text(report.status == 'CLOSED' ? 'Fechado' : 'Aberto')),
+                  Chip(
+                      label: Text(
+                          report.status == 'CLOSED' ? 'Fechado' : 'Aberto')),
                   const SizedBox(width: 8),
-                  if (report.status == 'OPEN')
+                  if (report.status == 'OPEN' && isGroupAdmin)
                     FilledButton(
-                      onPressed: report.eventId == null ? null : () => _confirmCloseEvent(context, ref, report.eventId!),
+                      onPressed: report.eventId == null
+                          ? null
+                          : () =>
+                              _confirmCloseEvent(context, ref, report.eventId!),
                       child: const Text('Fechar evento'),
                     ),
                 ],
@@ -91,13 +99,15 @@ class ReportsPage extends ConsumerWidget {
                   settlements: settlements,
                 ),
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => Text('Erro ao carregar pagamentos: $error'),
+                error: (error, _) =>
+                    Text('Erro ao carregar pagamentos: $error'),
               ),
             ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Erro ao carregar relatorio: $error')),
+        error: (error, _) =>
+            Center(child: Text('Erro ao carregar relatorio: $error')),
       ),
     );
   }
@@ -167,7 +177,8 @@ class _ReportTable extends ConsumerWidget {
                           if (value == null) {
                             return;
                           }
-                          await _updateSettlement(context, ref, settlement, value);
+                          await _updateSettlement(
+                              context, ref, settlement, value);
                         },
                 ),
               ),
@@ -202,17 +213,23 @@ Future<void> _updateSettlement(
   }
 }
 
-Future<void> _confirmCloseEvent(BuildContext context, WidgetRef ref, String eventId) async {
+Future<void> _confirmCloseEvent(
+    BuildContext context, WidgetRef ref, String eventId) async {
   final confirmed = await showDialog<bool>(
     barrierDismissible: false,
     context: context,
     builder: (context) {
       return AlertDialog(
         title: const Text('Fechar evento'),
-        content: const Text('Depois de fechado, o evento nao permite novas alteracoes. Deseja continuar?'),
+        content: const Text(
+            'Depois de fechado, o evento nao permite novas alteracoes. Deseja continuar?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Fechar')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Fechar')),
         ],
       );
     },
@@ -244,16 +261,4 @@ Future<void> _confirmCloseEvent(BuildContext context, WidgetRef ref, String even
 
 String _formatMoney(double value) {
   return 'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
-}
-
-String _groupName(List<dynamic>? groups, String groupId) {
-  if (groups == null) {
-    return 'Grupo';
-  }
-  for (final group in groups) {
-    if (group.id == groupId) {
-      return group.name as String;
-    }
-  }
-  return 'Grupo';
 }

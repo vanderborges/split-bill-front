@@ -18,21 +18,22 @@ class AppScaffold extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final showUsers =
+        ref.watch(currentUserProvider).valueOrNull?.admin ?? false;
+    final routes = [
+      '/',
+      '/groups',
+      '/events',
+      '/expenses',
+      '/reports',
+      '/summary',
+      if (showUsers) '/users',
+      '/profile',
+    ];
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       drawer: NavigationDrawer(
         onDestinationSelected: (index) async {
-          final routes = [
-            '/',
-            '/groups',
-            '/events',
-            '/expenses',
-            '/reports',
-            '/summary',
-            '/users',
-            '/profile',
-          ];
-
           if (index == routes.length) {
             await ref.read(authRepositoryProvider).logout();
             ref.invalidate(currentUserProvider);
@@ -44,7 +45,7 @@ class AppScaffold extends ConsumerWidget {
 
           context.go(routes[index]);
         },
-        children: const [
+        children: [
           DrawerHeader(child: Text('Split Bill')),
           NavigationDrawerDestination(
             icon: Icon(Icons.dashboard_outlined),
@@ -76,11 +77,12 @@ class AppScaffold extends ConsumerWidget {
             selectedIcon: Icon(Icons.list_alt),
             label: Text('Extrato'),
           ),
-          NavigationDrawerDestination(
-            icon: Icon(Icons.group_outlined),
-            selectedIcon: Icon(Icons.group),
-            label: Text('Usuarios'),
-          ),
+          if (showUsers)
+            const NavigationDrawerDestination(
+              icon: Icon(Icons.group_outlined),
+              selectedIcon: Icon(Icons.group),
+              label: Text('Usuarios'),
+            ),
           NavigationDrawerDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),

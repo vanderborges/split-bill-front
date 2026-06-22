@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../auth/services/auth_repository.dart';
 import '../../events/services/events_repository.dart';
 import '../../expenses/services/expense_categories_repository.dart';
-import '../../users/services/users_repository.dart';
+import '../../groups/services/groups_repository.dart';
 import '../models/user_expense_summary_model.dart';
 import '../services/user_expense_summary_repository.dart';
 
@@ -12,11 +13,14 @@ class UserExpenseSummaryPage extends ConsumerStatefulWidget {
   const UserExpenseSummaryPage({super.key});
 
   @override
-  ConsumerState<UserExpenseSummaryPage> createState() => _UserExpenseSummaryPageState();
+  ConsumerState<UserExpenseSummaryPage> createState() =>
+      _UserExpenseSummaryPageState();
 }
 
-class _UserExpenseSummaryPageState extends ConsumerState<UserExpenseSummaryPage> {
+class _UserExpenseSummaryPageState
+    extends ConsumerState<UserExpenseSummaryPage> {
   String? userId;
+  String? groupId;
   String? eventId;
   String? category;
   DateTime? from;
@@ -25,7 +29,8 @@ class _UserExpenseSummaryPageState extends ConsumerState<UserExpenseSummaryPage>
 
   @override
   Widget build(BuildContext context) {
-    final usersAsync = ref.watch(usersProvider);
+    final currentUserAsync = ref.watch(currentUserProvider);
+    final groupsAsync = ref.watch(groupsProvider);
     final eventsAsync = ref.watch(eventsProvider);
     final categoriesAsync = ref.watch(expenseCategoriesProvider);
 
@@ -34,29 +39,84 @@ class _UserExpenseSummaryPageState extends ConsumerState<UserExpenseSummaryPage>
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          usersAsync.when(
-            data: (users) {
-              if (userId == null && users.isNotEmpty) {
-                userId = users.first.id;
+          groupsAsync.when(
+            data: (groups) {
+              if (groups.isEmpty) {
+                return const Text('Voce nao participa de nenhum grupo.');
+              }
+              if (groupId == null ||
+                  groups.every((group) => group.id != groupId)) {
+                groupId = groups.first.id;
+                ref.read(selectedGroupIdProvider.notifier).state = groupId;
               }
               return DropdownButtonFormField<String>(
-                value: userId,
-                decoration: const InputDecoration(labelText: 'Usuario'),
-                items: users.map((user) => DropdownMenuItem(value: user.id, child: Text(user.nickname))).toList(),
-                onChanged: (value) => setState(() => userId = value),
+                value: groupId,
+                decoration: const InputDecoration(labelText: 'Grupo'),
+                items: groups
+                    .map((group) => DropdownMenuItem(
+                        value: group.id, child: Text(group.name)))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      groupId = value;
+                      userId = null;
+                      eventId = null;
+                      summaryFuture = null;
+                    });
+                    ref.read(selectedGroupIdProvider.notifier).state = value;
+                  }
+                },
               );
             },
             loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('Erro ao carregar usuarios: $error'),
+            error: (error, _) => Text('Erro ao carregar grupos: $error'),
           ),
+          const SizedBox(height: 12),
+          if (groupId != null)
+            currentUserAsync.when(
+              data: (currentUser) {
+                if (currentUser == null) {
+                  return const SizedBox.shrink();
+                }
+                final role = ref.watch(groupRoleProvider(groupId!)).valueOrNull;
+                if (role != 'ADMIN') {
+                  userId = currentUser.id;
+                  return Text('Extrato: ${currentUser.nickname}');
+                }
+                return FutureBuilder(
+                  future:
+                      ref.read(groupsRepositoryProvider).listMembers(groupId!),
+                  builder: (context, snapshot) {
+                    final members = snapshot.data ?? [];
+                    return DropdownButtonFormField<String?>(
+                      value: userId,
+                      decoration: const InputDecoration(labelText: 'Extrato'),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                            value: null, child: Text('Consolidado do grupo')),
+                        ...members.map((member) => DropdownMenuItem<String?>(
+                            value: member.userId,
+                            child: Text(member.nickname))),
+                      ],
+                      onChanged: (value) => setState(() => userId = value),
+                    );
+                  },
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) => const SizedBox.shrink(),
+            ),
           const SizedBox(height: 12),
           eventsAsync.when(
             data: (events) => DropdownButtonFormField<String?>(
               value: eventId,
               decoration: const InputDecoration(labelText: 'Evento'),
               items: [
-                const DropdownMenuItem<String?>(value: null, child: Text('Todos')),
-                ...events.map((event) => DropdownMenuItem<String?>(value: event.id, child: Text(event.name))),
+                const DropdownMenuItem<String?>(
+                    value: null, child: Text('Todos')),
+                ...events.map((event) => DropdownMenuItem<String?>(
+                    value: event.id, child: Text(event.name))),
               ],
               onChanged: (value) => setState(() => eventId = value),
             ),
@@ -69,8 +129,10 @@ class _UserExpenseSummaryPageState extends ConsumerState<UserExpenseSummaryPage>
               value: category,
               decoration: const InputDecoration(labelText: 'Tipo de despesa'),
               items: [
-                const DropdownMenuItem<String?>(value: null, child: Text('Todos')),
-                ...categories.map((item) => DropdownMenuItem<String?>(value: item.name, child: Text(item.name))),
+                const DropdownMenuItem<String?>(
+                    value: null, child: Text('Todos')),
+                ...categories.map((item) => DropdownMenuItem<String?>(
+                    value: item.name, child: Text(item.name))),
               ],
               onChanged: (value) => setState(() => category = value),
             ),
@@ -137,12 +199,13 @@ class _UserExpenseSummaryPageState extends ConsumerState<UserExpenseSummaryPage>
   }
 
   void _loadSummary() {
-    if (userId == null) {
+    if (groupId == null) {
       return;
     }
     setState(() {
       summaryFuture = ref.read(userExpenseSummaryRepositoryProvider).get(
-            userId: userId!,
+            groupId: groupId!,
+            userId: userId,
             from: from,
             to: to,
             category: category,
@@ -166,7 +229,8 @@ class _SummaryContent extends StatelessWidget {
           spacing: 12,
           runSpacing: 12,
           children: [
-            _Metric(label: 'Consumiu', value: _formatMoney(summary.totalConsumed)),
+            _Metric(
+                label: 'Consumiu', value: _formatMoney(summary.totalConsumed)),
             _Metric(label: 'Pagou', value: _formatMoney(summary.totalPaid)),
             _Metric(label: 'Saldo', value: _formatMoney(summary.balance)),
           ],
@@ -179,7 +243,8 @@ class _SummaryContent extends StatelessWidget {
             (expense) => ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(expense.description),
-              subtitle: Text('${_formatDate(expense.expenseDate)} | ${expense.category}'),
+              subtitle: Text(
+                  '${_formatDate(expense.expenseDate)} | ${expense.category}'),
               trailing: Text(_formatMoney(expense.amount)),
             ),
           ),
