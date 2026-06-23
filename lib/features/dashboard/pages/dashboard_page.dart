@@ -97,7 +97,7 @@ double _paid(List<dynamic> expenses, String? userId) => userId == null
     : expenses
         .expand((expense) => expense.payers)
         .where((payer) => payer.userId == userId)
-        .fold<double>(0, (total, payer) => total + payer.paidAmount);
+        .fold<double>(0, (total, payer) => total + payer.amount);
 double _receivable(List<dynamic> expenses, String? userId) =>
     (_paid(expenses, userId) - _consumed(expenses, userId))
         .clamp(0, double.infinity)

@@ -46,7 +46,7 @@ class AppScaffold extends ConsumerWidget {
           context.go(routes[index]);
         },
         children: [
-          const DrawerHeader(child: Text('DividiAí')),
+          const DrawerHeader(child: Text('DividiAi')),
           NavigationDrawerDestination(
             icon: Icon(Icons.dashboard_outlined),
             selectedIcon: Icon(Icons.dashboard),

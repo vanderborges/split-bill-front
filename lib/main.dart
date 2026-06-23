@@ -16,7 +16,7 @@ class DividiAiApp extends ConsumerWidget {
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
-      title: 'DividiAí',
+      title: 'DividiAi',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       routerConfig: router,
