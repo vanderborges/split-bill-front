@@ -20,6 +20,8 @@ class ReportsPage extends ConsumerWidget {
     final eventsAsync = ref.watch(eventsProvider);
     final reportAsync = ref.watch(selectedEventReportProvider);
     final settlementsAsync = ref.watch(selectedEventSettlementsProvider);
+    final groupsAsync = ref.watch(groupsProvider);
+    final selectedGroupId = ref.watch(selectedGroupIdProvider);
     final isGroupAdmin = eventAsync.valueOrNull != null
         ? ref
                 .watch(groupRoleProvider(eventAsync.valueOrNull!.groupId))
@@ -40,6 +42,28 @@ class ReportsPage extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              groupsAsync.when(
+                data: (groups) => DropdownButtonFormField<String?>(
+                  value: selectedGroupId,
+                  decoration: const InputDecoration(labelText: 'Grupo'),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                        value: null, child: Text('Todos os grupos')),
+                    ...groups.map((group) => DropdownMenuItem<String?>(
+                        value: group.id, child: Text(group.name))),
+                  ],
+                  onChanged: (value) {
+                    ref.read(selectedGroupIdProvider.notifier).state = value;
+                    ref.read(selectedEventIdProvider.notifier).state = null;
+                    ref.invalidate(selectedEventProvider);
+                    ref.invalidate(selectedEventReportProvider);
+                    ref.invalidate(selectedEventSettlementsProvider);
+                  },
+                ),
+                loading: () => const LinearProgressIndicator(),
+                error: (error, _) => Text('Erro ao carregar grupos: $error'),
+              ),
+              const SizedBox(height: 12),
               eventAsync.when(
                 data: (event) => eventsAsync.when(
                   data: (events) => DropdownButtonFormField<String>(

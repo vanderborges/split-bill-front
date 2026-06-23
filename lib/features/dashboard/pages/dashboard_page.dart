@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../expenses/services/expenses_repository.dart';
+import '../../groups/services/groups_repository.dart';
 import '../../months/services/months_repository.dart';
-import '../../users/services/users_repository.dart';
+import '../../auth/services/auth_repository.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 
 class DashboardPage extends ConsumerWidget {
@@ -12,9 +13,12 @@ class DashboardPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final usersAsync = ref.watch(usersProvider);
+    final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final monthAsync = ref.watch(currentMonthProvider);
     final expensesAsync = ref.watch(currentMonthExpensesProvider);
+    final group = ref.watch(selectedGroupProvider).valueOrNull;
+    final isGroupAdmin = group != null &&
+        ref.watch(groupRoleProvider(group.id)).valueOrNull == 'ADMIN';
 
     return AppScaffold(
       title: 'Dashboard',
@@ -23,7 +27,9 @@ class DashboardPage extends ConsumerWidget {
         children: [
           Text(
             monthAsync.when(
-              data: (month) => month == null ? 'Nenhum mes aberto' : 'Mes atual: ${month.label}',
+              data: (month) => month == null
+                  ? 'Nenhum mes aberto'
+                  : 'Mes atual: ${month.label}',
               loading: () => 'Carregando mes atual...',
               error: (_, __) => 'Erro ao carregar mes atual',
             ),
@@ -35,25 +41,36 @@ class DashboardPage extends ConsumerWidget {
             runSpacing: 12,
             children: [
               _MetricCard(
-                label: 'Despesas',
+                label: 'Consumiu',
                 value: expensesAsync.when(
-                  data: (expenses) => _formatMoney(
-                    expenses.fold<double>(0.0, (total, expense) => total + expense.amount),
-                  ),
+                  data: (expenses) =>
+                      _formatMoney(_consumed(expenses, currentUser?.id)),
                   loading: () => '...',
-                  error: (_, __) => 'Erro',
+                  error: (_, __) => _formatMoney(0),
                 ),
               ),
               _MetricCard(
-                label: 'Participantes',
-                value: usersAsync.when(
-                  data: (users) => users.length.toString(),
-                  loading: () => '...',
-                  error: (_, __) => 'Erro',
-                ),
-              ),
-              const _MetricCard(label: 'A receber', value: 'R\$ 0,00'),
-              const _MetricCard(label: 'A pagar', value: 'R\$ 0,00'),
+                  label: 'Pagou',
+                  value: expensesAsync.when(
+                      data: (expenses) =>
+                          _formatMoney(_paid(expenses, currentUser?.id)),
+                      loading: () => '...',
+                      error: (_, __) => _formatMoney(0))),
+              _MetricCard(
+                  label: 'A receber',
+                  value: expensesAsync.when(
+                      data: (expenses) =>
+                          _formatMoney(_receivable(expenses, currentUser?.id)),
+                      loading: () => '...',
+                      error: (_, __) => _formatMoney(0))),
+              _MetricCard(
+                  label: 'A pagar',
+                  value: expensesAsync.when(
+                      data: (expenses) =>
+                          _formatMoney(_payable(expenses, currentUser?.id)),
+                      loading: () => '...',
+                      error: (_, __) => _formatMoney(0))),
+              if (isGroupAdmin) _ParticipantMetric(groupId: group.id),
             ],
           ),
           const SizedBox(height: 24),
@@ -66,6 +83,40 @@ class DashboardPage extends ConsumerWidget {
       ),
     );
   }
+}
+
+double _consumed(List<dynamic> expenses, String? userId) => userId == null
+    ? 0
+    : expenses
+        .expand((expense) => expense.participants)
+        .where((participant) => participant.userId == userId)
+        .fold<double>(
+            0, (total, participant) => total + participant.shareAmount);
+double _paid(List<dynamic> expenses, String? userId) => userId == null
+    ? 0
+    : expenses
+        .expand((expense) => expense.payers)
+        .where((payer) => payer.userId == userId)
+        .fold<double>(0, (total, payer) => total + payer.paidAmount);
+double _receivable(List<dynamic> expenses, String? userId) =>
+    (_paid(expenses, userId) - _consumed(expenses, userId))
+        .clamp(0, double.infinity)
+        .toDouble();
+double _payable(List<dynamic> expenses, String? userId) =>
+    (_consumed(expenses, userId) - _paid(expenses, userId))
+        .clamp(0, double.infinity)
+        .toDouble();
+
+class _ParticipantMetric extends ConsumerWidget {
+  const _ParticipantMetric({required this.groupId});
+  final String groupId;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => FutureBuilder(
+        future: ref.watch(groupsRepositoryProvider).listMembers(groupId),
+        builder: (context, snapshot) => _MetricCard(
+            label: 'Participantes',
+            value: snapshot.hasData ? snapshot.data!.length.toString() : '0'),
+      );
 }
 
 String _formatMoney(double value) {

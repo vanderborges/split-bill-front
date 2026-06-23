@@ -35,7 +35,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Split Bill',
+                Text('DividiAí',
                     style: Theme.of(context).textTheme.headlineMedium),
                 const SizedBox(height: 24),
                 TextField(

@@ -1,11 +1,11 @@
 {
-    "name": "split_bill_front",
-    "short_name": "split_bill_front",
+    "name": "DividiAí",
+    "short_name": "DividiAí",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Divida despesas em grupo de forma simples.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
