@@ -116,6 +116,7 @@ class _GroupMembers extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isGroupAdmin =
         ref.watch(groupRoleProvider(group.id)).valueOrNull == 'ADMIN';
+    final currentUser = ref.watch(currentUserProvider).valueOrNull;
     return FutureBuilder<List<GroupMemberModel>>(
       future: ref.watch(groupsRepositoryProvider).listMembers(group.id),
       builder: (context, snapshot) {
@@ -134,6 +135,12 @@ class _GroupMembers extends ConsumerWidget {
                     icon: const Icon(Icons.person_add),
                     label: const Text('Adicionar'),
                   ),
+                if (currentUser != null)
+                  TextButton.icon(
+                    onPressed: () => _confirmLeaveGroup(context, ref, group),
+                    icon: const Icon(Icons.exit_to_app),
+                    label: const Text('Sair'),
+                  ),
               ],
             ),
             if (snapshot.connectionState != ConnectionState.done)
@@ -147,12 +154,22 @@ class _GroupMembers extends ConsumerWidget {
                   contentPadding: EdgeInsets.zero,
                   title: Text(member.nickname),
                   subtitle: Text(member.roleLabel),
-                  trailing: isGroupAdmin
-                      ? IconButton(
-                          tooltip: 'Alterar perfil no grupo',
-                          icon: const Icon(Icons.manage_accounts_outlined),
-                          onPressed: () => _showEditMemberRoleDialog(
-                              context, ref, group, member),
+                  trailing: isGroupAdmin && member.userId != currentUser?.id
+                      ? Wrap(
+                          children: [
+                            IconButton(
+                              tooltip: 'Alterar perfil no grupo',
+                              icon: const Icon(Icons.manage_accounts_outlined),
+                              onPressed: () => _showEditMemberRoleDialog(
+                                  context, ref, group, member),
+                            ),
+                            IconButton(
+                              tooltip: 'Remover integrante',
+                              icon: const Icon(Icons.person_remove_outlined),
+                              onPressed: () => _confirmRemoveMember(
+                                  context, ref, group, member),
+                            ),
+                          ],
                         )
                       : null,
                 ),
@@ -161,6 +178,76 @@ class _GroupMembers extends ConsumerWidget {
         );
       },
     );
+  }
+}
+
+Future<void> _confirmRemoveMember(BuildContext context, WidgetRef ref,
+    GroupModel group, GroupMemberModel member) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Remover integrante'),
+      content: Text('Deseja remover ${member.nickname} deste grupo?'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remover')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+  try {
+    await ref
+        .read(groupsRepositoryProvider)
+        .removeMember(group.id, member.userId);
+    ref.invalidate(selectedGroupProvider);
+    ref.invalidate(groupRoleProvider(group.id));
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Nao foi possivel remover integrante: $error')));
+    }
+  }
+}
+
+Future<void> _confirmLeaveGroup(
+    BuildContext context, WidgetRef ref, GroupModel group) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Sair do grupo'),
+      content: const Text(
+          'Voce so pode sair se nao tiver saldo pendente em eventos abertos.'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sair')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+  try {
+    await ref.read(groupsRepositoryProvider).leave(group.id);
+    ref.read(selectedGroupIdProvider.notifier).state = null;
+    ref.invalidate(groupsProvider);
+    ref.invalidate(selectedGroupProvider);
+    ref.invalidate(eventsProvider);
+    ref.invalidate(selectedEventProvider);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Nao foi possivel sair do grupo: $error')));
+    }
   }
 }
 

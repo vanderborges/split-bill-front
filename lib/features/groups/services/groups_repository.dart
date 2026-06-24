@@ -120,4 +120,12 @@ class GroupsRepository {
       queryParameters: {'adminUserId': adminUserId},
     );
   }
+
+  Future<void> removeMember(String groupId, String userId) {
+    return dio.delete<void>('/groups/$groupId/members/$userId');
+  }
+
+  Future<void> leave(String groupId) {
+    return dio.post<void>('/groups/$groupId/leave');
+  }
 }

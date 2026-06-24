@@ -76,4 +76,17 @@ class UsersRepository {
   Future<void> delete(String id) async {
     await dio.delete<void>('/users/$id');
   }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await dio.put<void>(
+      '/users/me/password',
+      data: {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      },
+    );
+  }
 }

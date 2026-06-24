@@ -39,6 +39,12 @@ class ProfilePage extends ConsumerWidget {
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Editar perfil'),
               ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _showChangePasswordDialog(context, ref),
+                icon: const Icon(Icons.lock_reset_outlined),
+                label: const Text('Alterar senha'),
+              ),
             ],
           );
         },
@@ -47,6 +53,89 @@ class ProfilePage extends ConsumerWidget {
             Center(child: Text('Erro ao carregar perfil: $error')),
       ),
     );
+  }
+}
+
+Future<void> _showChangePasswordDialog(
+    BuildContext context, WidgetRef ref) async {
+  final currentPasswordController = TextEditingController();
+  final newPasswordController = TextEditingController();
+  final confirmationController = TextEditingController();
+  final saved = await showDialog<bool>(
+    barrierDismissible: false,
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Alterar senha'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+              controller: currentPasswordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Senha atual')),
+          const SizedBox(height: 12),
+          TextField(
+              controller: newPasswordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Nova senha')),
+          const SizedBox(height: 12),
+          TextField(
+              controller: confirmationController,
+              obscureText: true,
+              decoration:
+                  const InputDecoration(labelText: 'Confirmar nova senha')),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Salvar')),
+      ],
+    ),
+  );
+  if (saved != true || !context.mounted) {
+    _disposeControllers([
+      currentPasswordController,
+      newPasswordController,
+      confirmationController
+    ]);
+    return;
+  }
+  if (newPasswordController.text.length < 6 ||
+      newPasswordController.text != confirmationController.text) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+            'A nova senha deve ter ao menos 6 caracteres e ser confirmada.')));
+    _disposeControllers([
+      currentPasswordController,
+      newPasswordController,
+      confirmationController
+    ]);
+    return;
+  }
+  try {
+    await ref.read(usersRepositoryProvider).changePassword(
+          currentPassword: currentPasswordController.text,
+          newPassword: newPasswordController.text,
+        );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Senha alterada com sucesso.')));
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Nao foi possivel alterar senha: $error')));
+    }
+  } finally {
+    _disposeControllers([
+      currentPasswordController,
+      newPasswordController,
+      confirmationController
+    ]);
   }
 }
 
