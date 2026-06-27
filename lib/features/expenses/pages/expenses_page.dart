@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../dashboard/services/dashboard_repository.dart';
 import '../../events/models/event_model.dart';
 import '../../events/services/events_repository.dart';
 import '../../groups/services/groups_repository.dart';
@@ -37,7 +38,8 @@ class ExpensesPage extends ConsumerWidget {
           }
           if (event.status == 'CLOSED') {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Evento fechado nao permite novas despesas.')),
+              const SnackBar(
+                  content: Text('Evento fechado nao permite novas despesas.')),
             );
             return;
           }
@@ -69,10 +71,12 @@ class ExpensesPage extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: eventsAsync.when(
                   data: (events) => DropdownButtonFormField<String>(
-                    value: event.id,
+                    initialValue: event.id,
                     decoration: const InputDecoration(labelText: 'Evento'),
                     items: events
-                        .map((item) => DropdownMenuItem(value: item.id, child: Text('${item.name} - ${item.typeLabel}')))
+                        .map((item) => DropdownMenuItem(
+                            value: item.id,
+                            child: Text('${item.name} - ${item.typeLabel}')))
                         .toList(),
                     onChanged: (value) {
                       ref.read(selectedEventIdProvider.notifier).state = value;
@@ -80,8 +84,10 @@ class ExpensesPage extends ConsumerWidget {
                       ref.invalidate(selectedEventExpensesProvider);
                     },
                   ),
-                  loading: () => Text('Evento ${event.name}', style: Theme.of(context).textTheme.titleMedium),
-                  error: (_, __) => Text('Evento ${event.name}', style: Theme.of(context).textTheme.titleMedium),
+                  loading: () => Text('Evento ${event.name}',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  error: (_, __) => Text('Evento ${event.name}',
+                      style: Theme.of(context).textTheme.titleMedium),
                 ),
               ),
               Padding(
@@ -95,7 +101,8 @@ class ExpensesPage extends ConsumerWidget {
                 child: expensesAsync.when(
                   data: (expenses) {
                     if (expenses.isEmpty) {
-                      return const Center(child: Text('Nenhuma despesa cadastrada.'));
+                      return const Center(
+                          child: Text('Nenhuma despesa cadastrada.'));
                     }
                     return ListView.separated(
                       padding: const EdgeInsets.all(16),
@@ -107,33 +114,42 @@ class ExpensesPage extends ConsumerWidget {
                           onTap: () async {
                             if (event.status == 'CLOSED') {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Evento fechado nao permite editar despesas.')),
+                                const SnackBar(
+                                    content: Text(
+                                        'Evento fechado nao permite editar despesas.')),
                               );
                               return;
                             }
                             final users = await _loadEventUsers(ref, event);
                             final categories = await _loadCategoryNames(ref);
                             if (context.mounted) {
-                              await _showExpenseDialog(context, ref, event, users, categories, expense: expense);
+                              await _showExpenseDialog(
+                                  context, ref, event, users, categories,
+                                  expense: expense);
                             }
                           },
                           title: Text(expense.description),
-                          subtitle: Text('$groupName | ${event.name} | ${_expenseSubtitle(expense)}'),
+                          subtitle: Text(
+                              '$groupName | ${event.name} | ${_expenseSubtitle(expense)}'),
                           trailing: Text(_formatMoney(expense.amount)),
-                          onLongPress: () => _deleteExpense(context, ref, event, expense),
+                          onLongPress: () =>
+                              _deleteExpense(context, ref, event, expense),
                         );
                       },
                     );
                   },
-                  loading: () => const Center(child: CircularProgressIndicator()),
-                  error: (error, _) => Center(child: Text('Erro ao carregar despesas: $error')),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (error, _) =>
+                      Center(child: Text('Erro ao carregar despesas: $error')),
                 ),
               ),
             ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Erro ao carregar evento: $error')),
+        error: (error, _) =>
+            Center(child: Text('Erro ao carregar evento: $error')),
       ),
     );
   }
@@ -151,19 +167,26 @@ String _groupName(List<dynamic>? groups, String groupId) {
   return 'Grupo';
 }
 
-Future<void> _deleteExpense(BuildContext context, WidgetRef ref, EventModel event, ExpenseModel expense) async {
+Future<void> _deleteExpense(BuildContext context, WidgetRef ref,
+    EventModel event, ExpenseModel expense) async {
   try {
     final adminId = await _groupAdminId(ref, event.groupId);
+    if (!context.mounted) {
+      return;
+    }
     if (adminId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Apenas admin do grupo pode deletar.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Apenas admin do grupo pode deletar.')));
       return;
     }
     await ref.read(expensesRepositoryProvider).delete(expense.id, adminId);
     ref.invalidate(selectedEventExpensesProvider);
     ref.invalidate(selectedEventReportProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Nao foi possivel deletar despesa: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Nao foi possivel deletar despesa: $error')));
     }
   }
 }
@@ -177,7 +200,9 @@ Future<String?> _groupAdminId(WidgetRef ref, String groupId) async {
 Future<void> _createCurrentMonth(BuildContext context, WidgetRef ref) async {
   final now = DateTime.now();
   try {
-    await ref.read(monthsRepositoryProvider).create(month: now.month, year: now.year);
+    await ref
+        .read(monthsRepositoryProvider)
+        .create(month: now.month, year: now.year);
     ref.invalidate(monthsProvider);
     ref.invalidate(currentMonthProvider);
     ref.invalidate(currentMonthExpensesProvider);
@@ -200,28 +225,36 @@ Future<void> _showExpenseDialog(
   List<UserModel> users,
   List<String> categories, {
   ExpenseModel? expense,
-}
-) async {
+}) async {
   if (users.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Cadastre ao menos um usuario antes de criar despesas.')),
+      const SnackBar(
+          content:
+              Text('Cadastre ao menos um usuario antes de criar despesas.')),
     );
     return;
   }
 
-  final descriptionController = TextEditingController(text: expense?.description ?? '');
+  final descriptionController =
+      TextEditingController(text: expense?.description ?? '');
   final amountController = TextEditingController(
-    text: expense == null ? '' : expense.amount.toStringAsFixed(2).replaceAll('.', ','),
+    text: expense == null
+        ? ''
+        : expense.amount.toStringAsFixed(2).replaceAll('.', ','),
   );
   final categoryOptions = [...categories];
-  var selectedCategory = categoryOptions.contains(expense?.category) ? expense!.category : categoryOptions.first;
+  var selectedCategory = categoryOptions.contains(expense?.category)
+      ? expense!.category
+      : categoryOptions.first;
   final selectedParticipants = expense == null
       ? users.map((user) => user.id).toSet()
       : expense.participants.map((participant) => participant.userId).toSet();
   var splitPaymentByUser = (expense?.payers.length ?? 0) > 1;
   final installmentsController = TextEditingController(text: '1');
   var installments = 1;
-  var singlePayerId = expense == null || expense.payers.isEmpty ? users.first.id : expense.payers.first.userId;
+  var singlePayerId = expense == null || expense.payers.isEmpty
+      ? users.first.id
+      : expense.payers.first.userId;
   final payerControllers = {
     for (final user in users)
       user.id: TextEditingController(
@@ -250,15 +283,18 @@ Future<void> _showExpenseDialog(
                     const SizedBox(height: 12),
                     TextField(
                       controller: amountController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(labelText: 'Valor'),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: selectedCategory,
-                      decoration: const InputDecoration(labelText: 'Tipo de despesa'),
+                      initialValue: selectedCategory,
+                      decoration:
+                          const InputDecoration(labelText: 'Tipo de despesa'),
                       items: categoryOptions
-                          .map((category) => DropdownMenuItem(value: category, child: Text(category)))
+                          .map((category) => DropdownMenuItem(
+                              value: category, child: Text(category)))
                           .toList(),
                       onChanged: (value) {
                         if (value != null) {
@@ -270,7 +306,8 @@ Future<void> _showExpenseDialog(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
                         onPressed: () async {
-                          final created = await _showCreateCategoryDialog(context, ref);
+                          final created =
+                              await _showCreateCategoryDialog(context, ref);
                           if (created != null) {
                             setState(() {
                               categoryOptions.add(created);
@@ -288,7 +325,8 @@ Future<void> _showExpenseDialog(
                       TextField(
                         controller: installmentsController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Parcelas'),
+                        decoration:
+                            const InputDecoration(labelText: 'Parcelas'),
                         onChanged: (value) {
                           final parsed = int.tryParse(value) ?? 1;
                           setState(() {
@@ -315,15 +353,17 @@ Future<void> _showExpenseDialog(
                     const SizedBox(height: 8),
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('Quem pagou', style: Theme.of(context).textTheme.titleSmall),
+                      child: Text('Quem pagou',
+                          style: Theme.of(context).textTheme.titleSmall),
                     ),
                     const SizedBox(height: 8),
                     if (!splitPaymentByUser)
                       DropdownButtonFormField<String>(
-                        value: singlePayerId,
+                        initialValue: singlePayerId,
                         decoration: const InputDecoration(labelText: 'Pagador'),
                         items: users
-                            .map((user) => DropdownMenuItem(value: user.id, child: Text(user.nickname)))
+                            .map((user) => DropdownMenuItem(
+                                value: user.id, child: Text(user.nickname)))
                             .toList(),
                         onChanged: (value) {
                           if (value != null) {
@@ -337,15 +377,18 @@ Future<void> _showExpenseDialog(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: TextField(
                             controller: payerControllers[user.id],
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: InputDecoration(labelText: 'Valor pago por ${user.nickname}'),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            decoration: InputDecoration(
+                                labelText: 'Valor pago por ${user.nickname}'),
                           ),
                         ),
-                    ),
+                      ),
                     const SizedBox(height: 16),
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('Participantes', style: Theme.of(context).textTheme.titleSmall),
+                      child: Text('Participantes',
+                          style: Theme.of(context).textTheme.titleSmall),
                     ),
                     ...users.map(
                       (user) => CheckboxListTile(
@@ -367,8 +410,12 @@ Future<void> _showExpenseDialog(
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-              FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Salvar')),
+              TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancelar')),
+              FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Salvar')),
             ],
           );
         },
@@ -399,7 +446,8 @@ Future<void> _showExpenseDialog(
           ? <String, double>{}
           : {singlePayerId: amount};
   final installmentsToSave = int.tryParse(installmentsController.text.trim());
-  final totalPaid = payerAmounts.values.fold<double>(0.0, (total, value) => total + value);
+  final totalPaid =
+      payerAmounts.values.fold<double>(0.0, (total, value) => total + value);
   if (descriptionController.text.trim().isEmpty ||
       amount == null ||
       selectedParticipants.isEmpty ||
@@ -410,7 +458,8 @@ Future<void> _showExpenseDialog(
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Preencha descricao, valor, participantes e pagamentos somando o valor da despesa.'),
+          content: Text(
+              'Preencha descricao, valor, participantes e pagamentos somando o valor da despesa.'),
         ),
       );
     }
@@ -422,7 +471,8 @@ Future<void> _showExpenseDialog(
   }
   if (installmentsToSave > 1 && splitPaymentByUser) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Despesa parcelada permite apenas um pagador.')),
+      const SnackBar(
+          content: Text('Despesa parcelada permite apenas um pagador.')),
     );
     descriptionController.dispose();
     amountController.dispose();
@@ -461,6 +511,16 @@ Future<void> _showExpenseDialog(
     ref.invalidate(selectedEventExpensesProvider);
     ref.invalidate(currentMonthReportProvider);
     ref.invalidate(selectedEventReportProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(expense == null
+              ? 'Despesa cadastrada com sucesso.'
+              : 'Despesa atualizada com sucesso.'),
+        ),
+      );
+    }
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -475,7 +535,8 @@ Future<void> _showExpenseDialog(
   }
 }
 
-Future<String?> _showCreateCategoryDialog(BuildContext context, WidgetRef ref) async {
+Future<String?> _showCreateCategoryDialog(
+    BuildContext context, WidgetRef ref) async {
   final controller = TextEditingController();
   final saved = await showDialog<bool>(
     barrierDismissible: false,
@@ -489,8 +550,12 @@ Future<String?> _showCreateCategoryDialog(BuildContext context, WidgetRef ref) a
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Salvar')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Salvar')),
         ],
       );
     },
@@ -511,7 +576,8 @@ Future<String?> _showCreateCategoryDialog(BuildContext context, WidgetRef ref) a
   }
 
   try {
-    final category = await ref.read(expenseCategoriesRepositoryProvider).create(name);
+    final category =
+        await ref.read(expenseCategoriesRepositoryProvider).create(name);
     ref.invalidate(expenseCategoriesProvider);
     return category.name;
   } catch (error) {
@@ -526,7 +592,8 @@ Future<String?> _showCreateCategoryDialog(BuildContext context, WidgetRef ref) a
 
 Future<List<UserModel>> _loadEventUsers(WidgetRef ref, EventModel event) async {
   final users = await ref.read(usersProvider.future);
-  final members = await ref.read(groupsRepositoryProvider).listMembers(event.groupId);
+  final members =
+      await ref.read(groupsRepositoryProvider).listMembers(event.groupId);
   final memberIds = members.map((member) => member.userId).toSet();
   return users.where((user) => memberIds.contains(user.id)).toList();
 }
@@ -565,7 +632,8 @@ String _initialPayerAmount(String userId, ExpenseModel? expense) {
   return matching.first.amount.toStringAsFixed(2).replaceAll('.', ',');
 }
 
-Map<String, double> _readPayerAmounts(Map<String, TextEditingController> controllers) {
+Map<String, double> _readPayerAmounts(
+    Map<String, TextEditingController> controllers) {
   final result = <String, double>{};
   for (final entry in controllers.entries) {
     final value = double.tryParse(entry.value.text.replaceAll(',', '.')) ?? 0;

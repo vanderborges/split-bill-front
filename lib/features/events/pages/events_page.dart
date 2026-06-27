@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../dashboard/services/dashboard_repository.dart';
 import '../../expenses/services/expenses_repository.dart';
 import '../../groups/services/groups_repository.dart';
 import '../../months/services/months_repository.dart';
@@ -178,7 +179,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                         selectedGroupId = groups.first.id;
                       }
                       return DropdownButtonFormField<String>(
-                        value: selectedGroupId,
+                        initialValue: selectedGroupId,
                         decoration: const InputDecoration(labelText: 'Grupo'),
                         items: groups
                             .map((group) => DropdownMenuItem(
@@ -205,7 +206,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: type,
+                    initialValue: type,
                     decoration: const InputDecoration(labelText: 'Tipo'),
                     items: const [
                       DropdownMenuItem(
@@ -365,7 +366,7 @@ Future<void> _closeEvent(
                     'Voce pode fechar apenas ou consolidar o saldo como despesa em outro evento.'),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String?>(
-                  value: targetId,
+                  initialValue: targetId,
                   decoration: const InputDecoration(labelText: 'Consolidar em'),
                   items: [
                     const DropdownMenuItem<String?>(
@@ -398,6 +399,11 @@ Future<void> _closeEvent(
         .read(eventsRepositoryProvider)
         .close(event.id, consolidateToEventId: targetId);
     _invalidateEventState(ref);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Evento fechado com sucesso.')),
+      );
+    }
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -423,6 +429,9 @@ Future<void> _deleteEvent(
     BuildContext context, WidgetRef ref, EventModel event) async {
   try {
     final adminId = await _groupAdminId(ref, event.groupId);
+    if (!context.mounted) {
+      return;
+    }
     if (adminId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Apenas admin do grupo pode deletar.')));
@@ -449,4 +458,5 @@ void _invalidateEventState(WidgetRef ref) {
   ref.invalidate(selectedEventProvider);
   ref.invalidate(selectedEventExpensesProvider);
   ref.invalidate(selectedEventReportProvider);
+  ref.invalidate(dashboardGroupBalancesProvider);
 }

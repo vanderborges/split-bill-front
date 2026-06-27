@@ -39,11 +39,17 @@ class UsersPage extends ConsumerWidget {
               final user = users[index];
               return ListTile(
                 title: Text(user.fullName),
-                onTap: () => _showUserDetailsDialog(context, user),
+                onTap: () => _openFreshUserDetails(context, ref, user.id),
                 trailing: isAdmin
                     ? Wrap(
                         spacing: 8,
                         children: [
+                          IconButton(
+                            tooltip: 'Reiniciar senha',
+                            onPressed: () =>
+                                _showResetPasswordDialog(context, ref, user),
+                            icon: const Icon(Icons.lock_reset_outlined),
+                          ),
                           IconButton(
                             tooltip: 'Editar usuario',
                             onPressed: () =>
@@ -68,6 +74,25 @@ class UsersPage extends ConsumerWidget {
             Center(child: Text('Erro ao carregar usuarios: $error')),
       ),
     );
+  }
+}
+
+Future<void> _openFreshUserDetails(
+  BuildContext context,
+  WidgetRef ref,
+  String userId,
+) async {
+  try {
+    final user = await ref.read(usersRepositoryProvider).get(userId);
+    if (context.mounted) {
+      await _showUserDetailsDialog(context, user);
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nao foi possivel atualizar usuario: $error')),
+      );
+    }
   }
 }
 
@@ -275,6 +300,65 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
       pixKeyController,
       passwordController,
     ]);
+  }
+}
+
+Future<void> _showResetPasswordDialog(
+  BuildContext context,
+  WidgetRef ref,
+  UserModel user,
+) async {
+  final passwordController = TextEditingController();
+  final saved = await showDialog<bool>(
+    barrierDismissible: false,
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Reiniciar senha de ${user.fullName}'),
+      content: TextField(
+        controller: passwordController,
+        obscureText: true,
+        decoration: const InputDecoration(labelText: 'Nova senha'),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Salvar')),
+      ],
+    ),
+  );
+
+  if (saved != true || !context.mounted) {
+    passwordController.dispose();
+    return;
+  }
+
+  final password = passwordController.text;
+  passwordController.dispose();
+  if (password.length < 6) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Senha deve ter ao menos 6 caracteres.')),
+    );
+    return;
+  }
+
+  try {
+    await ref
+        .read(usersRepositoryProvider)
+        .resetPassword(id: user.id, newPassword: password);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Senha reiniciada com sucesso.')),
+      );
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nao foi possivel reiniciar senha: $error')),
+      );
+    }
   }
 }
 

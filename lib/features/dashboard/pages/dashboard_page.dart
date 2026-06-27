@@ -3,52 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_scaffold.dart';
-import '../../auth/services/auth_repository.dart';
-import '../../events/services/events_repository.dart';
-import '../../groups/models/group_model.dart';
-import '../../groups/services/groups_repository.dart';
-import '../../reports/services/reports_repository.dart';
-
-final dashboardGroupBalancesProvider =
-    FutureProvider<List<_GroupBalance>>((ref) async {
-  final user = await ref.watch(currentUserProvider.future);
-  if (user == null) {
-    return [];
-  }
-
-  final groups = await ref.watch(groupsProvider.future);
-  final eventsRepository = ref.watch(eventsRepositoryProvider);
-  final reportsRepository = ref.watch(reportsRepositoryProvider);
-
-  final balances = <_GroupBalance>[];
-  for (final group in groups) {
-    var balance = 0.0;
-
-    try {
-      final events = await eventsRepository.list(groupId: group.id);
-      final openEvents = events.where((event) => event.status == 'OPEN');
-
-      for (final event in openEvents) {
-        try {
-          final report = await reportsRepository.getEventReport(event.id);
-          final userBalances =
-              report.balances.where((item) => item.userId == user.id);
-          if (userBalances.isNotEmpty) {
-            balance += userBalances.first.balance;
-          }
-        } catch (_) {
-          balance += 0;
-        }
-      }
-    } catch (_) {
-      balance = 0;
-    }
-
-    balances.add(_GroupBalance(group: group, balance: balance));
-  }
-
-  return balances;
-});
+import '../models/dashboard_group_balance_model.dart';
+import '../services/dashboard_repository.dart';
 
 class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key});
@@ -97,7 +53,7 @@ class DashboardPage extends ConsumerWidget {
 class _BalancesContent extends StatelessWidget {
   const _BalancesContent({required this.balances});
 
-  final List<_GroupBalance> balances;
+  final List<DashboardGroupBalanceModel> balances;
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +80,7 @@ class _BalancesContent extends StatelessWidget {
             (groupBalance) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: _BalanceCard(
-                title: groupBalance.group.name,
+                title: groupBalance.groupName,
                 balance: groupBalance.balance,
                 icon: Icons.groups_outlined,
               ),
@@ -174,16 +130,6 @@ class _BalanceCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _GroupBalance {
-  const _GroupBalance({
-    required this.group,
-    required this.balance,
-  });
-
-  final GroupModel group;
-  final double balance;
 }
 
 String _formatMoney(double value) {

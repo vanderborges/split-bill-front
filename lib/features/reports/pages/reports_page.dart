@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../dashboard/services/dashboard_repository.dart';
 import '../../events/services/events_repository.dart';
 import '../../expenses/services/expenses_repository.dart';
 import '../../groups/services/groups_repository.dart';
@@ -44,7 +45,7 @@ class ReportsPage extends ConsumerWidget {
             children: [
               groupsAsync.when(
                 data: (groups) => DropdownButtonFormField<String?>(
-                  value: selectedGroupId,
+                  initialValue: selectedGroupId,
                   decoration: const InputDecoration(labelText: 'Grupo'),
                   items: [
                     const DropdownMenuItem<String?>(
@@ -67,7 +68,7 @@ class ReportsPage extends ConsumerWidget {
               eventAsync.when(
                 data: (event) => eventsAsync.when(
                   data: (events) => DropdownButtonFormField<String>(
-                    value: event?.id,
+                    initialValue: event?.id,
                     decoration: const InputDecoration(labelText: 'Evento'),
                     items: events
                         .map((item) => DropdownMenuItem(
@@ -228,6 +229,7 @@ Future<void> _updateSettlement(
         );
     ref.invalidate(selectedEventSettlementsProvider);
     ref.invalidate(selectedEventReportProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -274,6 +276,12 @@ Future<void> _confirmCloseEvent(
     ref.invalidate(selectedEventReportProvider);
     ref.invalidate(selectedEventExpensesProvider);
     ref.invalidate(selectedEventSettlementsProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Evento fechado com sucesso.')),
+      );
+    }
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

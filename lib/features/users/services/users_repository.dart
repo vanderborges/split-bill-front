@@ -24,6 +24,11 @@ class UsersRepository {
         .toList();
   }
 
+  Future<UserModel> get(String id) async {
+    final response = await dio.get<Map<String, dynamic>>('/users/$id');
+    return UserModel.fromJson(response.data!);
+  }
+
   Future<UserModel> create({
     required String fullName,
     required String nickname,
@@ -87,6 +92,16 @@ class UsersRepository {
         'currentPassword': currentPassword,
         'newPassword': newPassword,
       },
+    );
+  }
+
+  Future<void> resetPassword({
+    required String id,
+    required String newPassword,
+  }) async {
+    await dio.put<void>(
+      '/users/$id/password/reset',
+      data: {'newPassword': newPassword},
     );
   }
 }

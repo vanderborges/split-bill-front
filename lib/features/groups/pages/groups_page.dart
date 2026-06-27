@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../dashboard/services/dashboard_repository.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../events/services/events_repository.dart';
 import '../../users/services/users_repository.dart';
@@ -37,7 +38,7 @@ class GroupsPage extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: selectedId,
+                      initialValue: selectedId,
                       decoration: const InputDecoration(labelText: 'Grupo'),
                       items: groups
                           .map((group) => DropdownMenuItem(
@@ -86,6 +87,9 @@ Future<void> _deleteGroup(
     final members =
         await ref.read(groupsRepositoryProvider).listMembers(group.id);
     final admins = members.where((member) => member.role == 'ADMIN').toList();
+    if (!context.mounted) {
+      return;
+    }
     if (admins.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Apenas admin do grupo pode deletar.')));
@@ -99,6 +103,7 @@ Future<void> _deleteGroup(
     ref.invalidate(selectedGroupProvider);
     ref.invalidate(eventsProvider);
     ref.invalidate(selectedEventProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -207,6 +212,9 @@ Future<void> _confirmRemoveMember(BuildContext context, WidgetRef ref,
         .removeMember(group.id, member.userId);
     ref.invalidate(selectedGroupProvider);
     ref.invalidate(groupRoleProvider(group.id));
+    ref.invalidate(groupsProvider);
+    ref.invalidate(eventsProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -243,6 +251,7 @@ Future<void> _confirmLeaveGroup(
     ref.invalidate(selectedGroupProvider);
     ref.invalidate(eventsProvider);
     ref.invalidate(selectedEventProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -260,7 +269,7 @@ Future<void> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
       builder: (context, setState) => AlertDialog(
         title: Text('Perfil de ${member.nickname}'),
         content: DropdownButtonFormField<String>(
-          value: role,
+          initialValue: role,
           decoration: const InputDecoration(labelText: 'Perfil no grupo'),
           items: const [
             DropdownMenuItem(value: 'MEMBER', child: Text('Integrante')),
@@ -291,6 +300,8 @@ Future<void> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
         );
     ref.invalidate(selectedGroupProvider);
     ref.invalidate(groupRoleProvider(group.id));
+    ref.invalidate(groupsProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -349,6 +360,7 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
     ref.read(selectedGroupIdProvider.notifier).state = group.id;
     ref.invalidate(groupsProvider);
     ref.invalidate(selectedGroupProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -378,7 +390,7 @@ Future<void> _showAddMemberDialog(
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<String>(
-              value: userId,
+              initialValue: userId,
               decoration: const InputDecoration(labelText: 'Usuario'),
               items: users
                   .map((user) => DropdownMenuItem(
@@ -392,7 +404,7 @@ Future<void> _showAddMemberDialog(
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: role,
+              initialValue: role,
               decoration: const InputDecoration(labelText: 'Perfil no grupo'),
               items: const [
                 DropdownMenuItem(value: 'MEMBER', child: Text('Integrante')),
@@ -434,6 +446,8 @@ Future<void> _showAddMemberDialog(
           role: role,
         );
     ref.invalidate(selectedGroupProvider);
+    ref.invalidate(groupsProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
