@@ -280,13 +280,22 @@ Future<void> _showExpenseDialog(
     builder: (context) {
       return StatefulBuilder(
         builder: (context, setState) {
+          final totalShares =
+              _totalShareCount(selectedParticipants, shareCountControllers);
+          final dialogAmount =
+              double.tryParse(amountController.text.replaceAll(',', '.'));
+          final shareValue = dialogAmount == null || totalShares == 0
+              ? null
+              : dialogAmount / totalShares;
+
           return AlertDialog(
             title: Text(expense == null ? 'Nova despesa' : 'Editar despesa'),
-            content: SizedBox(
-              width: 420,
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     TextField(
                       controller: descriptionController,
@@ -402,69 +411,147 @@ Future<void> _showExpenseDialog(
                       child: Text('Participantes',
                           style: Theme.of(context).textTheme.titleSmall),
                     ),
-                    ...users.map(
-                      (user) {
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: users.map((user) {
                         final selected = selectedParticipants.contains(user.id);
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Column(
-                            children: [
-                              CheckboxListTile(
-                                value: selected,
-                                title: Text(user.nickname),
-                                subtitle: selected
-                                    ? Text(_sharePreview(
-                                        shareCountControllers[user.id]!.text,
-                                        shareDescriptionControllers[user.id]!
-                                            .text,
-                                      ))
-                                    : null,
-                                onChanged: (checked) {
-                                  setState(() {
-                                    if (checked ?? false) {
-                                      selectedParticipants.add(user.id);
-                                    } else {
-                                      selectedParticipants.remove(user.id);
-                                    }
-                                  });
-                                },
-                              ),
-                              if (selected)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16),
-                                  child: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 96,
-                                        child: TextField(
-                                          controller:
-                                              shareCountControllers[user.id],
-                                          keyboardType: TextInputType.number,
-                                          decoration: const InputDecoration(
-                                              labelText: 'Cotas'),
-                                          onChanged: (_) => setState(() {}),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: TextField(
-                                          controller:
-                                              shareDescriptionControllers[
-                                                  user.id],
-                                          decoration: const InputDecoration(
-                                              labelText: 'Descricao das cotas'),
-                                          onChanged: (_) => setState(() {}),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
+                        return FilterChip(
+                          selected: selected,
+                          label: Text(user.nickname),
+                          onSelected: (checked) {
+                            setState(() {
+                              if (checked) {
+                                selectedParticipants.add(user.id);
+                                final current =
+                                    shareCountControllers[user.id]!.text;
+                                if ((int.tryParse(current) ?? 0) <= 0) {
+                                  shareCountControllers[user.id]!.text = '1';
+                                }
+                              } else {
+                                selectedParticipants.remove(user.id);
+                              }
+                            });
+                          },
                         );
-                      },
+                      }).toList(),
                     ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Wrap(
+                        spacing: 16,
+                        runSpacing: 4,
+                        children: [
+                          Text('${selectedParticipants.length} participantes'),
+                          Text('$totalShares cotas'),
+                          Text(shareValue == null
+                              ? 'Valor por cota: -'
+                              : 'Valor por cota: ${_formatMoney(shareValue)}'),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (selectedParticipants.isEmpty)
+                      const Text('Selecione ao menos um participante.')
+                    else
+                      ...users
+                          .where(
+                              (user) => selectedParticipants.contains(user.id))
+                          .map(
+                        (user) {
+                          final count = _shareCountFor(
+                            user.id,
+                            shareCountControllers,
+                          );
+                          final userAmount =
+                              shareValue == null ? null : shareValue * count;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        user.nickname,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyLarge,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Diminuir cota',
+                                      onPressed: count <= 1
+                                          ? null
+                                          : () {
+                                              setState(() {
+                                                shareCountControllers[user.id]!
+                                                    .text = '${count - 1}';
+                                              });
+                                            },
+                                      icon: const Icon(Icons.remove),
+                                    ),
+                                    SizedBox(
+                                      width: 48,
+                                      child: TextField(
+                                        controller:
+                                            shareCountControllers[user.id],
+                                        textAlign: TextAlign.center,
+                                        keyboardType: TextInputType.number,
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          labelText: 'Cotas',
+                                        ),
+                                        onChanged: (_) => setState(() {}),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Aumentar cota',
+                                      onPressed: () {
+                                        setState(() {
+                                          shareCountControllers[user.id]!.text =
+                                              '${count + 1}';
+                                        });
+                                      },
+                                      icon: const Icon(Icons.add),
+                                    ),
+                                  ],
+                                ),
+                                if (userAmount != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      'Participacao: ${_formatMoney(userAmount)}',
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller:
+                                      shareDescriptionControllers[user.id],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Historico desta cota',
+                                    hintText: 'Ex.: Rafa e Gertrudes',
+                                    isDense: true,
+                                  ),
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                   ],
                 ),
               ),
@@ -743,16 +830,6 @@ String _initialShareDescription(String userId, ExpenseModel? expense) {
   return matching.first.shareDescription ?? '';
 }
 
-String _sharePreview(String countText, String description) {
-  final count = int.tryParse(countText) ?? 1;
-  final label = count == 1 ? '1 cota' : '$count cotas';
-  final trimmedDescription = description.trim();
-  if (trimmedDescription.isEmpty) {
-    return label;
-  }
-  return '$label: $trimmedDescription';
-}
-
 Map<String, double> _readPayerAmounts(
     Map<String, TextEditingController> controllers) {
   final result = <String, double>{};
@@ -765,16 +842,31 @@ Map<String, double> _readPayerAmounts(
   return result;
 }
 
+int _shareCountFor(
+  String userId,
+  Map<String, TextEditingController> controllers,
+) {
+  final value = int.tryParse(controllers[userId]?.text.trim() ?? '') ?? 1;
+  return value < 1 ? 1 : value;
+}
+
+int _totalShareCount(
+  Set<String> selectedParticipants,
+  Map<String, TextEditingController> controllers,
+) {
+  return selectedParticipants.fold<int>(
+    0,
+    (total, userId) => total + _shareCountFor(userId, controllers),
+  );
+}
+
 Map<String, int> _readParticipantShareCounts(
   Set<String> selectedParticipants,
   Map<String, TextEditingController> controllers,
 ) {
   final result = <String, int>{};
   for (final userId in selectedParticipants) {
-    final value = int.tryParse(controllers[userId]?.text.trim() ?? '') ?? 0;
-    if (value > 0) {
-      result[userId] = value;
-    }
+    result[userId] = _shareCountFor(userId, controllers);
   }
   return result;
 }
