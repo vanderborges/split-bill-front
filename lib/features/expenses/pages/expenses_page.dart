@@ -452,10 +452,13 @@ Future<void> _showExpenseDialog(
                         runSpacing: 4,
                         children: [
                           Text('${selectedParticipants.length} participantes'),
-                          Text('$totalShares cotas'),
+                          if (totalShares > selectedParticipants.length)
+                            Text('$totalShares cotas'),
                           Text(shareValue == null
-                              ? 'Valor por cota: -'
-                              : 'Valor por cota: ${_formatMoney(shareValue)}'),
+                              ? 'Divisao: -'
+                              : totalShares > selectedParticipants.length
+                                  ? 'Valor por cota: ${_formatMoney(shareValue)}'
+                                  : 'Cada participante: ${_formatMoney(shareValue)}'),
                         ],
                       ),
                     ),
@@ -472,6 +475,11 @@ Future<void> _showExpenseDialog(
                             user.id,
                             shareCountControllers,
                           );
+                          final hasExtraShare = _hasExtraShare(
+                            user.id,
+                            shareCountControllers,
+                            shareDescriptionControllers,
+                          );
                           final userAmount =
                               shareValue == null ? null : shareValue * count;
                           return Padding(
@@ -482,71 +490,104 @@ Future<void> _showExpenseDialog(
                                 Row(
                                   children: [
                                     Expanded(
-                                      child: Text(
-                                        user.nickname,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyLarge,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            user.nickname,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyLarge,
+                                          ),
+                                          if (userAmount != null)
+                                            Text(
+                                              'Participacao: ${_formatMoney(userAmount)}',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall,
+                                            ),
+                                        ],
                                       ),
                                     ),
-                                    IconButton(
-                                      tooltip: 'Diminuir cota',
-                                      onPressed: count <= 1
-                                          ? null
-                                          : () {
-                                              setState(() {
-                                                shareCountControllers[user.id]!
-                                                    .text = '${count - 1}';
-                                              });
-                                            },
-                                      icon: const Icon(Icons.remove),
-                                    ),
-                                    SizedBox(
-                                      width: 48,
-                                      child: TextField(
-                                        controller:
-                                            shareCountControllers[user.id],
-                                        textAlign: TextAlign.center,
-                                        keyboardType: TextInputType.number,
-                                        decoration: const InputDecoration(
-                                          isDense: true,
-                                          labelText: 'Cotas',
+                                    if (!hasExtraShare)
+                                      TextButton.icon(
+                                        onPressed: () {
+                                          setState(() {
+                                            shareCountControllers[user.id]!
+                                                .text = '2';
+                                          });
+                                        },
+                                        icon: const Icon(Icons.group_add),
+                                        label: const Text('Cota extra'),
+                                      )
+                                    else ...[
+                                      IconButton(
+                                        tooltip: 'Diminuir cota',
+                                        onPressed: count <= 2
+                                            ? null
+                                            : () {
+                                                setState(() {
+                                                  shareCountControllers[
+                                                          user.id]!
+                                                      .text = '${count - 1}';
+                                                });
+                                              },
+                                        icon: const Icon(Icons.remove),
+                                      ),
+                                      SizedBox(
+                                        width: 64,
+                                        child: TextField(
+                                          controller:
+                                              shareCountControllers[user.id],
+                                          textAlign: TextAlign.center,
+                                          keyboardType: TextInputType.number,
+                                          decoration: const InputDecoration(
+                                            isDense: true,
+                                            labelText: 'Cotas',
+                                          ),
+                                          onChanged: (_) => setState(() {}),
                                         ),
-                                        onChanged: (_) => setState(() {}),
                                       ),
-                                    ),
-                                    IconButton(
-                                      tooltip: 'Aumentar cota',
-                                      onPressed: () {
-                                        setState(() {
-                                          shareCountControllers[user.id]!.text =
-                                              '${count + 1}';
-                                        });
-                                      },
-                                      icon: const Icon(Icons.add),
-                                    ),
+                                      IconButton(
+                                        tooltip: 'Aumentar cota',
+                                        onPressed: () {
+                                          setState(() {
+                                            shareCountControllers[user.id]!
+                                                .text = '${count + 1}';
+                                          });
+                                        },
+                                        icon: const Icon(Icons.add),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Remover cota extra',
+                                        onPressed: () {
+                                          setState(() {
+                                            shareCountControllers[user.id]!
+                                                .text = '1';
+                                            shareDescriptionControllers[
+                                                    user.id]!
+                                                .clear();
+                                          });
+                                        },
+                                        icon: const Icon(Icons.close),
+                                      ),
+                                    ],
                                   ],
                                 ),
-                                if (userAmount != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 2),
-                                    child: Text(
-                                      'Participacao: ${_formatMoney(userAmount)}',
-                                      style:
-                                          Theme.of(context).textTheme.bodySmall,
+                                if (hasExtraShare) ...[
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller:
+                                        shareDescriptionControllers[user.id],
+                                    decoration: const InputDecoration(
+                                      labelText: 'Historico da cota extra',
+                                      hintText: 'Ex.: Rafa e Gertrudes',
+                                      isDense: true,
                                     ),
+                                    onChanged: (_) => setState(() {}),
                                   ),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller:
-                                      shareDescriptionControllers[user.id],
-                                  decoration: const InputDecoration(
-                                    labelText: 'Historico desta cota',
-                                    hintText: 'Ex.: Rafa e Gertrudes',
-                                    isDense: true,
-                                  ),
-                                  onChanged: (_) => setState(() {}),
-                                ),
+                                ],
                               ],
                             ),
                           );
@@ -858,6 +899,15 @@ int _totalShareCount(
     0,
     (total, userId) => total + _shareCountFor(userId, controllers),
   );
+}
+
+bool _hasExtraShare(
+  String userId,
+  Map<String, TextEditingController> shareCountControllers,
+  Map<String, TextEditingController> shareDescriptionControllers,
+) {
+  return _shareCountFor(userId, shareCountControllers) > 1 ||
+      (shareDescriptionControllers[userId]?.text.trim().isNotEmpty ?? false);
 }
 
 Map<String, int> _readParticipantShareCounts(
