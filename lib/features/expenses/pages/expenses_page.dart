@@ -249,6 +249,18 @@ Future<void> _showExpenseDialog(
   final selectedParticipants = expense == null
       ? users.map((user) => user.id).toSet()
       : expense.participants.map((participant) => participant.userId).toSet();
+  final shareCountControllers = {
+    for (final user in users)
+      user.id: TextEditingController(
+        text: _initialShareCount(user.id, expense),
+      ),
+  };
+  final shareDescriptionControllers = {
+    for (final user in users)
+      user.id: TextEditingController(
+        text: _initialShareDescription(user.id, expense),
+      ),
+  };
   var splitPaymentByUser = (expense?.payers.length ?? 0) > 1;
   final installmentsController = TextEditingController(text: '1');
   var installments = 1;
@@ -391,19 +403,67 @@ Future<void> _showExpenseDialog(
                           style: Theme.of(context).textTheme.titleSmall),
                     ),
                     ...users.map(
-                      (user) => CheckboxListTile(
-                        value: selectedParticipants.contains(user.id),
-                        title: Text(user.nickname),
-                        onChanged: (checked) {
-                          setState(() {
-                            if (checked ?? false) {
-                              selectedParticipants.add(user.id);
-                            } else {
-                              selectedParticipants.remove(user.id);
-                            }
-                          });
-                        },
-                      ),
+                      (user) {
+                        final selected = selectedParticipants.contains(user.id);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Column(
+                            children: [
+                              CheckboxListTile(
+                                value: selected,
+                                title: Text(user.nickname),
+                                subtitle: selected
+                                    ? Text(_sharePreview(
+                                        shareCountControllers[user.id]!.text,
+                                        shareDescriptionControllers[user.id]!
+                                            .text,
+                                      ))
+                                    : null,
+                                onChanged: (checked) {
+                                  setState(() {
+                                    if (checked ?? false) {
+                                      selectedParticipants.add(user.id);
+                                    } else {
+                                      selectedParticipants.remove(user.id);
+                                    }
+                                  });
+                                },
+                              ),
+                              if (selected)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 96,
+                                        child: TextField(
+                                          controller:
+                                              shareCountControllers[user.id],
+                                          keyboardType: TextInputType.number,
+                                          decoration: const InputDecoration(
+                                              labelText: 'Cotas'),
+                                          onChanged: (_) => setState(() {}),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: TextField(
+                                          controller:
+                                              shareDescriptionControllers[
+                                                  user.id],
+                                          decoration: const InputDecoration(
+                                              labelText: 'Descricao das cotas'),
+                                          onChanged: (_) => setState(() {}),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -428,6 +488,8 @@ Future<void> _showExpenseDialog(
     amountController.dispose();
     installmentsController.dispose();
     _disposeControllers(payerControllers.values);
+    _disposeControllers(shareCountControllers.values);
+    _disposeControllers(shareDescriptionControllers.values);
     return;
   }
 
@@ -436,6 +498,8 @@ Future<void> _showExpenseDialog(
     amountController.dispose();
     installmentsController.dispose();
     _disposeControllers(payerControllers.values);
+    _disposeControllers(shareCountControllers.values);
+    _disposeControllers(shareDescriptionControllers.values);
     return;
   }
 
@@ -446,11 +510,18 @@ Future<void> _showExpenseDialog(
           ? <String, double>{}
           : {singlePayerId: amount};
   final installmentsToSave = int.tryParse(installmentsController.text.trim());
+  final participantShareCounts =
+      _readParticipantShareCounts(selectedParticipants, shareCountControllers);
+  final participantShareDescriptions = _readParticipantShareDescriptions(
+    selectedParticipants,
+    shareDescriptionControllers,
+  );
   final totalPaid =
       payerAmounts.values.fold<double>(0.0, (total, value) => total + value);
   if (descriptionController.text.trim().isEmpty ||
       amount == null ||
       selectedParticipants.isEmpty ||
+      participantShareCounts.length != selectedParticipants.length ||
       payerAmounts.isEmpty ||
       installmentsToSave == null ||
       installmentsToSave < 1 ||
@@ -467,6 +538,8 @@ Future<void> _showExpenseDialog(
     amountController.dispose();
     installmentsController.dispose();
     _disposeControllers(payerControllers.values);
+    _disposeControllers(shareCountControllers.values);
+    _disposeControllers(shareDescriptionControllers.values);
     return;
   }
   if (installmentsToSave > 1 && splitPaymentByUser) {
@@ -478,6 +551,8 @@ Future<void> _showExpenseDialog(
     amountController.dispose();
     installmentsController.dispose();
     _disposeControllers(payerControllers.values);
+    _disposeControllers(shareCountControllers.values);
+    _disposeControllers(shareDescriptionControllers.values);
     return;
   }
 
@@ -491,6 +566,8 @@ Future<void> _showExpenseDialog(
             monthId: event.monthId,
             eventId: event.id,
             participantIds: selectedParticipants.toList(),
+            participantShareCounts: participantShareCounts,
+            participantShareDescriptions: participantShareDescriptions,
             payerAmounts: payerAmounts,
             installments: installmentsToSave,
           );
@@ -504,6 +581,8 @@ Future<void> _showExpenseDialog(
             monthId: event.monthId,
             eventId: event.id,
             participantIds: selectedParticipants.toList(),
+            participantShareCounts: participantShareCounts,
+            participantShareDescriptions: participantShareDescriptions,
             payerAmounts: payerAmounts,
           );
     }
@@ -532,6 +611,8 @@ Future<void> _showExpenseDialog(
     amountController.dispose();
     installmentsController.dispose();
     _disposeControllers(payerControllers.values);
+    _disposeControllers(shareCountControllers.values);
+    _disposeControllers(shareDescriptionControllers.values);
   }
 }
 
@@ -618,7 +699,13 @@ String _expenseSubtitle(ExpenseModel expense) {
   final installment = expense.installmentNumber == null
       ? ''
       : ' | Parcelado ${expense.installmentNumber}/${expense.totalInstallments}';
-  return '${expense.category} | Pago por ${expense.payerNickname}$installment';
+  final shares = expense.participants
+      .where((participant) => participant.shareCount > 1)
+      .map(
+          (participant) => '${participant.nickname} x${participant.shareCount}')
+      .join(', ');
+  final shareText = shares.isEmpty ? '' : ' | Cotas: $shares';
+  return '${expense.category} | Pago por ${expense.payerNickname}$installment$shareText';
 }
 
 String _initialPayerAmount(String userId, ExpenseModel? expense) {
@@ -632,6 +719,40 @@ String _initialPayerAmount(String userId, ExpenseModel? expense) {
   return matching.first.amount.toStringAsFixed(2).replaceAll('.', ',');
 }
 
+String _initialShareCount(String userId, ExpenseModel? expense) {
+  if (expense == null) {
+    return '1';
+  }
+  final matching =
+      expense.participants.where((participant) => participant.userId == userId);
+  if (matching.isEmpty) {
+    return '1';
+  }
+  return matching.first.shareCount.toString();
+}
+
+String _initialShareDescription(String userId, ExpenseModel? expense) {
+  if (expense == null) {
+    return '';
+  }
+  final matching =
+      expense.participants.where((participant) => participant.userId == userId);
+  if (matching.isEmpty) {
+    return '';
+  }
+  return matching.first.shareDescription ?? '';
+}
+
+String _sharePreview(String countText, String description) {
+  final count = int.tryParse(countText) ?? 1;
+  final label = count == 1 ? '1 cota' : '$count cotas';
+  final trimmedDescription = description.trim();
+  if (trimmedDescription.isEmpty) {
+    return label;
+  }
+  return '$label: $trimmedDescription';
+}
+
 Map<String, double> _readPayerAmounts(
     Map<String, TextEditingController> controllers) {
   final result = <String, double>{};
@@ -639,6 +760,34 @@ Map<String, double> _readPayerAmounts(
     final value = double.tryParse(entry.value.text.replaceAll(',', '.')) ?? 0;
     if (value > 0) {
       result[entry.key] = value;
+    }
+  }
+  return result;
+}
+
+Map<String, int> _readParticipantShareCounts(
+  Set<String> selectedParticipants,
+  Map<String, TextEditingController> controllers,
+) {
+  final result = <String, int>{};
+  for (final userId in selectedParticipants) {
+    final value = int.tryParse(controllers[userId]?.text.trim() ?? '') ?? 0;
+    if (value > 0) {
+      result[userId] = value;
+    }
+  }
+  return result;
+}
+
+Map<String, String> _readParticipantShareDescriptions(
+  Set<String> selectedParticipants,
+  Map<String, TextEditingController> controllers,
+) {
+  final result = <String, String>{};
+  for (final userId in selectedParticipants) {
+    final value = controllers[userId]?.text.trim() ?? '';
+    if (value.isNotEmpty) {
+      result[userId] = value;
     }
   }
   return result;

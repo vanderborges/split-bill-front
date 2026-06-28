@@ -50,7 +50,7 @@ class _UserExpenseSummaryPageState
                 ref.read(selectedGroupIdProvider.notifier).state = groupId;
               }
               return DropdownButtonFormField<String>(
-                value: groupId,
+                initialValue: groupId,
                 decoration: const InputDecoration(labelText: 'Grupo'),
                 items: groups
                     .map((group) => DropdownMenuItem(
@@ -90,7 +90,7 @@ class _UserExpenseSummaryPageState
                   builder: (context, snapshot) {
                     final members = snapshot.data ?? [];
                     return DropdownButtonFormField<String?>(
-                      value: userId,
+                      initialValue: userId,
                       decoration: const InputDecoration(labelText: 'Extrato'),
                       items: [
                         const DropdownMenuItem<String?>(
@@ -110,7 +110,7 @@ class _UserExpenseSummaryPageState
           const SizedBox(height: 12),
           eventsAsync.when(
             data: (events) => DropdownButtonFormField<String?>(
-              value: eventId,
+              initialValue: eventId,
               decoration: const InputDecoration(labelText: 'Evento'),
               items: [
                 const DropdownMenuItem<String?>(
@@ -126,7 +126,7 @@ class _UserExpenseSummaryPageState
           const SizedBox(height: 12),
           categoriesAsync.when(
             data: (categories) => DropdownButtonFormField<String?>(
-              value: category,
+              initialValue: category,
               decoration: const InputDecoration(labelText: 'Tipo de despesa'),
               items: [
                 const DropdownMenuItem<String?>(

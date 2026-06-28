@@ -49,10 +49,12 @@ class ExpenseModel {
       installmentNumber: json['installmentNumber'] as int?,
       totalInstallments: json['totalInstallments'] as int?,
       payers: (json['payers'] as List<dynamic>? ?? [])
-          .map((item) => ExpensePayerModel.fromJson(item as Map<String, dynamic>))
+          .map((item) =>
+              ExpensePayerModel.fromJson(item as Map<String, dynamic>))
           .toList(),
       participants: (json['participants'] as List<dynamic>)
-          .map((item) => ExpenseParticipantModel.fromJson(item as Map<String, dynamic>))
+          .map((item) =>
+              ExpenseParticipantModel.fromJson(item as Map<String, dynamic>))
           .toList(),
     );
   }
@@ -83,17 +85,23 @@ class ExpenseParticipantModel {
     required this.userId,
     required this.nickname,
     required this.shareAmount,
+    required this.shareCount,
+    required this.shareDescription,
   });
 
   final String userId;
   final String nickname;
   final double shareAmount;
+  final int shareCount;
+  final String? shareDescription;
 
   factory ExpenseParticipantModel.fromJson(Map<String, dynamic> json) {
     return ExpenseParticipantModel(
       userId: json['userId'] as String,
       nickname: json['nickname'] as String,
       shareAmount: double.parse(json['shareAmount'].toString()),
+      shareCount: json['shareCount'] as int? ?? 1,
+      shareDescription: json['shareDescription'] as String?,
     );
   }
 }
