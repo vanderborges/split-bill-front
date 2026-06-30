@@ -124,12 +124,9 @@ class ExpensesRepository {
     }
   }
 
-  Future<void> delete(String id, String adminUserId) async {
+  Future<void> delete(String id) async {
     try {
-      await dio.delete<void>(
-        '/expenses/$id',
-        queryParameters: {'adminUserId': adminUserId},
-      );
+      await dio.delete<void>('/expenses/$id');
     } on DioException catch (error) {
       throw Exception(_errorMessage(error));
     }

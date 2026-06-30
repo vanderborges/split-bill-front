@@ -7,6 +7,7 @@ class ExpenseModel {
     required this.category,
     required this.payerId,
     required this.payerNickname,
+    required this.createdByUserId,
     required this.monthId,
     required this.eventId,
     required this.sourceEventId,
@@ -24,6 +25,7 @@ class ExpenseModel {
   final String category;
   final String payerId;
   final String payerNickname;
+  final String createdByUserId;
   final String? monthId;
   final String? eventId;
   final String? sourceEventId;
@@ -42,6 +44,8 @@ class ExpenseModel {
       category: json['category'] as String,
       payerId: json['payerId'] as String,
       payerNickname: json['payerNickname'] as String,
+      createdByUserId:
+          json['createdByUserId'] as String? ?? json['payerId'] as String,
       monthId: json['monthId'] as String?,
       eventId: json['eventId'] as String?,
       sourceEventId: json['sourceEventId'] as String?,

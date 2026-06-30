@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../auth/services/auth_repository.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../events/models/event_model.dart';
 import '../../events/services/events_repository.dart';
@@ -23,6 +24,7 @@ class ExpensesPage extends ConsumerWidget {
     final eventsAsync = ref.watch(eventsProvider);
     final expensesAsync = ref.watch(selectedEventExpensesProvider);
     final groupsAsync = ref.watch(groupsProvider);
+    final currentUser = ref.watch(currentUserProvider).valueOrNull;
 
     return AppScaffold(
       title: 'Despesas',
@@ -63,6 +65,9 @@ class ExpensesPage extends ConsumerWidget {
             );
           }
           final groupName = _groupName(groupsAsync.valueOrNull, event.groupId);
+          final isGroupAdmin =
+              ref.watch(groupRoleProvider(event.groupId)).valueOrNull ==
+                  'ADMIN';
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -76,7 +81,8 @@ class ExpensesPage extends ConsumerWidget {
                     items: events
                         .map((item) => DropdownMenuItem(
                             value: item.id,
-                            child: Text('${item.name} - ${item.typeLabel}')))
+                            child: Text(
+                                _eventLabel(item, groupsAsync.valueOrNull))))
                         .toList(),
                     onChanged: (value) {
                       ref.read(selectedEventIdProvider.notifier).state = value;
@@ -110,30 +116,49 @@ class ExpensesPage extends ConsumerWidget {
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final expense = expenses[index];
+                        final canChange = _canChangeExpense(
+                          expense,
+                          currentUser?.id,
+                          isGroupAdmin,
+                        );
                         return ListTile(
-                          onTap: () async {
-                            if (event.status == 'CLOSED') {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text(
-                                        'Evento fechado nao permite editar despesas.')),
-                              );
-                              return;
-                            }
-                            final users = await _loadEventUsers(ref, event);
-                            final categories = await _loadCategoryNames(ref);
-                            if (context.mounted) {
-                              await _showExpenseDialog(
-                                  context, ref, event, users, categories,
-                                  expense: expense);
-                            }
-                          },
+                          leading: SizedBox(
+                            width: 56,
+                            child: Text(
+                              _formatDate(expense.expenseDate),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          onTap: !canChange
+                              ? null
+                              : () async {
+                                  if (event.status == 'CLOSED') {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              'Evento fechado nao permite editar despesas.')),
+                                    );
+                                    return;
+                                  }
+                                  final users =
+                                      await _loadEventUsers(ref, event);
+                                  final categories =
+                                      await _loadCategoryNames(ref);
+                                  if (context.mounted) {
+                                    await _showExpenseDialog(
+                                        context, ref, event, users, categories,
+                                        expense: expense);
+                                  }
+                                },
                           title: Text(expense.description),
-                          subtitle: Text(
-                              '$groupName | ${event.name} | ${_expenseSubtitle(expense)}'),
                           trailing: Text(_formatMoney(expense.amount)),
-                          onLongPress: () =>
-                              _deleteExpense(context, ref, event, expense),
+                          onLongPress: !canChange
+                              ? null
+                              : () => _deleteExpense(
+                                    context,
+                                    ref,
+                                    expense,
+                                  ),
                         );
                       },
                     );
@@ -167,19 +192,22 @@ String _groupName(List<dynamic>? groups, String groupId) {
   return 'Grupo';
 }
 
-Future<void> _deleteExpense(BuildContext context, WidgetRef ref,
-    EventModel event, ExpenseModel expense) async {
+String _eventLabel(EventModel event, List<dynamic>? groups) {
+  return '${event.name} | ${_groupName(groups, event.groupId)}';
+}
+
+bool _canChangeExpense(
+  ExpenseModel expense,
+  String? currentUserId,
+  bool isGroupAdmin,
+) {
+  return isGroupAdmin || expense.createdByUserId == currentUserId;
+}
+
+Future<void> _deleteExpense(
+    BuildContext context, WidgetRef ref, ExpenseModel expense) async {
   try {
-    final adminId = await _groupAdminId(ref, event.groupId);
-    if (!context.mounted) {
-      return;
-    }
-    if (adminId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Apenas admin do grupo pode deletar.')));
-      return;
-    }
-    await ref.read(expensesRepositoryProvider).delete(expense.id, adminId);
+    await ref.read(expensesRepositoryProvider).delete(expense.id);
     ref.invalidate(selectedEventExpensesProvider);
     ref.invalidate(selectedEventReportProvider);
     ref.invalidate(dashboardGroupBalancesProvider);
@@ -189,12 +217,6 @@ Future<void> _deleteExpense(BuildContext context, WidgetRef ref,
           SnackBar(content: Text('Nao foi possivel deletar despesa: $error')));
     }
   }
-}
-
-Future<String?> _groupAdminId(WidgetRef ref, String groupId) async {
-  final members = await ref.read(groupsRepositoryProvider).listMembers(groupId);
-  final admins = members.where((member) => member.role == 'ADMIN').toList();
-  return admins.isEmpty ? null : admins.first.userId;
 }
 
 Future<void> _createCurrentMonth(BuildContext context, WidgetRef ref) async {
@@ -242,6 +264,7 @@ Future<void> _showExpenseDialog(
         ? ''
         : expense.amount.toStringAsFixed(2).replaceAll('.', ','),
   );
+  var selectedExpenseDate = expense?.expenseDate ?? DateTime.now();
   final categoryOptions = [...categories];
   var selectedCategory = categoryOptions.contains(expense?.category)
       ? expense!.category
@@ -307,6 +330,22 @@ Future<void> _showExpenseDialog(
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(labelText: 'Valor'),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final selected = await showDatePicker(
+                          context: context,
+                          initialDate: selectedExpenseDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2100),
+                        );
+                        if (selected != null) {
+                          setState(() => selectedExpenseDate = selected);
+                        }
+                      },
+                      icon: const Icon(Icons.date_range),
+                      label: Text(_formatDate(selectedExpenseDate)),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
@@ -689,7 +728,7 @@ Future<void> _showExpenseDialog(
       await ref.read(expensesRepositoryProvider).create(
             description: descriptionController.text.trim(),
             amount: amount,
-            expenseDate: DateTime.now(),
+            expenseDate: selectedExpenseDate,
             category: selectedCategory,
             monthId: event.monthId,
             eventId: event.id,
@@ -704,7 +743,7 @@ Future<void> _showExpenseDialog(
             id: expense.id,
             description: descriptionController.text.trim(),
             amount: amount,
-            expenseDate: expense.expenseDate,
+            expenseDate: selectedExpenseDate,
             category: selectedCategory,
             monthId: event.monthId,
             eventId: event.id,
@@ -823,17 +862,8 @@ String _formatMoney(double value) {
   return 'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
 }
 
-String _expenseSubtitle(ExpenseModel expense) {
-  final installment = expense.installmentNumber == null
-      ? ''
-      : ' | Parcelado ${expense.installmentNumber}/${expense.totalInstallments}';
-  final shares = expense.participants
-      .where((participant) => participant.shareCount > 1)
-      .map(
-          (participant) => '${participant.nickname} x${participant.shareCount}')
-      .join(', ');
-  final shareText = shares.isEmpty ? '' : ' | Cotas: $shares';
-  return '${expense.category} | Pago por ${expense.payerNickname}$installment$shareText';
+String _formatDate(DateTime value) {
+  return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
 }
 
 String _initialPayerAmount(String userId, ExpenseModel? expense) {

@@ -73,7 +73,8 @@ class ReportsPage extends ConsumerWidget {
                     items: events
                         .map((item) => DropdownMenuItem(
                             value: item.id,
-                            child: Text('${item.name} - ${item.typeLabel}')))
+                            child: Text(
+                                _eventLabel(item, groupsAsync.valueOrNull))))
                         .toList(),
                     onChanged: (value) {
                       ref.read(selectedEventIdProvider.notifier).state = value;
@@ -158,8 +159,6 @@ class _ReportTable extends ConsumerWidget {
       child: DataTable(
         columns: const [
           DataColumn(label: Text('Apelido')),
-          DataColumn(label: Text('Consumiu')),
-          DataColumn(label: Text('Pagou')),
           DataColumn(label: Text('Saldo')),
           DataColumn(label: Text('Status pagamento')),
         ],
@@ -174,8 +173,6 @@ class _ReportTable extends ConsumerWidget {
             color: WidgetStatePropertyAll(color),
             cells: [
               DataCell(Text(balance.nickname)),
-              DataCell(Text(_formatMoney(balance.totalConsumed))),
-              DataCell(Text(_formatMoney(balance.totalPaid))),
               DataCell(
                 Text(
                   _formatMoney(balance.balance),
@@ -293,4 +290,20 @@ Future<void> _confirmCloseEvent(
 
 String _formatMoney(double value) {
   return 'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
+}
+
+String _groupName(List<dynamic>? groups, String groupId) {
+  if (groups == null) {
+    return 'Grupo';
+  }
+  for (final group in groups) {
+    if (group.id == groupId) {
+      return group.name as String;
+    }
+  }
+  return 'Grupo';
+}
+
+String _eventLabel(dynamic event, List<dynamic>? groups) {
+  return '${event.name} | ${_groupName(groups, event.groupId)}';
 }
