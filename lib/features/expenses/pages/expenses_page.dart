@@ -121,6 +121,7 @@ class ExpensesPage extends ConsumerWidget {
                           currentUser?.id,
                           isGroupAdmin,
                         );
+                        final shareSummary = _expenseShareSummary(expense);
                         return ListTile(
                           leading: SizedBox(
                             width: 56,
@@ -151,6 +152,8 @@ class ExpensesPage extends ConsumerWidget {
                                   }
                                 },
                           title: Text(expense.description),
+                          subtitle:
+                              shareSummary == null ? null : Text(shareSummary),
                           trailing: Text(_formatMoney(expense.amount)),
                         );
                       },
@@ -910,6 +913,24 @@ String _formatMoney(double value) {
 
 String _formatDate(DateTime value) {
   return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
+}
+
+String? _expenseShareSummary(ExpenseModel expense) {
+  final extraShares = expense.participants
+      .where((participant) => participant.shareCount > 1)
+      .toList();
+  if (extraShares.isEmpty) {
+    return null;
+  }
+  final totalShares = expense.participants.fold<int>(
+    0,
+    (total, participant) => total + participant.shareCount,
+  );
+  final users = extraShares
+      .map(
+          (participant) => '${participant.nickname} x${participant.shareCount}')
+      .join(', ');
+  return '$totalShares cotas | $users';
 }
 
 String _initialPayerAmount(String userId, ExpenseModel? expense) {

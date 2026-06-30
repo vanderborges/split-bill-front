@@ -156,6 +156,9 @@ class ExpensesRepository {
               'shareDescription': participantShareDescriptions[id],
             })
         .toList();
+    final hasCustomShares = participants.any((participant) =>
+        participant['shareCount'] != 1 ||
+        participant['shareDescription'] != null);
     return {
       'description': description,
       'amount': amount,
@@ -164,7 +167,7 @@ class ExpensesRepository {
       'payerId': payers.isEmpty ? null : payers.first['userId'],
       'monthId': monthId,
       'eventId': eventId,
-      'participantIds': participantIds,
+      if (!hasCustomShares) 'participantIds': participantIds,
       'participants': participants,
       'payers': payers,
       'installments': installments,
