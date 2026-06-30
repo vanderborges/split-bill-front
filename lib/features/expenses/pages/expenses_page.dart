@@ -110,12 +110,20 @@ class ExpensesPage extends ConsumerWidget {
                       return const Center(
                           child: Text('Nenhuma despesa cadastrada.'));
                     }
+                    final sortedExpenses = [...expenses]..sort((first, second) {
+                        final dateComparison =
+                            first.expenseDate.compareTo(second.expenseDate);
+                        if (dateComparison != 0) {
+                          return dateComparison;
+                        }
+                        return first.description.compareTo(second.description);
+                      });
                     return ListView.separated(
                       padding: const EdgeInsets.all(16),
-                      itemCount: expenses.length,
+                      itemCount: sortedExpenses.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
-                        final expense = expenses[index];
+                        final expense = sortedExpenses[index];
                         final canChange = _canChangeExpense(
                           expense,
                           currentUser?.id,
@@ -588,8 +596,13 @@ Future<void> _showExpenseDialog(
                                         },
                                         icon: const Icon(Icons.group_add),
                                         label: const Text('Cota extra'),
-                                      )
-                                    else ...[
+                                      ),
+                                  ],
+                                ),
+                                if (hasExtraShare) ...[
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
                                       IconButton(
                                         tooltip: 'Diminuir cota',
                                         onPressed: count <= 2
@@ -604,7 +617,7 @@ Future<void> _showExpenseDialog(
                                         icon: const Icon(Icons.remove),
                                       ),
                                       SizedBox(
-                                        width: 64,
+                                        width: 72,
                                         child: TextField(
                                           controller:
                                               shareCountControllers[user.id],
@@ -627,6 +640,7 @@ Future<void> _showExpenseDialog(
                                         },
                                         icon: const Icon(Icons.add),
                                       ),
+                                      const Spacer(),
                                       IconButton(
                                         tooltip: 'Remover cota extra',
                                         onPressed: () {
@@ -641,9 +655,7 @@ Future<void> _showExpenseDialog(
                                         icon: const Icon(Icons.close),
                                       ),
                                     ],
-                                  ],
-                                ),
-                                if (hasExtraShare) ...[
+                                  ),
                                   const SizedBox(height: 8),
                                   TextField(
                                     controller:
