@@ -152,13 +152,6 @@ class ExpensesPage extends ConsumerWidget {
                                 },
                           title: Text(expense.description),
                           trailing: Text(_formatMoney(expense.amount)),
-                          onLongPress: !canChange
-                              ? null
-                              : () => _deleteExpense(
-                                    context,
-                                    ref,
-                                    expense,
-                                  ),
                         );
                       },
                     );
@@ -217,6 +210,39 @@ Future<void> _deleteExpense(
           SnackBar(content: Text('Nao foi possivel deletar despesa: $error')));
     }
   }
+}
+
+Future<bool> _confirmDeleteExpense(
+  BuildContext context,
+  WidgetRef ref,
+  ExpenseModel expense,
+) async {
+  final confirmed = await showDialog<bool>(
+    barrierDismissible: false,
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Excluir despesa'),
+        content: Text('Deseja excluir "${expense.description}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      );
+    },
+  );
+
+  if (confirmed == true && context.mounted) {
+    await _deleteExpense(context, ref, expense);
+    return true;
+  }
+  return false;
 }
 
 Future<void> _createCurrentMonth(BuildContext context, WidgetRef ref) async {
@@ -632,6 +658,26 @@ Future<void> _showExpenseDialog(
                           );
                         },
                       ),
+                    if (expense != null) ...[
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final deleted = await _confirmDeleteExpense(
+                              context,
+                              ref,
+                              expense,
+                            );
+                            if (deleted && context.mounted) {
+                              Navigator.of(context).pop(false);
+                            }
+                          },
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Excluir despesa'),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
