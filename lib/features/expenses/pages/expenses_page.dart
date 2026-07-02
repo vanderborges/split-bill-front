@@ -112,7 +112,7 @@ class ExpensesPage extends ConsumerWidget {
                     }
                     final sortedExpenses = [...expenses]..sort((first, second) {
                         final dateComparison =
-                            first.expenseDate.compareTo(second.expenseDate);
+                            second.expenseDate.compareTo(first.expenseDate);
                         if (dateComparison != 0) {
                           return dateComparison;
                         }
@@ -324,8 +324,12 @@ Future<void> _showExpenseDialog(
   var splitPaymentByUser = (expense?.payers.length ?? 0) > 1;
   final installmentsController = TextEditingController(text: '1');
   var installments = 1;
+  final currentUserId = ref.read(currentUserProvider).valueOrNull?.id;
+  final defaultPayerId = users.any((user) => user.id == currentUserId)
+      ? currentUserId!
+      : users.first.id;
   var singlePayerId = expense == null || expense.payers.isEmpty
-      ? users.first.id
+      ? defaultPayerId
       : expense.payers.first.userId;
   final payerControllers = {
     for (final user in users)
@@ -486,6 +490,55 @@ Future<void> _showExpenseDialog(
                       alignment: Alignment.centerLeft,
                       child: Text('Participantes',
                           style: Theme.of(context).textTheme.titleSmall),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ActionChip(
+                          avatar: const Icon(Icons.done_all, size: 18),
+                          label: const Text('Todos'),
+                          onPressed: () {
+                            setState(() {
+                              selectedParticipants
+                                ..clear()
+                                ..addAll(users.map((user) => user.id));
+                              for (final user in users) {
+                                final current =
+                                    shareCountControllers[user.id]!.text;
+                                if ((int.tryParse(current) ?? 0) <= 0) {
+                                  shareCountControllers[user.id]!.text = '1';
+                                }
+                              }
+                            });
+                          },
+                        ),
+                        ActionChip(
+                          avatar: const Icon(Icons.person_outline, size: 18),
+                          label: const Text('So pagador'),
+                          onPressed: () {
+                            setState(() {
+                              selectedParticipants
+                                ..clear()
+                                ..add(singlePayerId);
+                              final current =
+                                  shareCountControllers[singlePayerId]!.text;
+                              if ((int.tryParse(current) ?? 0) <= 0) {
+                                shareCountControllers[singlePayerId]!.text =
+                                    '1';
+                              }
+                            });
+                          },
+                        ),
+                        ActionChip(
+                          avatar: const Icon(Icons.clear, size: 18),
+                          label: const Text('Limpar'),
+                          onPressed: () {
+                            setState(() => selectedParticipants.clear());
+                          },
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Wrap(

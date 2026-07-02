@@ -34,6 +34,14 @@ class GroupsPage extends ConsumerWidget {
               }
               final selectedId =
                   selectedGroupAsync.valueOrNull?.id ?? groups.first.id;
+              final isSelectedGroupAdmin =
+                  selectedGroupAsync.valueOrNull == null
+                      ? false
+                      : ref
+                              .watch(groupRoleProvider(
+                                  selectedGroupAsync.valueOrNull!.id))
+                              .valueOrNull ==
+                          'ADMIN';
               return Row(
                 children: [
                   Expanded(
@@ -55,7 +63,8 @@ class GroupsPage extends ConsumerWidget {
                   ),
                   IconButton(
                     tooltip: 'Deletar grupo',
-                    onPressed: selectedGroupAsync.valueOrNull == null
+                    onPressed: selectedGroupAsync.valueOrNull == null ||
+                            !isSelectedGroupAdmin
                         ? null
                         : () => _deleteGroup(
                             context, ref, selectedGroupAsync.valueOrNull!),

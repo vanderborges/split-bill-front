@@ -30,9 +30,12 @@ class AppScaffold extends ConsumerWidget {
       if (showUsers) '/users',
       '/profile',
     ];
+    final currentPath = GoRouterState.of(context).uri.path;
+    final selectedIndex = routes.indexOf(currentPath);
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       drawer: NavigationDrawer(
+        selectedIndex: selectedIndex < 0 ? null : selectedIndex,
         onDestinationSelected: (index) async {
           if (index == routes.length) {
             await ref.read(authRepositoryProvider).logout();

@@ -81,6 +81,10 @@ class EventsPage extends ConsumerWidget {
                     final event = events[index];
                     final groupName =
                         groupsById[event.groupId]?.name ?? 'Grupo';
+                    final isEventAdmin = ref
+                            .watch(groupRoleProvider(event.groupId))
+                            .valueOrNull ==
+                        'ADMIN';
                     return Card(
                       child: ListTile(
                         title: Text(event.name),
@@ -117,14 +121,15 @@ class EventsPage extends ConsumerWidget {
                                 value: 'expenses', child: Text('Ver despesas')),
                             const PopupMenuItem(
                                 value: 'report', child: Text('Ver relatorio')),
-                            if (!event.isClosed)
+                            if (isEventAdmin && !event.isClosed)
                               const PopupMenuItem(
                                   value: 'close', child: Text('Fechar')),
-                            if (event.isClosed)
+                            if (isEventAdmin && event.isClosed)
                               const PopupMenuItem(
                                   value: 'reopen', child: Text('Reabrir')),
-                            const PopupMenuItem(
-                                value: 'delete', child: Text('Deletar')),
+                            if (isEventAdmin)
+                              const PopupMenuItem(
+                                  value: 'delete', child: Text('Deletar')),
                           ],
                         ),
                       ),
@@ -427,6 +432,26 @@ Future<void> _reopenEvent(
 
 Future<void> _deleteEvent(
     BuildContext context, WidgetRef ref, EventModel event) async {
+  final confirmed = await showDialog<bool>(
+    barrierDismissible: false,
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Deletar evento'),
+      content: Text('Deseja deletar ${event.name}?'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Deletar')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+
   try {
     final adminId = await _groupAdminId(ref, event.groupId);
     if (!context.mounted) {

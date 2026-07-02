@@ -65,6 +65,7 @@ class _UserExpenseSummaryPageState
                       summaryFuture = null;
                     });
                     ref.read(selectedGroupIdProvider.notifier).state = value;
+                    ref.invalidate(eventsProvider);
                   }
                 },
               );
@@ -99,7 +100,10 @@ class _UserExpenseSummaryPageState
                             value: member.userId,
                             child: Text(member.nickname))),
                       ],
-                      onChanged: (value) => setState(() => userId = value),
+                      onChanged: (value) => setState(() {
+                        userId = value;
+                        summaryFuture = null;
+                      }),
                     );
                   },
                 );
@@ -118,7 +122,10 @@ class _UserExpenseSummaryPageState
                 ...events.map((event) => DropdownMenuItem<String?>(
                     value: event.id, child: Text(event.name))),
               ],
-              onChanged: (value) => setState(() => eventId = value),
+              onChanged: (value) => setState(() {
+                eventId = value;
+                summaryFuture = null;
+              }),
             ),
             loading: () => const LinearProgressIndicator(),
             error: (error, _) => Text('Erro ao carregar eventos: $error'),
@@ -134,7 +141,10 @@ class _UserExpenseSummaryPageState
                 ...categories.map((item) => DropdownMenuItem<String?>(
                     value: item.name, child: Text(item.name))),
               ],
-              onChanged: (value) => setState(() => category = value),
+              onChanged: (value) => setState(() {
+                category = value;
+                summaryFuture = null;
+              }),
             ),
             loading: () => const LinearProgressIndicator(),
             error: (error, _) => Text('Erro ao carregar tipos: $error'),
@@ -154,17 +164,17 @@ class _UserExpenseSummaryPageState
                 icon: const Icon(Icons.date_range),
                 label: Text(to == null ? 'Data final' : _formatDate(to!)),
               ),
-              FilledButton.icon(
-                onPressed: _loadSummary,
-                icon: const Icon(Icons.search),
-                label: const Text('Buscar'),
+              OutlinedButton.icon(
+                onPressed: _clearFilters,
+                icon: const Icon(Icons.filter_alt_off_outlined),
+                label: const Text('Limpar filtros'),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          if (summaryFuture != null)
+          if (groupId != null && currentUserAsync.valueOrNull != null)
             FutureBuilder<UserExpenseSummaryModel>(
-              future: summaryFuture,
+              future: summaryFuture ??= _summaryFuture(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) {
                   return const Center(child: CircularProgressIndicator());
@@ -194,23 +204,30 @@ class _UserExpenseSummaryPageState
         } else {
           to = selected;
         }
+        summaryFuture = null;
       });
     }
   }
 
-  void _loadSummary() {
-    if (groupId == null) {
-      return;
-    }
+  Future<UserExpenseSummaryModel> _summaryFuture() {
+    return ref.read(userExpenseSummaryRepositoryProvider).get(
+          groupId: groupId!,
+          userId: userId,
+          from: from,
+          to: to,
+          category: category,
+          eventId: eventId,
+        );
+  }
+
+  void _clearFilters() {
     setState(() {
-      summaryFuture = ref.read(userExpenseSummaryRepositoryProvider).get(
-            groupId: groupId!,
-            userId: userId,
-            from: from,
-            to: to,
-            category: category,
-            eventId: eventId,
-          );
+      userId = null;
+      eventId = null;
+      category = null;
+      from = null;
+      to = null;
+      summaryFuture = null;
     });
   }
 }
