@@ -157,65 +157,121 @@ class _ReportTable extends ConsumerWidget {
     final settlementsByUser = {
       for (final settlement in settlements) settlement.userId: settlement,
     };
+    final sortedBalances = [...balances]..sort((first, second) {
+        final firstSettlement = settlementsByUser[first.userId];
+        final secondSettlement = settlementsByUser[second.userId];
+        final statusComparison = _statusOrder(firstSettlement)
+            .compareTo(_statusOrder(secondSettlement));
+        if (statusComparison != 0) {
+          return statusComparison;
+        }
+        return first.nickname.compareTo(second.nickname);
+      });
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('Apelido')),
-          DataColumn(label: Text('Saldo')),
-          DataColumn(label: Text('Status pagamento')),
-        ],
-        rows: balances.map((balance) {
-          final settlement = settlementsByUser[balance.userId];
-          final color = balance.balance < 0
-              ? const Color.fromRGBO(244, 67, 54, 0.14)
-              : balance.balance > 0
-                  ? const Color.fromRGBO(76, 175, 80, 0.14)
-                  : Colors.transparent;
-          return DataRow(
-            color: WidgetStatePropertyAll(color),
-            cells: [
-              DataCell(Text(balance.nickname)),
-              DataCell(
-                Text(
-                  _formatMoney(balance.balance),
-                  style: TextStyle(
-                    color: balance.balance < 0
-                        ? Colors.red.shade700
-                        : balance.balance > 0
-                            ? Colors.green.shade700
-                            : null,
-                    fontWeight: FontWeight.w700,
-                  ),
+    return Column(
+      children: sortedBalances.map((balance) {
+        final settlement = settlementsByUser[balance.userId];
+        final color = balance.balance < 0
+            ? const Color.fromRGBO(244, 67, 54, 0.14)
+            : balance.balance > 0
+                ? const Color.fromRGBO(76, 175, 80, 0.14)
+                : Colors.transparent;
+        final balanceColor = balance.balance < 0
+            ? Colors.red.shade700
+            : balance.balance > 0
+                ? Colors.green.shade700
+                : null;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Theme.of(context).dividerColor),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 430;
+              final name = Text(
+                balance.nickname,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              );
+              final amount = Text(
+                _formatMoney(balance.balance),
+                textAlign: compact ? TextAlign.left : TextAlign.right,
+                style: TextStyle(
+                  color: balanceColor,
+                  fontWeight: FontWeight.w700,
                 ),
-              ),
-              DataCell(
-                DropdownButton<String>(
-                  value: settlement?.normalizedStatus ?? 'PENDING',
-                  items: const [
-                    DropdownMenuItem(value: 'PENDING', child: Text('Pendente')),
-                    DropdownMenuItem(value: 'PAID', child: Text('Pago')),
+              );
+              final status = DropdownButton<String>(
+                value: settlement?.normalizedStatus ?? 'PENDING',
+                isDense: true,
+                underline: const SizedBox.shrink(),
+                items: const [
+                  DropdownMenuItem(value: 'PENDING', child: Text('Pendente')),
+                  DropdownMenuItem(value: 'PAID', child: Text('Pago')),
+                ],
+                onChanged: !canUpdateSettlements ||
+                        settlement == null ||
+                        settlement.amount == 0
+                    ? null
+                    : (value) async {
+                        if (value == null) {
+                          return;
+                        }
+                        await _updateSettlement(
+                            context, ref, settlement, value);
+                      },
+              );
+
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    name,
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(child: amount),
+                        const SizedBox(width: 12),
+                        status,
+                      ],
+                    ),
                   ],
-                  onChanged: !canUpdateSettlements ||
-                          settlement == null ||
-                          settlement.amount == 0
-                      ? null
-                      : (value) async {
-                          if (value == null) {
-                            return;
-                          }
-                          await _updateSettlement(
-                              context, ref, settlement, value);
-                        },
-                ),
-              ),
-            ],
-          );
-        }).toList(),
-      ),
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: name),
+                  SizedBox(width: 110, child: amount),
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: 112,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: status,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      }).toList(),
     );
   }
+}
+
+int _statusOrder(EventSettlementModel? settlement) {
+  if (settlement?.normalizedStatus == 'PAID') {
+    return 1;
+  }
+  return 0;
 }
 
 Future<void> _updateSettlement(
