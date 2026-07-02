@@ -93,20 +93,7 @@ class GroupsPage extends ConsumerWidget {
 Future<void> _deleteGroup(
     BuildContext context, WidgetRef ref, GroupModel group) async {
   try {
-    final members =
-        await ref.read(groupsRepositoryProvider).listMembers(group.id);
-    final admins = members.where((member) => member.role == 'ADMIN').toList();
-    if (!context.mounted) {
-      return;
-    }
-    if (admins.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Apenas admin do grupo pode deletar.')));
-      return;
-    }
-    await ref
-        .read(groupsRepositoryProvider)
-        .delete(group.id, admins.first.userId);
+    await ref.read(groupsRepositoryProvider).delete(group.id);
     ref.read(selectedGroupIdProvider.notifier).state = null;
     ref.invalidate(groupsProvider);
     ref.invalidate(selectedGroupProvider);
@@ -303,7 +290,6 @@ Future<void> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
     if (currentUser == null) throw Exception('Sessao expirada');
     await ref.read(groupsRepositoryProvider).addMember(
           groupId: group.id,
-          adminUserId: currentUser.id,
           userId: member.userId,
           role: role,
         );
@@ -354,17 +340,13 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
     return;
   }
   try {
-    final users = await ref.read(usersProvider.future);
-    final admins = users.where((user) => user.admin).toList();
-    if (admins.isEmpty) {
-      throw Exception('Nenhum admin cadastrado');
-    }
+    final currentUser = await ref.read(currentUserProvider.future);
+    if (currentUser == null) throw Exception('Sessao expirada');
     final group = await ref.read(groupsRepositoryProvider).create(
           name: nameController.text.trim(),
           description: descriptionController.text.trim().isEmpty
               ? null
               : descriptionController.text.trim(),
-          adminUserId: admins.first.id,
         );
     ref.read(selectedGroupIdProvider.notifier).state = group.id;
     ref.invalidate(groupsProvider);
@@ -442,15 +424,8 @@ Future<void> _showAddMemberDialog(
     return;
   }
   try {
-    final members =
-        await ref.read(groupsRepositoryProvider).listMembers(group.id);
-    final admins = members.where((member) => member.role == 'ADMIN').toList();
-    if (admins.isEmpty) {
-      throw Exception('Nenhum admin no grupo');
-    }
     await ref.read(groupsRepositoryProvider).addMember(
           groupId: group.id,
-          adminUserId: admins.first.userId,
           userId: userId,
           role: role,
         );

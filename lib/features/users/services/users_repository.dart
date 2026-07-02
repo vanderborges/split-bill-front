@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_provider.dart';
 import '../models/user_model.dart';
+import '../models/user_option_model.dart';
 
 final usersRepositoryProvider = Provider<UsersRepository>((ref) {
   return UsersRepository(ref.watch(dioProvider));
@@ -10,6 +11,10 @@ final usersRepositoryProvider = Provider<UsersRepository>((ref) {
 
 final usersProvider = FutureProvider<List<UserModel>>((ref) {
   return ref.watch(usersRepositoryProvider).list();
+});
+
+final userOptionsProvider = FutureProvider<List<UserOptionModel>>((ref) {
+  return ref.watch(usersRepositoryProvider).options();
 });
 
 class UsersRepository {
@@ -21,6 +26,13 @@ class UsersRepository {
     final response = await dio.get<List<dynamic>>('/users');
     return response.data!
         .map((item) => UserModel.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<UserOptionModel>> options() async {
+    final response = await dio.get<List<dynamic>>('/users/options');
+    return response.data!
+        .map((item) => UserOptionModel.fromJson(item as Map<String, dynamic>))
         .toList();
   }
 

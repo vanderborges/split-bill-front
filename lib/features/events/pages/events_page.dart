@@ -287,12 +287,6 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
         throw Exception('Nenhum grupo cadastrado');
       }
       final groupId = selectedGroupId ?? groups.first.id;
-      final members =
-          await ref.read(groupsRepositoryProvider).listMembers(groupId);
-      final admins = members.where((member) => member.role == 'ADMIN').toList();
-      if (admins.isEmpty) {
-        throw Exception('Nenhum admin no grupo');
-      }
       final event = await ref.read(eventsRepositoryProvider).create(
             name: nameController.text.trim().isEmpty
                 ? '${month.toString().padLeft(2, '0')}/$year'
@@ -304,7 +298,6 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
             month: month,
             year: year,
             groupId: groupId,
-            adminUserId: admins.first.userId,
           );
       ref.read(selectedEventIdProvider.notifier).state = event.id;
       ref.invalidate(monthsProvider);
@@ -314,12 +307,6 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
         throw Exception('Nenhum grupo cadastrado');
       }
       final groupId = selectedGroupId ?? groups.first.id;
-      final members =
-          await ref.read(groupsRepositoryProvider).listMembers(groupId);
-      final admins = members.where((member) => member.role == 'ADMIN').toList();
-      if (admins.isEmpty) {
-        throw Exception('Nenhum admin no grupo');
-      }
       final event = await ref.read(eventsRepositoryProvider).create(
             name: nameController.text.trim(),
             description: descriptionController.text.trim().isEmpty
@@ -327,7 +314,6 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                 : descriptionController.text.trim(),
             type: type,
             groupId: groupId,
-            adminUserId: admins.first.userId,
           );
       ref.read(selectedEventIdProvider.notifier).state = event.id;
     }
@@ -453,16 +439,7 @@ Future<void> _deleteEvent(
   }
 
   try {
-    final adminId = await _groupAdminId(ref, event.groupId);
-    if (!context.mounted) {
-      return;
-    }
-    if (adminId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Apenas admin do grupo pode deletar.')));
-      return;
-    }
-    await ref.read(eventsRepositoryProvider).delete(event.id, adminId);
+    await ref.read(eventsRepositoryProvider).delete(event.id);
     _invalidateEventState(ref);
   } catch (error) {
     if (context.mounted) {
@@ -470,12 +447,6 @@ Future<void> _deleteEvent(
           SnackBar(content: Text('Nao foi possivel deletar evento: $error')));
     }
   }
-}
-
-Future<String?> _groupAdminId(WidgetRef ref, String groupId) async {
-  final members = await ref.read(groupsRepositoryProvider).listMembers(groupId);
-  final admins = members.where((member) => member.role == 'ADMIN').toList();
-  return admins.isEmpty ? null : admins.first.userId;
 }
 
 void _invalidateEventState(WidgetRef ref) {

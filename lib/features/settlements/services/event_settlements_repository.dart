@@ -5,11 +5,13 @@ import '../../../core/network/dio_provider.dart';
 import '../../events/services/events_repository.dart';
 import '../models/event_settlement_model.dart';
 
-final eventSettlementsRepositoryProvider = Provider<EventSettlementsRepository>((ref) {
+final eventSettlementsRepositoryProvider =
+    Provider<EventSettlementsRepository>((ref) {
   return EventSettlementsRepository(ref.watch(dioProvider));
 });
 
-final selectedEventSettlementsProvider = FutureProvider<List<EventSettlementModel>>((ref) async {
+final selectedEventSettlementsProvider =
+    FutureProvider<List<EventSettlementModel>>((ref) async {
   final event = await ref.watch(selectedEventProvider.future);
   if (event == null) {
     return [];
@@ -23,9 +25,11 @@ class EventSettlementsRepository {
   final Dio dio;
 
   Future<List<EventSettlementModel>> listByEvent(String eventId) async {
-    final response = await dio.get<List<dynamic>>('/events/$eventId/settlements');
+    final response =
+        await dio.get<List<dynamic>>('/events/$eventId/settlements');
     return response.data!
-        .map((item) => EventSettlementModel.fromJson(item as Map<String, dynamic>))
+        .map((item) =>
+            EventSettlementModel.fromJson(item as Map<String, dynamic>))
         .toList();
   }
 
@@ -33,11 +37,10 @@ class EventSettlementsRepository {
     required String eventId,
     required String settlementId,
     required String status,
-    String? adminUserId,
   }) async {
     final response = await dio.put<Map<String, dynamic>>(
       '/events/$eventId/settlements/$settlementId',
-      data: {'status': status, 'adminUserId': adminUserId},
+      data: {'status': status},
     );
     return EventSettlementModel.fromJson(response.data!);
   }

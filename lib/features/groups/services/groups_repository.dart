@@ -71,14 +71,12 @@ class GroupsRepository {
   Future<GroupModel> create({
     required String name,
     String? description,
-    required String adminUserId,
   }) async {
     final response = await dio.post<Map<String, dynamic>>(
       '/groups',
       data: {
         'name': name,
         'description': description,
-        'adminUserId': adminUserId,
       },
     );
     return GroupModel.fromJson(response.data!);
@@ -99,14 +97,12 @@ class GroupsRepository {
 
   Future<GroupMemberModel> addMember({
     required String groupId,
-    required String adminUserId,
     required String userId,
     required String role,
   }) async {
     final response = await dio.post<Map<String, dynamic>>(
       '/groups/$groupId/members',
       data: {
-        'adminUserId': adminUserId,
         'userId': userId,
         'role': role,
       },
@@ -114,11 +110,8 @@ class GroupsRepository {
     return GroupMemberModel.fromJson(response.data!);
   }
 
-  Future<void> delete(String groupId, String adminUserId) async {
-    await dio.delete<void>(
-      '/groups/$groupId',
-      queryParameters: {'adminUserId': adminUserId},
-    );
+  Future<void> delete(String groupId) async {
+    await dio.delete<void>('/groups/$groupId');
   }
 
   Future<void> removeMember(String groupId, String userId) {

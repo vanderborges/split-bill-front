@@ -9,8 +9,7 @@ import '../../events/services/events_repository.dart';
 import '../../groups/services/groups_repository.dart';
 import '../../months/services/months_repository.dart';
 import '../../reports/services/reports_repository.dart';
-import '../../users/models/user_model.dart';
-import '../../users/services/users_repository.dart';
+import '../../users/models/user_option_model.dart';
 import '../models/expense_model.dart';
 import '../services/expense_categories_repository.dart';
 import '../services/expenses_repository.dart';
@@ -281,7 +280,7 @@ Future<void> _showExpenseDialog(
   BuildContext context,
   WidgetRef ref,
   EventModel event,
-  List<UserModel> users,
+  List<UserOptionModel> users,
   List<String> categories, {
   ExpenseModel? expense,
 }) async {
@@ -952,12 +951,18 @@ Future<String?> _showCreateCategoryDialog(
   }
 }
 
-Future<List<UserModel>> _loadEventUsers(WidgetRef ref, EventModel event) async {
-  final users = await ref.read(usersProvider.future);
+Future<List<UserOptionModel>> _loadEventUsers(
+    WidgetRef ref, EventModel event) async {
   final members =
       await ref.read(groupsRepositoryProvider).listMembers(event.groupId);
-  final memberIds = members.map((member) => member.userId).toSet();
-  return users.where((user) => memberIds.contains(user.id)).toList();
+  return members
+      .where((member) => member.active)
+      .map((member) => UserOptionModel(
+            id: member.userId,
+            nickname: member.nickname,
+            active: member.active,
+          ))
+      .toList();
 }
 
 Future<List<String>> _loadCategoryNames(WidgetRef ref) async {
