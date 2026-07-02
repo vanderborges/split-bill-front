@@ -10,6 +10,7 @@ import '../../groups/services/groups_repository.dart';
 import '../../months/services/months_repository.dart';
 import '../../settlements/models/event_settlement_model.dart';
 import '../../settlements/services/event_settlements_repository.dart';
+import '../models/balance_expense_detail_model.dart';
 import '../models/monthly_report_model.dart';
 import '../services/reports_repository.dart';
 
@@ -141,7 +142,7 @@ class ReportsPage extends ConsumerWidget {
   }
 }
 
-class _ReportTable extends ConsumerWidget {
+class _ReportTable extends ConsumerStatefulWidget {
   const _ReportTable({
     required this.balances,
     required this.settlements,
@@ -153,11 +154,20 @@ class _ReportTable extends ConsumerWidget {
   final bool canUpdateSettlements;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ReportTable> createState() => _ReportTableState();
+}
+
+class _ReportTableState extends ConsumerState<_ReportTable> {
+  final Set<String> expandedUserIds = {};
+  final Map<String, Future<List<BalanceExpenseDetailModel>>> detailsByUser = {};
+
+  @override
+  Widget build(BuildContext context) {
     final settlementsByUser = {
-      for (final settlement in settlements) settlement.userId: settlement,
+      for (final settlement in widget.settlements)
+        settlement.userId: settlement,
     };
-    final sortedBalances = [...balances]..sort((first, second) {
+    final sortedBalances = [...widget.balances]..sort((first, second) {
         final firstSettlement = settlementsByUser[first.userId];
         final secondSettlement = settlementsByUser[second.userId];
         final statusComparison = _statusOrder(firstSettlement)
@@ -171,6 +181,7 @@ class _ReportTable extends ConsumerWidget {
     return Column(
       children: sortedBalances.map((balance) {
         final settlement = settlementsByUser[balance.userId];
+        final expanded = expandedUserIds.contains(balance.userId);
         final color = balance.balance < 0
             ? const Color.fromRGBO(244, 67, 54, 0.14)
             : balance.balance > 0
@@ -193,11 +204,21 @@ class _ReportTable extends ConsumerWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < 430;
-              final name = Text(
-                balance.nickname,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600),
+              final toggle = IconButton(
+                tooltip: expanded ? 'Ocultar despesas' : 'Ver despesas',
+                onPressed: () => _toggle(balance.userId),
+                icon: Icon(expanded
+                    ? Icons.keyboard_arrow_up
+                    : Icons.keyboard_arrow_down),
+              );
+              final name = InkWell(
+                onTap: () => _toggle(balance.userId),
+                child: Text(
+                  balance.nickname,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
               );
               final amount = Text(
                 _formatMoney(balance.balance),
@@ -215,7 +236,7 @@ class _ReportTable extends ConsumerWidget {
                   DropdownMenuItem(value: 'PENDING', child: Text('Pendente')),
                   DropdownMenuItem(value: 'PAID', child: Text('Pago')),
                 ],
-                onChanged: !canUpdateSettlements ||
+                onChanged: !widget.canUpdateSettlements ||
                         settlement == null ||
                         settlement.amount == 0
                     ? null
@@ -232,7 +253,12 @@ class _ReportTable extends ConsumerWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    name,
+                    Row(
+                      children: [
+                        Expanded(child: name),
+                        toggle,
+                      ],
+                    ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -241,28 +267,148 @@ class _ReportTable extends ConsumerWidget {
                         status,
                       ],
                     ),
+                    if (expanded) _BalanceDetails(details: _details(balance)),
                   ],
                 );
               }
 
-              return Row(
+              return Column(
                 children: [
-                  Expanded(child: name),
-                  SizedBox(width: 110, child: amount),
-                  const SizedBox(width: 16),
-                  SizedBox(
-                    width: 112,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: status,
-                    ),
+                  Row(
+                    children: [
+                      toggle,
+                      Expanded(child: name),
+                      SizedBox(width: 110, child: amount),
+                      const SizedBox(width: 16),
+                      SizedBox(
+                        width: 112,
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: status,
+                        ),
+                      ),
+                    ],
                   ),
+                  if (expanded)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 48, top: 8),
+                      child: _BalanceDetails(details: _details(balance)),
+                    ),
                 ],
               );
             },
           ),
         );
       }).toList(),
+    );
+  }
+
+  void _toggle(String userId) {
+    setState(() {
+      if (!expandedUserIds.add(userId)) {
+        expandedUserIds.remove(userId);
+      }
+    });
+  }
+
+  Future<List<BalanceExpenseDetailModel>> _details(
+      MonthlyBalanceModel balance) {
+    final eventId = ref.read(selectedEventProvider).valueOrNull?.id;
+    if (eventId == null) {
+      return Future.value([]);
+    }
+    return detailsByUser.putIfAbsent(
+      balance.userId,
+      () => ref.read(reportsRepositoryProvider).getBalanceDetails(
+            eventId: eventId,
+            userId: balance.userId,
+          ),
+    );
+  }
+}
+
+class _BalanceDetails extends StatelessWidget {
+  const _BalanceDetails({required this.details});
+
+  final Future<List<BalanceExpenseDetailModel>> details;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<BalanceExpenseDetailModel>>(
+      future: details,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(),
+          );
+        }
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('Erro ao carregar despesas: ${snapshot.error}'),
+          );
+        }
+        final items = snapshot.data ?? [];
+        if (items.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text('Nenhuma despesa encontrada.'),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Column(
+            children: items.map((detail) {
+              final impact = detail.impact;
+              final impactColor = impact < 0
+                  ? Colors.red.shade700
+                  : impact > 0
+                      ? Colors.green.shade700
+                      : null;
+              return Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 72,
+                      child: Text(
+                        _formatDate(detail.expenseDate),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            detail.description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Consumiu ${_formatMoney(detail.consumed)} | Pagou ${_formatMoney(detail.paid)}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _formatMoney(impact),
+                      style: TextStyle(
+                        color: impactColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 }
@@ -370,6 +516,10 @@ Future<void> _confirmCloseEvent(
 
 String _formatMoney(double value) {
   return 'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
+}
+
+String _formatDate(DateTime value) {
+  return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}';
 }
 
 String _groupName(List<dynamic>? groups, String groupId) {

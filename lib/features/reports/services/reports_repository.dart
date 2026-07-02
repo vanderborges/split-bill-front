@@ -4,13 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/dio_provider.dart';
 import '../../events/services/events_repository.dart';
 import '../../months/services/months_repository.dart';
+import '../models/balance_expense_detail_model.dart';
 import '../models/monthly_report_model.dart';
 
 final reportsRepositoryProvider = Provider<ReportsRepository>((ref) {
   return ReportsRepository(ref.watch(dioProvider));
 });
 
-final currentMonthReportProvider = FutureProvider<MonthlyReportModel?>((ref) async {
+final currentMonthReportProvider =
+    FutureProvider<MonthlyReportModel?>((ref) async {
   final month = await ref.watch(currentMonthProvider.future);
   if (month == null) {
     return null;
@@ -18,7 +20,8 @@ final currentMonthReportProvider = FutureProvider<MonthlyReportModel?>((ref) asy
   return ref.watch(reportsRepositoryProvider).getMonthlyReport(month.id);
 });
 
-final selectedEventReportProvider = FutureProvider<MonthlyReportModel?>((ref) async {
+final selectedEventReportProvider =
+    FutureProvider<MonthlyReportModel?>((ref) async {
   final event = await ref.watch(selectedEventProvider.future);
   if (event == null) {
     return null;
@@ -32,12 +35,26 @@ class ReportsRepository {
   final Dio dio;
 
   Future<MonthlyReportModel> getMonthlyReport(String monthId) async {
-    final response = await dio.get<Map<String, dynamic>>('/reports/months/$monthId');
+    final response =
+        await dio.get<Map<String, dynamic>>('/reports/months/$monthId');
     return MonthlyReportModel.fromJson(response.data!);
   }
 
   Future<MonthlyReportModel> getEventReport(String eventId) async {
-    final response = await dio.get<Map<String, dynamic>>('/reports/events/$eventId');
+    final response =
+        await dio.get<Map<String, dynamic>>('/reports/events/$eventId');
     return MonthlyReportModel.fromJson(response.data!);
+  }
+
+  Future<List<BalanceExpenseDetailModel>> getBalanceDetails({
+    required String eventId,
+    required String userId,
+  }) async {
+    final response = await dio.get<List<dynamic>>(
+        '/reports/events/$eventId/balances/$userId/details');
+    return response.data!
+        .map((item) =>
+            BalanceExpenseDetailModel.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 }
