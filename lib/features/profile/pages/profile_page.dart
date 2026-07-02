@@ -236,6 +236,7 @@ Future<void> _showEditProfileDialog(
           email: values[2],
           phone: values[3],
           pixKey: values[4],
+          billingUserId: user.billingUserId,
           admin: user.admin,
           active: user.active,
         );

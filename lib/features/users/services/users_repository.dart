@@ -36,6 +36,7 @@ class UsersRepository {
     required String phone,
     required String pixKey,
     required String password,
+    String? billingUserId,
     required bool admin,
   }) async {
     final response = await dio.post<Map<String, dynamic>>(
@@ -47,6 +48,7 @@ class UsersRepository {
         'phone': phone,
         'pixKey': pixKey,
         'password': password,
+        'billingUserId': billingUserId,
         'admin': admin,
       },
     );
@@ -60,6 +62,7 @@ class UsersRepository {
     required String email,
     required String phone,
     required String pixKey,
+    required String? billingUserId,
     required bool admin,
     required bool active,
   }) async {
@@ -71,6 +74,7 @@ class UsersRepository {
         'email': email,
         'phone': phone,
         'pixKey': pixKey,
+        'billingUserId': billingUserId,
         'admin': admin,
         'active': active,
       },

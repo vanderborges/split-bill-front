@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/services/auth_repository.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../dashboard/services/dashboard_repository.dart';
+import '../../reports/services/reports_repository.dart';
+import '../../settlements/services/event_settlements_repository.dart';
 import '../models/user_model.dart';
 import '../services/users_repository.dart';
 
@@ -39,6 +42,10 @@ class UsersPage extends ConsumerWidget {
               final user = users[index];
               return ListTile(
                 title: Text(user.fullName),
+                subtitle: user.billingUserId == null
+                    ? null
+                    : Text(
+                        'Saldo junto com ${_billingUserLabel(users, user.billingUserId)}'),
                 onTap: () => _openFreshUserDetails(context, ref, user.id),
                 trailing: isAdmin
                     ? Wrap(
@@ -84,8 +91,9 @@ Future<void> _openFreshUserDetails(
 ) async {
   try {
     final user = await ref.read(usersRepositoryProvider).get(userId);
+    final users = await ref.read(usersProvider.future);
     if (context.mounted) {
-      await _showUserDetailsDialog(context, user);
+      await _showUserDetailsDialog(context, user, users);
     }
   } catch (error) {
     if (context.mounted) {
@@ -96,7 +104,8 @@ Future<void> _openFreshUserDetails(
   }
 }
 
-Future<void> _showUserDetailsDialog(BuildContext context, UserModel user) {
+Future<void> _showUserDetailsDialog(
+    BuildContext context, UserModel user, List<UserModel> users) {
   return showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
@@ -109,6 +118,9 @@ Future<void> _showUserDetailsDialog(BuildContext context, UserModel user) {
           Text('Email: ${user.email}'),
           Text('Telefone: ${user.phone}'),
           Text('Chave PIX: ${user.pixKey}'),
+          if (user.billingUserId != null)
+            Text(
+                'Saldo junto com: ${_billingUserLabel(users, user.billingUserId)}'),
           Text('Perfil: ${user.admin ? 'Administrador' : 'Usuario'}'),
           Text('Status: ${user.active ? 'Ativo' : 'Inativo'}'),
         ],
@@ -130,8 +142,27 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
   final phoneController = TextEditingController(text: user?.phone ?? '');
   final pixKeyController = TextEditingController(text: user?.pixKey ?? '');
   final passwordController = TextEditingController();
+  final users = await ref.read(usersProvider.future);
+  if (!context.mounted) {
+    _disposeControllers([
+      fullNameController,
+      nicknameController,
+      emailController,
+      phoneController,
+      pixKeyController,
+      passwordController,
+    ]);
+    return;
+  }
+  final billingCandidates = users
+      .where((item) =>
+          item.id != user?.id &&
+          item.active &&
+          (item.billingUserId == null || item.id == user?.billingUserId))
+      .toList();
   bool admin = user?.admin ?? false;
   bool active = user?.active ?? true;
+  String? billingUserId = user?.billingUserId;
 
   final saved = await showDialog<bool>(
     barrierDismissible: false,
@@ -173,6 +204,22 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
                     TextField(
                       controller: pixKeyController,
                       decoration: const InputDecoration(labelText: 'Chave PIX'),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String?>(
+                      initialValue: billingUserId,
+                      decoration: const InputDecoration(
+                          labelText: 'Cobrar saldo junto com'),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                            value: null, child: Text('Ninguem')),
+                        ...billingCandidates.map((candidate) =>
+                            DropdownMenuItem<String?>(
+                                value: candidate.id,
+                                child: Text(candidate.nickname))),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => billingUserId = value),
                     ),
                     if (user == null) ...[
                       const SizedBox(height: 12),
@@ -270,6 +317,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
             phone: phone,
             pixKey: pixKey,
             password: password,
+            billingUserId: billingUserId,
             admin: admin,
           );
     } else {
@@ -280,11 +328,15 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
             email: email,
             phone: phone,
             pixKey: pixKey,
+            billingUserId: billingUserId,
             admin: admin,
             active: active,
           );
     }
     ref.invalidate(usersProvider);
+    ref.invalidate(selectedEventReportProvider);
+    ref.invalidate(selectedEventSettlementsProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -407,4 +459,16 @@ void _disposeControllers(List<TextEditingController> controllers) {
   for (final controller in controllers) {
     controller.dispose();
   }
+}
+
+String _billingUserLabel(List<UserModel> users, String? billingUserId) {
+  if (billingUserId == null) {
+    return '';
+  }
+  for (final user in users) {
+    if (user.id == billingUserId) {
+      return user.nickname;
+    }
+  }
+  return billingUserId;
 }
