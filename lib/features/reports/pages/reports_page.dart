@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../dashboard/services/dashboard_repository.dart';
@@ -123,6 +124,7 @@ class ReportsPage extends ConsumerWidget {
                 data: (settlements) => _ReportTable(
                   balances: report.balances,
                   settlements: settlements,
+                  canUpdateSettlements: isGroupAdmin,
                 ),
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, _) =>
@@ -143,10 +145,12 @@ class _ReportTable extends ConsumerWidget {
   const _ReportTable({
     required this.balances,
     required this.settlements,
+    required this.canUpdateSettlements,
   });
 
   final List<MonthlyBalanceModel> balances;
   final List<EventSettlementModel> settlements;
+  final bool canUpdateSettlements;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -193,7 +197,9 @@ class _ReportTable extends ConsumerWidget {
                     DropdownMenuItem(value: 'PENDING', child: Text('Pendente')),
                     DropdownMenuItem(value: 'PAID', child: Text('Pago')),
                   ],
-                  onChanged: settlement == null || settlement.amount == 0
+                  onChanged: !canUpdateSettlements ||
+                          settlement == null ||
+                          settlement.amount == 0
                       ? null
                       : (value) async {
                           if (value == null) {
@@ -230,10 +236,28 @@ Future<void> _updateSettlement(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel atualizar pagamento: $error')),
+        SnackBar(
+            content: Text(
+                'Nao foi possivel atualizar pagamento: ${_errorMessage(error)}')),
       );
     }
   }
+}
+
+String _errorMessage(Object error) {
+  if (error is DioException) {
+    final data = error.response?.data;
+    if (data is Map && data['message'] != null) {
+      return data['message'].toString();
+    }
+    if (error.response?.statusCode == 403) {
+      return 'apenas admins do grupo podem alterar pagamentos';
+    }
+    if (error.message != null) {
+      return error.message!;
+    }
+  }
+  return error.toString();
 }
 
 Future<void> _confirmCloseEvent(
