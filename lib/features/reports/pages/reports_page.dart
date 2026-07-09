@@ -123,6 +123,7 @@ class ReportsPage extends ConsumerWidget {
               const SizedBox(height: 16),
               settlementsAsync.when(
                 data: (settlements) => _ReportTable(
+                  key: ValueKey('${report.eventId}-${report.monthId}'),
                   balances: report.balances,
                   settlements: settlements,
                   canUpdateSettlements: isGroupAdmin,
@@ -144,6 +145,7 @@ class ReportsPage extends ConsumerWidget {
 
 class _ReportTable extends ConsumerStatefulWidget {
   const _ReportTable({
+    super.key,
     required this.balances,
     required this.settlements,
     required this.canUpdateSettlements,
