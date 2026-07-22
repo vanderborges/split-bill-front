@@ -145,28 +145,14 @@ class ExpensesPage extends ConsumerWidget {
                         final shareSummary = _expenseShareSummary(expense);
                         return ListTile(
                           leading: SizedBox(
-                            width: 44,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _formatDayMonth(expense.expenseDate),
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                                Text(
-                                  expense.expenseDate.year.toString(),
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
-                                      ),
-                                ),
-                              ],
+                            width: 64,
+                            child: Text(
+                              _formatDateShort(expense.expenseDate),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.visible,
+                              style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ),
                           onTap: !canChange
@@ -1018,8 +1004,9 @@ String _formatDate(DateTime value) {
   return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
 }
 
-String _formatDayMonth(DateTime value) {
-  return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}';
+String _formatDateShort(DateTime value) {
+  final year = (value.year % 100).toString().padLeft(2, '0');
+  return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/$year';
 }
 
 String? _expenseShareSummary(ExpenseModel expense) {
