@@ -145,10 +145,28 @@ class ExpensesPage extends ConsumerWidget {
                         final shareSummary = _expenseShareSummary(expense);
                         return ListTile(
                           leading: SizedBox(
-                            width: 56,
-                            child: Text(
-                              _formatDate(expense.expenseDate),
-                              textAlign: TextAlign.center,
+                            width: 44,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _formatDayMonth(expense.expenseDate),
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                                Text(
+                                  expense.expenseDate.year.toString(),
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                ),
+                              ],
                             ),
                           ),
                           onTap: !canChange
@@ -998,6 +1016,10 @@ String _formatMoney(double value) {
 
 String _formatDate(DateTime value) {
   return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
+}
+
+String _formatDayMonth(DateTime value) {
+  return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}';
 }
 
 String? _expenseShareSummary(ExpenseModel expense) {
