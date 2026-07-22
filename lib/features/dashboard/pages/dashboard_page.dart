@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../events/services/events_repository.dart';
+import '../../expenses/services/expenses_repository.dart';
+import '../../groups/services/groups_repository.dart';
 import '../models/dashboard_group_balance_model.dart';
 import '../services/dashboard_repository.dart';
 
@@ -50,13 +53,13 @@ class DashboardPage extends ConsumerWidget {
   }
 }
 
-class _BalancesContent extends StatelessWidget {
+class _BalancesContent extends ConsumerWidget {
   const _BalancesContent({required this.balances});
 
   final List<DashboardGroupBalanceModel> balances;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final total = balances.fold<double>(0, (sum, group) => sum + group.balance);
 
     return Column(
@@ -83,6 +86,8 @@ class _BalancesContent extends StatelessWidget {
                 title: groupBalance.groupName,
                 balance: groupBalance.balance,
                 icon: Icons.groups_outlined,
+                onTap: () =>
+                    _openGroupExpenses(context, ref, groupBalance.groupId),
               ),
             ),
           ),
@@ -91,16 +96,26 @@ class _BalancesContent extends StatelessWidget {
   }
 }
 
+void _openGroupExpenses(BuildContext context, WidgetRef ref, String groupId) {
+  ref.read(selectedGroupIdProvider.notifier).state = groupId;
+  ref.read(selectedEventIdProvider.notifier).state = null;
+  ref.invalidate(selectedEventProvider);
+  ref.invalidate(selectedEventExpensesProvider);
+  context.go('/expenses');
+}
+
 class _BalanceCard extends StatelessWidget {
   const _BalanceCard({
     required this.title,
     required this.balance,
     required this.icon,
+    this.onTap,
   });
 
   final String title;
   final double balance;
   final IconData icon;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -127,6 +142,7 @@ class _BalanceCard extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
         ),
+        onTap: onTap,
       ),
     );
   }

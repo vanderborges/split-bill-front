@@ -1,4 +1,4 @@
-package com.example.split_bill_front
+package com.dividiai.app
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

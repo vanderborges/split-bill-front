@@ -20,7 +20,7 @@ class ExpensesPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final eventAsync = ref.watch(selectedEventProvider);
-    final eventsAsync = ref.watch(eventsProvider);
+    final openEventsAsync = ref.watch(openEventsProvider);
     final expensesAsync = ref.watch(selectedEventExpensesProvider);
     final groupsAsync = ref.watch(groupsProvider);
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
@@ -73,22 +73,29 @@ class ExpensesPage extends ConsumerWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: eventsAsync.when(
-                  data: (events) => DropdownButtonFormField<String>(
-                    initialValue: event.id,
-                    decoration: const InputDecoration(labelText: 'Evento'),
-                    items: events
-                        .map((item) => DropdownMenuItem(
-                            value: item.id,
-                            child: Text(
-                                _eventLabel(item, groupsAsync.valueOrNull))))
-                        .toList(),
-                    onChanged: (value) {
-                      ref.read(selectedEventIdProvider.notifier).state = value;
-                      ref.invalidate(selectedEventProvider);
-                      ref.invalidate(selectedEventExpensesProvider);
-                    },
-                  ),
+                child: openEventsAsync.when(
+                  data: (openEvents) {
+                    final items = [...openEvents];
+                    if (items.every((item) => item.id != event.id)) {
+                      items.add(event);
+                    }
+                    return DropdownButtonFormField<String>(
+                      initialValue: event.id,
+                      decoration: const InputDecoration(labelText: 'Evento'),
+                      items: items
+                          .map((item) => DropdownMenuItem(
+                              value: item.id,
+                              child: Text(
+                                  _eventLabel(item, groupsAsync.valueOrNull))))
+                          .toList(),
+                      onChanged: (value) {
+                        ref.read(selectedEventIdProvider.notifier).state =
+                            value;
+                        ref.invalidate(selectedEventProvider);
+                        ref.invalidate(selectedEventExpensesProvider);
+                      },
+                    );
+                  },
                   loading: () => Text('Evento ${event.name}',
                       style: Theme.of(context).textTheme.titleMedium),
                   error: (_, __) => Text('Evento ${event.name}',
@@ -110,6 +117,13 @@ class ExpensesPage extends ConsumerWidget {
                           child: Text('Nenhuma despesa cadastrada.'));
                     }
                     final sortedExpenses = [...expenses]..sort((first, second) {
+                        final firstIsInstallment =
+                            first.installmentGroupId != null;
+                        final secondIsInstallment =
+                            second.installmentGroupId != null;
+                        if (firstIsInstallment != secondIsInstallment) {
+                          return firstIsInstallment ? 1 : -1;
+                        }
                         final dateComparison =
                             second.expenseDate.compareTo(first.expenseDate);
                         if (dateComparison != 0) {
@@ -265,6 +279,7 @@ Future<void> _createCurrentMonth(BuildContext context, WidgetRef ref) async {
     ref.invalidate(currentMonthProvider);
     ref.invalidate(currentMonthExpensesProvider);
     ref.invalidate(eventsProvider);
+    ref.invalidate(openEventsProvider);
     ref.invalidate(selectedEventProvider);
     ref.invalidate(selectedEventExpensesProvider);
   } catch (error) {
