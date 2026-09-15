@@ -53,7 +53,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                       style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 6),
                   Text(
-                    'Depois do cadastro, um admin pode adicionar voce aos grupos.',
+                    'Depois do cadastro, crie seu proprio grupo ou entre em um pelo link de convite.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 24),
@@ -158,9 +158,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                'Cadastro criado. Aguarde um admin adicionar voce ao grupo.')),
+        const SnackBar(content: Text('Cadastro criado. Faca login para continuar.')),
       );
       context.go('/login');
     } catch (error) {

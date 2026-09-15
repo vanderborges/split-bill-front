@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/environment.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../events/services/events_repository.dart';
-import '../../users/services/users_repository.dart';
+import '../models/group_invite_model.dart';
 import '../models/group_member_model.dart';
 import '../models/group_model.dart';
+import '../services/group_invite_repository.dart';
 import '../services/groups_repository.dart';
 
 class GroupsPage extends ConsumerWidget {
@@ -132,9 +135,9 @@ class _GroupMembers extends ConsumerWidget {
                         style: Theme.of(context).textTheme.titleMedium)),
                 if (isGroupAdmin)
                   TextButton.icon(
-                    onPressed: () => _showAddMemberDialog(context, ref, group),
+                    onPressed: () => _showInviteDialog(context, ref, group),
                     icon: const Icon(Icons.person_add),
-                    label: const Text('Adicionar'),
+                    label: const Text('Convidar'),
                   ),
                 if (currentUser != null)
                   TextButton.icon(
@@ -363,79 +366,65 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
   }
 }
 
-Future<void> _showAddMemberDialog(
+Future<void> _showInviteDialog(
     BuildContext context, WidgetRef ref, GroupModel group) async {
-  final users = await ref.read(usersProvider.future);
-  if (!context.mounted || users.isEmpty) {
-    return;
-  }
-  var userId = users.first.id;
-  var role = 'MEMBER';
-  final saved = await showDialog<bool>(
-    barrierDismissible: false,
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const Text('Adicionar integrante'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              initialValue: userId,
-              decoration: const InputDecoration(labelText: 'Usuario'),
-              items: users
-                  .map((user) => DropdownMenuItem(
-                      value: user.id, child: Text(user.nickname)))
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => userId = value);
-                }
-              },
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: role,
-              decoration: const InputDecoration(labelText: 'Perfil no grupo'),
-              items: const [
-                DropdownMenuItem(value: 'MEMBER', child: Text('Integrante')),
-                DropdownMenuItem(value: 'ADMIN', child: Text('Admin')),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => role = value);
-                }
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Salvar')),
-        ],
-      ),
-    ),
-  );
-  if (saved != true || !context.mounted) {
-    return;
-  }
+  GroupInviteModel invite;
   try {
-    await ref.read(groupsRepositoryProvider).addMember(
-          groupId: group.id,
-          userId: userId,
-          role: role,
-        );
-    ref.invalidate(selectedGroupProvider);
-    ref.invalidate(groupsProvider);
-    ref.invalidate(dashboardGroupBalancesProvider);
+    invite =
+        await ref.read(groupInviteRepositoryProvider).getOrCreate(group.id);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel adicionar: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Nao foi possivel gerar o convite: $error')));
     }
+    return;
   }
+  if (!context.mounted) {
+    return;
+  }
+  await showDialog<void>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) {
+        final url = '${Environment.webBaseUrl}/invite/${invite.id}';
+        return AlertDialog(
+          title: const Text('Convidar para o grupo'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Envie este link para adicionar alguem ao grupo:'),
+              const SizedBox(height: 12),
+              SelectableText(url),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                final regenerated = await ref
+                    .read(groupInviteRepositoryProvider)
+                    .regenerate(group.id);
+                setState(() => invite = regenerated);
+              },
+              child: const Text('Gerar novo link'),
+            ),
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: url));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Link copiado.')));
+                }
+              },
+              child: const Text('Copiar link'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Fechar'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
 }

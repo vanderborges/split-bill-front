@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../groups/services/group_invite_repository.dart';
+import '../../groups/services/groups_repository.dart';
 import '../services/auth_repository.dart';
 import '../services/biometric_auth_service.dart';
 
@@ -141,6 +143,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             password: password,
           );
       ref.invalidate(currentUserProvider);
+      await _joinPendingInviteIfAny();
       if (mounted) {
         setState(() {
           biometricAvailable = _canSignInWithBiometrics();
@@ -185,6 +188,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         return;
       }
       ref.invalidate(currentUserProvider);
+      await _joinPendingInviteIfAny();
       if (mounted) {
         context.go('/');
       }
@@ -200,6 +204,21 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       if (mounted) {
         setState(() => biometricLoading = false);
       }
+    }
+  }
+
+  Future<void> _joinPendingInviteIfAny() async {
+    final pendingInviteId = ref.read(pendingInviteIdProvider);
+    if (pendingInviteId == null) {
+      return;
+    }
+    ref.read(pendingInviteIdProvider.notifier).state = null;
+    try {
+      await ref.read(groupInviteRepositoryProvider).join(pendingInviteId);
+      ref.invalidate(groupsProvider);
+    } catch (_) {
+      // O usuario ja esta logado; se o convite expirou ele so nao entra
+      // automaticamente no grupo, sem bloquear o login.
     }
   }
 }
