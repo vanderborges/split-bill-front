@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/session_reset.dart';
 import '../../groups/services/group_invite_repository.dart';
 import '../../groups/services/groups_repository.dart';
 import '../services/auth_repository.dart';
@@ -136,14 +137,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       return;
     }
 
+    final pendingInviteId = ref.read(pendingInviteIdProvider);
     setState(() => loading = true);
     try {
       await ref.read(authRepositoryProvider).login(
             email: email,
             password: password,
           );
-      ref.invalidate(currentUserProvider);
-      final joinedGroup = await _joinPendingInviteIfAny();
+      resetSessionScopedProviders(ref);
+      final joinedGroup = await _joinPendingInvite(pendingInviteId);
       if (mounted) {
         setState(() {
           biometricAvailable = _canSignInWithBiometrics();
@@ -164,6 +166,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   Future<void> _biometricLogin() async {
+    final pendingInviteId = ref.read(pendingInviteIdProvider);
     setState(() => biometricLoading = true);
     try {
       final authenticated =
@@ -175,6 +178,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         await ref.read(authRepositoryProvider).me();
       } catch (_) {
         await ref.read(authRepositoryProvider).logout();
+        resetSessionScopedProviders(ref);
         if (mounted) {
           setState(() {
             biometricAvailable = _canSignInWithBiometrics();
@@ -187,8 +191,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         }
         return;
       }
-      ref.invalidate(currentUserProvider);
-      final joinedGroup = await _joinPendingInviteIfAny();
+      resetSessionScopedProviders(ref);
+      final joinedGroup = await _joinPendingInvite(pendingInviteId);
       if (mounted) {
         context.go(joinedGroup ? '/groups' : '/');
       }
@@ -209,13 +213,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   /// Returns true when a pending invite was joined successfully, so the
   /// caller can open the group screen already pointed at that group instead
-  /// of the dashboard.
-  Future<bool> _joinPendingInviteIfAny() async {
-    final pendingInviteId = ref.read(pendingInviteIdProvider);
+  /// of the dashboard. [pendingInviteId] must be captured before calling
+  /// [resetSessionScopedProviders], which clears it.
+  Future<bool> _joinPendingInvite(String? pendingInviteId) async {
     if (pendingInviteId == null) {
       return false;
     }
-    ref.read(pendingInviteIdProvider.notifier).state = null;
     try {
       final member =
           await ref.read(groupInviteRepositoryProvider).join(pendingInviteId);

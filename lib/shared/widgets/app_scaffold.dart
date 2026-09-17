@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/services/auth_repository.dart';
+import '../session_reset.dart';
 
 class AppScaffold extends ConsumerWidget {
   const AppScaffold({
@@ -39,7 +40,7 @@ class AppScaffold extends ConsumerWidget {
         onDestinationSelected: (index) async {
           if (index == routes.length) {
             await ref.read(authRepositoryProvider).logout();
-            ref.invalidate(currentUserProvider);
+            resetSessionScopedProviders(ref);
             if (context.mounted) {
               context.go('/login');
             }
