@@ -143,12 +143,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             password: password,
           );
       ref.invalidate(currentUserProvider);
-      await _joinPendingInviteIfAny();
+      final joinedGroup = await _joinPendingInviteIfAny();
       if (mounted) {
         setState(() {
           biometricAvailable = _canSignInWithBiometrics();
         });
-        context.go('/');
+        context.go(joinedGroup ? '/groups' : '/');
       }
     } catch (_) {
       if (mounted) {
@@ -188,9 +188,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         return;
       }
       ref.invalidate(currentUserProvider);
-      await _joinPendingInviteIfAny();
+      final joinedGroup = await _joinPendingInviteIfAny();
       if (mounted) {
-        context.go('/');
+        context.go(joinedGroup ? '/groups' : '/');
       }
     } catch (_) {
       if (mounted) {
@@ -207,18 +207,26 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
   }
 
-  Future<void> _joinPendingInviteIfAny() async {
+  /// Returns true when a pending invite was joined successfully, so the
+  /// caller can open the group screen already pointed at that group instead
+  /// of the dashboard.
+  Future<bool> _joinPendingInviteIfAny() async {
     final pendingInviteId = ref.read(pendingInviteIdProvider);
     if (pendingInviteId == null) {
-      return;
+      return false;
     }
     ref.read(pendingInviteIdProvider.notifier).state = null;
     try {
-      await ref.read(groupInviteRepositoryProvider).join(pendingInviteId);
+      final member =
+          await ref.read(groupInviteRepositoryProvider).join(pendingInviteId);
+      ref.read(selectedGroupIdProvider.notifier).state = member.groupId;
       ref.invalidate(groupsProvider);
+      ref.invalidate(selectedGroupProvider);
+      return true;
     } catch (_) {
       // O usuario ja esta logado; se o convite expirou ele so nao entra
       // automaticamente no grupo, sem bloquear o login.
+      return false;
     }
   }
 }

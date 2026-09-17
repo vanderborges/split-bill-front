@@ -147,10 +147,11 @@ class _JoinGroupState extends ConsumerState<_JoinGroup> {
   Future<void> _join() async {
     setState(() => joining = true);
     try {
-      await ref
-          .read(groupInviteRepositoryProvider)
-          .join(widget.inviteId);
+      final member =
+          await ref.read(groupInviteRepositoryProvider).join(widget.inviteId);
+      ref.read(selectedGroupIdProvider.notifier).state = member.groupId;
       ref.invalidate(groupsProvider);
+      ref.invalidate(selectedGroupProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Voce entrou no grupo!')),

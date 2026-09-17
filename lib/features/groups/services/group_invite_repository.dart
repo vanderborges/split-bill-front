@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/dio_provider.dart';
 import '../models/group_invite_model.dart';
 import '../models/group_invite_preview_model.dart';
+import '../models/group_member_model.dart';
 
 final groupInviteRepositoryProvider = Provider<GroupInviteRepository>((ref) {
   return GroupInviteRepository(ref.watch(dioProvider));
@@ -37,7 +38,9 @@ class GroupInviteRepository {
     return GroupInvitePreviewModel.fromJson(response.data!);
   }
 
-  Future<void> join(String inviteId) async {
-    await dio.post<void>('/invites/$inviteId/join');
+  Future<GroupMemberModel> join(String inviteId) async {
+    final response =
+        await dio.post<Map<String, dynamic>>('/invites/$inviteId/join');
+    return GroupMemberModel.fromJson(response.data!);
   }
 }
