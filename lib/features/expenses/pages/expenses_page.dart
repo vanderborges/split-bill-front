@@ -423,6 +423,15 @@ Future<void> _openExpenseForm(
         text: _initialPayerAmount(user.id, expense),
       ),
   };
+  // Ao editar, só entra pré-selecionado quem de fato pagou algo (> 0) — não
+  // faz sentido mostrar um campo de valor para cada integrante do grupo só
+  // porque ele existe, como acontecia antes.
+  final selectedPayerIds = <String>{
+    if (expense != null)
+      ...expense.payers
+          .where((payer) => payer.amount > 0)
+          .map((payer) => payer.userId),
+  };
 
   void disposeControllers() {
     descriptionController.dispose();
@@ -546,16 +555,47 @@ Future<void> _openExpenseForm(
                         ),
                       ],
                     ] else ...[
-                      ...users.map(
-                        (user) => Padding(
-                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                          child: AmountField(
-                            controller: payerControllers[user.id]!,
-                            label: 'Valor pago por ${user.nickname}',
-                            onChanged: (_) => setState(() {}),
+                      Wrap(
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.sm,
+                        children: users.map((user) {
+                          final selected =
+                              selectedPayerIds.contains(user.id);
+                          return FilterChip(
+                            selected: selected,
+                            label: Text(user.nickname),
+                            onSelected: (checked) {
+                              setState(() {
+                                if (checked) {
+                                  selectedPayerIds.add(user.id);
+                                } else {
+                                  selectedPayerIds.remove(user.id);
+                                  payerControllers[user.id]!.text = '0,00';
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      if (selectedPayerIds.isEmpty)
+                        const Text('Selecione quem pagou.')
+                      else
+                        ...users
+                            .where(
+                                (user) => selectedPayerIds.contains(user.id))
+                            .map(
+                          (user) => Padding(
+                            padding:
+                                const EdgeInsets.only(bottom: AppSpacing.sm),
+                            child: AmountField(
+                              controller: payerControllers[user.id]!,
+                              label: 'Valor pago por ${user.nickname}',
+                              onChanged: (_) => setState(() {}),
+                            ),
                           ),
                         ),
-                      ),
+                      const SizedBox(height: AppSpacing.xs),
                       TextButton.icon(
                         onPressed: () =>
                             setState(() => splitPaymentByUser = false),
