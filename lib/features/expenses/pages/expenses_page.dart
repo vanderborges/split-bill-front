@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_spacing.dart';
+import '../../../shared/api_error.dart';
+import '../../../shared/widgets/amount_field.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/error_state.dart';
+import '../../../shared/widgets/loading_state.dart';
+import '../../../shared/widgets/money_text.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../events/models/event_model.dart';
@@ -13,6 +20,7 @@ import '../../users/models/user_option_model.dart';
 import '../models/expense_model.dart';
 import '../services/expense_categories_repository.dart';
 import '../services/expenses_repository.dart';
+import '../services/new_expense_intent.dart';
 
 class ExpensesPage extends ConsumerWidget {
   const ExpensesPage({super.key});
@@ -25,31 +33,23 @@ class ExpensesPage extends ConsumerWidget {
     final groupsAsync = ref.watch(groupsProvider);
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
 
+    if (ref.read(pendingAutoOpenExpenseProvider)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) {
+          return;
+        }
+        if (!ref.read(pendingAutoOpenExpenseProvider)) {
+          return;
+        }
+        ref.read(pendingAutoOpenExpenseProvider.notifier).state = false;
+        _openNewExpenseFlow(context, ref);
+      });
+    }
+
     return AppScaffold(
       title: 'Despesas',
       floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final event = await ref.read(selectedEventProvider.future);
-          if (!context.mounted) {
-            return;
-          }
-          if (event == null) {
-            await _createCurrentMonth(context, ref);
-            return;
-          }
-          if (event.status == 'CLOSED') {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text('Evento fechado nao permite novas despesas.')),
-            );
-            return;
-          }
-          final users = await _loadEventUsers(ref, event);
-          final categories = await _loadCategoryNames(ref);
-          if (context.mounted) {
-            await _showExpenseDialog(context, ref, event, users, categories);
-          }
-        },
+        onPressed: () => _openNewExpenseFlow(context, ref),
         child: const Icon(Icons.add),
       ),
       child: eventAsync.when(
@@ -57,9 +57,9 @@ class ExpensesPage extends ConsumerWidget {
           if (event == null) {
             return Center(
               child: FilledButton.icon(
-                onPressed: () => _createCurrentMonth(context, ref),
+                onPressed: () => _openNewExpenseFlow(context, ref),
                 icon: const Icon(Icons.calendar_month),
-                label: const Text('Criar mes atual'),
+                label: const Text('Criar mes atual e adicionar gasto'),
               ),
             );
           }
@@ -72,7 +72,8 @@ class ExpensesPage extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
                 child: openEventsAsync.when(
                   data: (openEvents) {
                     final items = [...openEvents];
@@ -103,7 +104,7 @@ class ExpensesPage extends ConsumerWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 child: Text(
                   '$groupName | ${event.name}',
                   style: Theme.of(context).textTheme.bodySmall,
@@ -113,8 +114,12 @@ class ExpensesPage extends ConsumerWidget {
                 child: expensesAsync.when(
                   data: (expenses) {
                     if (expenses.isEmpty) {
-                      return const Center(
-                          child: Text('Nenhuma despesa cadastrada.'));
+                      return const EmptyState(
+                        icon: Icons.receipt_long_outlined,
+                        title: 'Nenhuma despesa cadastrada.',
+                        message:
+                            'Toque em "+" para registrar o primeiro gasto deste evento.',
+                      );
                     }
                     final sortedExpenses = [...expenses]..sort((first, second) {
                         final firstIsInstallment =
@@ -132,7 +137,7 @@ class ExpensesPage extends ConsumerWidget {
                         return first.description.compareTo(second.description);
                       });
                     return ListView.separated(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(AppSpacing.lg),
                       itemCount: sortedExpenses.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
@@ -143,6 +148,8 @@ class ExpensesPage extends ConsumerWidget {
                           isGroupAdmin,
                         );
                         final shareSummary = _expenseShareSummary(expense);
+                        final installmentLabel =
+                            _installmentLabel(expense, sortedExpenses);
                         return ListTile(
                           leading: SizedBox(
                             width: 64,
@@ -171,31 +178,42 @@ class ExpensesPage extends ConsumerWidget {
                                   final categories =
                                       await _loadCategoryNames(ref);
                                   if (context.mounted) {
-                                    await _showExpenseDialog(
+                                    await _openExpenseForm(
                                         context, ref, event, users, categories,
                                         expense: expense);
                                   }
                                 },
                           title: Text(expense.description),
-                          subtitle:
-                              shareSummary == null ? null : Text(shareSummary),
-                          trailing: Text(_formatMoney(expense.amount)),
+                          subtitle: [shareSummary, installmentLabel]
+                                  .whereType<String>()
+                                  .isEmpty
+                              ? null
+                              : Text([shareSummary, installmentLabel]
+                                  .whereType<String>()
+                                  .join(' | ')),
+                          trailing: MoneyText(expense.amount),
                         );
                       },
                     );
                   },
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (error, _) =>
-                      Center(child: Text('Erro ao carregar despesas: $error')),
+                  loading: () => const LoadingState(),
+                  error: (error, _) => ErrorState(
+                    message: friendlyApiError(error,
+                        fallback: 'Não foi possível carregar as despesas.'),
+                    onRetry: () =>
+                        ref.invalidate(selectedEventExpensesProvider),
+                  ),
                 ),
               ),
             ],
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) =>
-            Center(child: Text('Erro ao carregar evento: $error')),
+        loading: () => const LoadingState(),
+        error: (error, _) => ErrorState(
+          message: friendlyApiError(error,
+              fallback: 'Não foi possível carregar o evento.'),
+          onRetry: () => ref.invalidate(selectedEventProvider),
+        ),
       ),
     );
   }
@@ -235,7 +253,10 @@ Future<void> _deleteExpense(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel deletar despesa: $error')));
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível excluir a despesa.'))),
+      );
     }
   }
 }
@@ -273,7 +294,45 @@ Future<bool> _confirmDeleteExpense(
   return false;
 }
 
-Future<void> _createCurrentMonth(BuildContext context, WidgetRef ref) async {
+/// Fluxo único de "adicionar despesa": resolve o evento atual (criando o
+/// mês corrente automaticamente se ainda não existir) e abre o formulário —
+/// usado pelo FAB desta tela, pelo botão de estado vazio e pelo CTA "Nova
+/// despesa" da Home (via [pendingAutoOpenExpenseProvider]), para que
+/// nenhum desses pontos de entrada exija um segundo toque para chegar ao
+/// formulário.
+Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
+  var event = await ref.read(selectedEventProvider.future);
+  if (!context.mounted) {
+    return;
+  }
+
+  if (event == null) {
+    final created = await _createCurrentMonth(context, ref);
+    if (!created || !context.mounted) {
+      return;
+    }
+    event = await ref.read(selectedEventProvider.future);
+    if (!context.mounted || event == null) {
+      return;
+    }
+  }
+
+  if (event.status == 'CLOSED') {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Evento fechado nao permite novas despesas.')),
+    );
+    return;
+  }
+
+  final users = await _loadEventUsers(ref, event);
+  final categories = await _loadCategoryNames(ref);
+  if (context.mounted) {
+    await _openExpenseForm(context, ref, event, users, categories);
+  }
+}
+
+Future<bool> _createCurrentMonth(BuildContext context, WidgetRef ref) async {
   final now = DateTime.now();
   try {
     await ref
@@ -286,16 +345,24 @@ Future<void> _createCurrentMonth(BuildContext context, WidgetRef ref) async {
     ref.invalidate(openEventsProvider);
     ref.invalidate(selectedEventProvider);
     ref.invalidate(selectedEventExpensesProvider);
+    return true;
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel criar o mes: $error')),
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível criar o mês.'))),
       );
     }
+    return false;
   }
 }
 
-Future<void> _showExpenseDialog(
+/// Abre o formulário de despesa em tela cheia (Etapa 8 do roteiro de UX):
+/// valor em destaque primeiro, "quem pagou" e "parcelas" como seções
+/// avançadas que só aparecem quando o usuário pede. Nenhum campo enviado
+/// ao backend mudou — é só reorganização de apresentação.
+Future<void> _openExpenseForm(
   BuildContext context,
   WidgetRef ref,
   EventModel event,
@@ -317,7 +384,7 @@ Future<void> _showExpenseDialog(
   final amountController = TextEditingController(
     text: expense == null
         ? ''
-        : expense.amount.toStringAsFixed(2).replaceAll('.', ','),
+        : formatCurrencyBRL(expense.amount).replaceFirst('R\$ ', ''),
   );
   var selectedExpenseDate = expense?.expenseDate ?? DateTime.now();
   final categoryOptions = [...categories];
@@ -342,6 +409,7 @@ Future<void> _showExpenseDialog(
   var splitPaymentByUser = (expense?.payers.length ?? 0) > 1;
   final installmentsController = TextEditingController(text: '1');
   var installments = 1;
+  var showInstallments = false;
   final currentUserId = ref.read(currentUserProvider).valueOrNull?.id;
   final defaultPayerId = users.any((user) => user.id == currentUserId)
       ? currentUserId!
@@ -356,45 +424,52 @@ Future<void> _showExpenseDialog(
       ),
   };
 
-  final saved = await showDialog<bool>(
-    barrierDismissible: false,
-    context: context,
-    builder: (context) {
-      return StatefulBuilder(
-        builder: (context, setState) {
+  void disposeControllers() {
+    descriptionController.dispose();
+    amountController.dispose();
+    installmentsController.dispose();
+    _disposeControllers(payerControllers.values);
+    _disposeControllers(shareCountControllers.values);
+    _disposeControllers(shareDescriptionControllers.values);
+  }
+
+  final saved = await Navigator.of(context).push<bool>(
+    MaterialPageRoute(
+      builder: (routeContext) => StatefulBuilder(
+        builder: (routeContext, setState) {
           final totalShares =
               _totalShareCount(selectedParticipants, shareCountControllers);
-          final dialogAmount =
-              double.tryParse(amountController.text.replaceAll(',', '.'));
+          final dialogAmount = parseAmountFieldText(amountController.text);
           final shareValue = dialogAmount == null || totalShares == 0
               ? null
               : dialogAmount / totalShares;
 
-          return AlertDialog(
-            title: Text(expense == null ? 'Nova despesa' : 'Editar despesa'),
-            content: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(expense == null ? 'Nova despesa' : 'Editar despesa'),
+            ),
+            body: SafeArea(
               child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
+                    AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    AmountField(
+                      controller: amountController,
+                      autofocus: expense == null,
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
                     TextField(
                       controller: descriptionController,
                       decoration: const InputDecoration(labelText: 'Descricao'),
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: amountController,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Valor'),
-                    ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     OutlinedButton.icon(
                       onPressed: () async {
                         final selected = await showDatePicker(
-                          context: context,
+                          context: routeContext,
                           initialDate: selectedExpenseDate,
                           firstDate: DateTime(2020),
                           lastDate: DateTime(2100),
@@ -406,7 +481,7 @@ Future<void> _showExpenseDialog(
                       icon: const Icon(Icons.date_range),
                       label: Text(_formatDate(selectedExpenseDate)),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     DropdownButtonFormField<String>(
                       initialValue: selectedCategory,
                       decoration:
@@ -425,8 +500,8 @@ Future<void> _showExpenseDialog(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
                         onPressed: () async {
-                          final created =
-                              await _showCreateCategoryDialog(context, ref);
+                          final created = await _showCreateCategoryDialog(
+                              routeContext, ref);
                           if (created != null) {
                             setState(() {
                               categoryOptions.add(created);
@@ -439,47 +514,17 @@ Future<void> _showExpenseDialog(
                         label: const Text('Novo tipo'),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    if (expense == null && event.monthId != null) ...[
-                      TextField(
-                        controller: installmentsController,
-                        keyboardType: TextInputType.number,
-                        decoration:
-                            const InputDecoration(labelText: 'Parcelas'),
-                        onChanged: (value) {
-                          final parsed = int.tryParse(value) ?? 1;
-                          setState(() {
-                            installments = parsed;
-                            if (installments > 1) {
-                              splitPaymentByUser = false;
-                            }
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    SwitchListTile(
-                      value: splitPaymentByUser,
-                      title: const Text('Pagamento dividido por usuario?'),
-                      onChanged: installments > 1
-                          ? null
-                          : (value) {
-                              setState(() {
-                                splitPaymentByUser = value;
-                              });
-                            },
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('Quem pagou',
-                          style: Theme.of(context).textTheme.titleSmall),
-                    ),
-                    const SizedBox(height: 8),
-                    if (!splitPaymentByUser)
+                    const SizedBox(height: AppSpacing.md),
+                    const Divider(),
+                    const SizedBox(height: AppSpacing.md),
+                    Text('Quem pagou',
+                        style: Theme.of(routeContext).textTheme.titleSmall),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (!splitPaymentByUser) ...[
                       DropdownButtonFormField<String>(
                         initialValue: singlePayerId,
-                        decoration: const InputDecoration(labelText: 'Pagador'),
+                        decoration:
+                            const InputDecoration(labelText: 'Pagador'),
                         items: users
                             .map((user) => DropdownMenuItem(
                                 value: user.id, child: Text(user.nickname)))
@@ -489,30 +534,44 @@ Future<void> _showExpenseDialog(
                             setState(() => singlePayerId = value);
                           }
                         },
-                      )
-                    else
+                      ),
+                      if (installments <= 1) ...[
+                        const SizedBox(height: AppSpacing.xs),
+                        TextButton.icon(
+                          onPressed: () =>
+                              setState(() => splitPaymentByUser = true),
+                          icon: const Icon(Icons.call_split),
+                          label:
+                              const Text('Dividir pagamento entre várias pessoas'),
+                        ),
+                      ],
+                    ] else ...[
                       ...users.map(
                         (user) => Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: TextField(
-                            controller: payerControllers[user.id],
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            decoration: InputDecoration(
-                                labelText: 'Valor pago por ${user.nickname}'),
+                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                          child: AmountField(
+                            controller: payerControllers[user.id]!,
+                            label: 'Valor pago por ${user.nickname}',
+                            onChanged: (_) => setState(() {}),
                           ),
                         ),
                       ),
-                    const SizedBox(height: 16),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('Participantes',
-                          style: Theme.of(context).textTheme.titleSmall),
-                    ),
-                    const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: () =>
+                            setState(() => splitPaymentByUser = false),
+                        icon: const Icon(Icons.person),
+                        label: const Text('Voltar para um pagador só'),
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.md),
+                    const Divider(),
+                    const SizedBox(height: AppSpacing.md),
+                    Text('Participantes',
+                        style: Theme.of(routeContext).textTheme.titleSmall),
+                    const SizedBox(height: AppSpacing.sm),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
                       children: [
                         ActionChip(
                           avatar: const Icon(Icons.done_all, size: 18),
@@ -533,23 +592,6 @@ Future<void> _showExpenseDialog(
                           },
                         ),
                         ActionChip(
-                          avatar: const Icon(Icons.person_outline, size: 18),
-                          label: const Text('So pagador'),
-                          onPressed: () {
-                            setState(() {
-                              selectedParticipants
-                                ..clear()
-                                ..add(singlePayerId);
-                              final current =
-                                  shareCountControllers[singlePayerId]!.text;
-                              if ((int.tryParse(current) ?? 0) <= 0) {
-                                shareCountControllers[singlePayerId]!.text =
-                                    '1';
-                              }
-                            });
-                          },
-                        ),
-                        ActionChip(
                           avatar: const Icon(Icons.clear, size: 18),
                           label: const Text('Limpar'),
                           onPressed: () {
@@ -558,10 +600,10 @@ Future<void> _showExpenseDialog(
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppSpacing.sm),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
                       children: users.map((user) {
                         final selected = selectedParticipants.contains(user.id);
                         return FilterChip(
@@ -584,32 +626,43 @@ Future<void> _showExpenseDialog(
                         );
                       }).toList(),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(AppSpacing.md),
                       decoration: BoxDecoration(
-                        color: Theme.of(context)
+                        color: Theme.of(routeContext)
                             .colorScheme
                             .surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(AppRadius.card),
                       ),
                       child: Wrap(
-                        spacing: 16,
-                        runSpacing: 4,
+                        spacing: AppSpacing.lg,
+                        runSpacing: AppSpacing.xs,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text('${selectedParticipants.length} participantes'),
                           if (totalShares > selectedParticipants.length)
                             Text('$totalShares cotas'),
-                          Text(shareValue == null
-                              ? 'Divisao: -'
-                              : totalShares > selectedParticipants.length
-                                  ? 'Valor por cota: ${_formatMoney(shareValue)}'
-                                  : 'Cada participante: ${_formatMoney(shareValue)}'),
+                          if (shareValue == null)
+                            const Text('Divisao: -')
+                          else
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(totalShares > selectedParticipants.length
+                                    ? 'Valor por cota: '
+                                    : 'Cada participante: '),
+                                MoneyText(shareValue,
+                                    style: Theme.of(routeContext)
+                                        .textTheme
+                                        .bodyMedium),
+                              ],
+                            ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     if (selectedParticipants.isEmpty)
                       const Text('Selecione ao menos um participante.')
                     else
@@ -630,7 +683,8 @@ Future<void> _showExpenseDialog(
                           final userAmount =
                               shareValue == null ? null : shareValue * count;
                           return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
+                            padding:
+                                const EdgeInsets.only(bottom: AppSpacing.md),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -643,16 +697,23 @@ Future<void> _showExpenseDialog(
                                         children: [
                                           Text(
                                             user.nickname,
-                                            style: Theme.of(context)
+                                            style: Theme.of(routeContext)
                                                 .textTheme
                                                 .bodyLarge,
                                           ),
                                           if (userAmount != null)
-                                            Text(
-                                              'Participacao: ${_formatMoney(userAmount)}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall,
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text('Participação: ',
+                                                    style: Theme.of(routeContext)
+                                                        .textTheme
+                                                        .bodySmall),
+                                                MoneyText(userAmount,
+                                                    style: Theme.of(routeContext)
+                                                        .textTheme
+                                                        .bodySmall),
+                                              ],
                                             ),
                                         ],
                                       ),
@@ -671,7 +732,7 @@ Future<void> _showExpenseDialog(
                                   ],
                                 ),
                                 if (hasExtraShare) ...[
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: AppSpacing.sm),
                                   Row(
                                     children: [
                                       IconButton(
@@ -727,7 +788,7 @@ Future<void> _showExpenseDialog(
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: AppSpacing.sm),
                                   TextField(
                                     controller:
                                         shareDescriptionControllers[user.id],
@@ -744,19 +805,58 @@ Future<void> _showExpenseDialog(
                           );
                         },
                       ),
+                    if (expense == null && event.monthId != null) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      const Divider(),
+                      const SizedBox(height: AppSpacing.md),
+                      if (!showInstallments)
+                        TextButton.icon(
+                          onPressed: () =>
+                              setState(() => showInstallments = true),
+                          icon: const Icon(Icons.event_repeat),
+                          label: const Text('Parcelar essa despesa'),
+                        )
+                      else ...[
+                        TextField(
+                          controller: installmentsController,
+                          keyboardType: TextInputType.number,
+                          decoration:
+                              const InputDecoration(labelText: 'Parcelas'),
+                          onChanged: (value) {
+                            final parsed = int.tryParse(value) ?? 1;
+                            setState(() {
+                              installments = parsed;
+                              if (installments > 1) {
+                                splitPaymentByUser = false;
+                              }
+                            });
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        TextButton.icon(
+                          onPressed: () => setState(() {
+                            showInstallments = false;
+                            installments = 1;
+                            installmentsController.text = '1';
+                          }),
+                          icon: const Icon(Icons.close),
+                          label: const Text('Não parcelar'),
+                        ),
+                      ],
+                    ],
                     if (expense != null) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: AppSpacing.lg),
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
                           onPressed: () async {
                             final deleted = await _confirmDeleteExpense(
-                              context,
+                              routeContext,
                               ref,
                               expense,
                             );
-                            if (deleted && context.mounted) {
-                              Navigator.of(context).pop(false);
+                            if (deleted && routeContext.mounted) {
+                              Navigator.of(routeContext).pop(false);
                             }
                           },
                           icon: const Icon(Icons.delete_outline),
@@ -768,90 +868,118 @@ Future<void> _showExpenseDialog(
                 ),
               ),
             ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancelar')),
-              FilledButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Salvar')),
-            ],
+            bottomNavigationBar: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(routeContext).pop(false),
+                        child: const Text('Cancelar'),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => Navigator.of(routeContext).pop(true),
+                        child: const Text('Salvar'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           );
         },
-      );
-    },
+      ),
+    ),
   );
 
-  if (saved != true) {
-    descriptionController.dispose();
-    amountController.dispose();
-    installmentsController.dispose();
-    _disposeControllers(payerControllers.values);
-    _disposeControllers(shareCountControllers.values);
-    _disposeControllers(shareDescriptionControllers.values);
+  if (saved != true || !context.mounted) {
+    disposeControllers();
     return;
   }
 
-  if (!context.mounted) {
-    descriptionController.dispose();
-    amountController.dispose();
-    installmentsController.dispose();
-    _disposeControllers(payerControllers.values);
-    _disposeControllers(shareCountControllers.values);
-    _disposeControllers(shareDescriptionControllers.values);
+  final amount = parseAmountFieldText(amountController.text);
+  if (amount == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Informe o valor da despesa.')),
+    );
+    disposeControllers();
     return;
   }
 
-  final amount = double.tryParse(amountController.text.replaceAll(',', '.'));
-  final payerAmounts = splitPaymentByUser
-      ? _readPayerAmounts(payerControllers)
-      : amount == null
-          ? <String, double>{}
-          : {singlePayerId: amount};
-  final installmentsToSave = int.tryParse(installmentsController.text.trim());
+  if (descriptionController.text.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Informe uma descrição para a despesa.')),
+    );
+    disposeControllers();
+    return;
+  }
+
+  if (selectedParticipants.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Selecione ao menos um participante.')),
+    );
+    disposeControllers();
+    return;
+  }
+
   final participantShareCounts =
       _readParticipantShareCounts(selectedParticipants, shareCountControllers);
   final participantShareDescriptions = _readParticipantShareDescriptions(
     selectedParticipants,
     shareDescriptionControllers,
   );
-  final totalPaid =
-      payerAmounts.values.fold<double>(0.0, (total, value) => total + value);
-  if (descriptionController.text.trim().isEmpty ||
-      amount == null ||
-      selectedParticipants.isEmpty ||
-      participantShareCounts.length != selectedParticipants.length ||
-      payerAmounts.isEmpty ||
-      installmentsToSave == null ||
-      installmentsToSave < 1 ||
-      (totalPaid - amount).abs() > 0.009) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Preencha descricao, valor, participantes e pagamentos somando o valor da despesa.'),
-        ),
-      );
-    }
-    descriptionController.dispose();
-    amountController.dispose();
-    installmentsController.dispose();
-    _disposeControllers(payerControllers.values);
-    _disposeControllers(shareCountControllers.values);
-    _disposeControllers(shareDescriptionControllers.values);
+  if (participantShareCounts.length != selectedParticipants.length) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content: Text('Defina as cotas dos participantes selecionados.')),
+    );
+    disposeControllers();
     return;
   }
+
+  final payerAmounts = splitPaymentByUser
+      ? _readPayerAmounts(payerControllers)
+      : {singlePayerId: amount};
+  if (payerAmounts.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Informe quem pagou a despesa.')),
+    );
+    disposeControllers();
+    return;
+  }
+
+  final totalPaid =
+      payerAmounts.values.fold<double>(0.0, (total, value) => total + value);
+  if ((totalPaid - amount).abs() > 0.009) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            'A soma dos pagadores (${formatCurrencyBRL(totalPaid)}) precisa bater com o valor total (${formatCurrencyBRL(amount)}).'),
+      ),
+    );
+    disposeControllers();
+    return;
+  }
+
+  final installmentsToSave = int.tryParse(installmentsController.text.trim());
+  if (installmentsToSave == null || installmentsToSave < 1) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Informe um número de parcelas válido.')),
+    );
+    disposeControllers();
+    return;
+  }
+
   if (installmentsToSave > 1 && splitPaymentByUser) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
           content: Text('Despesa parcelada permite apenas um pagador.')),
     );
-    descriptionController.dispose();
-    amountController.dispose();
-    installmentsController.dispose();
-    _disposeControllers(payerControllers.values);
-    _disposeControllers(shareCountControllers.values);
-    _disposeControllers(shareDescriptionControllers.values);
+    disposeControllers();
     return;
   }
 
@@ -902,16 +1030,13 @@ Future<void> _showExpenseDialog(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel salvar a despesa: $error')),
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível salvar a despesa.'))),
       );
     }
   } finally {
-    descriptionController.dispose();
-    amountController.dispose();
-    installmentsController.dispose();
-    _disposeControllers(payerControllers.values);
-    _disposeControllers(shareCountControllers.values);
-    _disposeControllers(shareDescriptionControllers.values);
+    disposeControllers();
   }
 }
 
@@ -963,7 +1088,9 @@ Future<String?> _showCreateCategoryDialog(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel criar o tipo: $error')),
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível criar o tipo.'))),
       );
     }
     return null;
@@ -996,10 +1123,6 @@ Future<List<String>> _loadCategoryNames(WidgetRef ref) async {
   }
 }
 
-String _formatMoney(double value) {
-  return 'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
-}
-
 String _formatDate(DateTime value) {
   return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
 }
@@ -1027,15 +1150,35 @@ String? _expenseShareSummary(ExpenseModel expense) {
   return '$totalShares cotas | $users';
 }
 
+/// Rótulo "1/3", "2/3"... para despesas parceladas — Etapa 12 do roteiro
+/// de UX. `installmentGroupId` já é usado para ordenar a lista; aqui só
+/// contamos a posição da parcela dentro do próprio grupo já carregado,
+/// sem nenhuma chamada nova à API.
+String? _installmentLabel(ExpenseModel expense, List<ExpenseModel> allExpenses) {
+  final groupId = expense.installmentGroupId;
+  if (groupId == null) {
+    return null;
+  }
+  final siblings = allExpenses
+      .where((item) => item.installmentGroupId == groupId)
+      .toList()
+    ..sort((a, b) => a.expenseDate.compareTo(b.expenseDate));
+  final index = siblings.indexWhere((item) => item.id == expense.id);
+  if (index < 0) {
+    return null;
+  }
+  return 'Parcela ${index + 1}/${siblings.length}';
+}
+
 String _initialPayerAmount(String userId, ExpenseModel? expense) {
   if (expense == null) {
-    return '0';
+    return '0,00';
   }
   final matching = expense.payers.where((payer) => payer.userId == userId);
   if (matching.isEmpty) {
-    return '0';
+    return '0,00';
   }
-  return matching.first.amount.toStringAsFixed(2).replaceAll('.', ',');
+  return formatCurrencyBRL(matching.first.amount).replaceFirst('R\$ ', '');
 }
 
 String _initialShareCount(String userId, ExpenseModel? expense) {
@@ -1066,7 +1209,7 @@ Map<String, double> _readPayerAmounts(
     Map<String, TextEditingController> controllers) {
   final result = <String, double>{};
   for (final entry in controllers.entries) {
-    final value = double.tryParse(entry.value.text.replaceAll(',', '.')) ?? 0;
+    final value = parseAmountFieldText(entry.value.text) ?? 0;
     if (value > 0) {
       result[entry.key] = value;
     }

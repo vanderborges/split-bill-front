@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_spacing.dart';
+import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/error_state.dart';
+import '../../../shared/widgets/loading_state.dart';
+import '../../../shared/widgets/status_badge.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../expenses/services/expenses_repository.dart';
 import '../../groups/services/groups_repository.dart';
@@ -60,14 +66,22 @@ class EventsPage extends ConsumerWidget {
                 );
               },
               loading: () => const LinearProgressIndicator(),
-              error: (error, _) => Text('Erro ao carregar grupos: $error'),
+              error: (error, _) => Text(
+                friendlyApiError(error,
+                    fallback: 'Não foi possível carregar os grupos.'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
           ),
           Expanded(
             child: eventsAsync.when(
               data: (events) {
                 if (events.isEmpty) {
-                  return const Center(child: Text('Nenhum evento cadastrado.'));
+                  return const EmptyState(
+                    icon: Icons.event_outlined,
+                    title: 'Nenhum evento cadastrado.',
+                    message: 'Toque em "+" para criar um mês ou evento avulso.',
+                  );
                 }
                 final groupsById = {
                   for (final group in groupsAsync.valueOrNull ?? [])
@@ -88,8 +102,20 @@ class EventsPage extends ConsumerWidget {
                     return Card(
                       child: ListTile(
                         title: Text(event.name),
-                        subtitle: Text(
-                            '$groupName | ${event.typeLabel} | ${event.isClosed ? 'Fechado' : 'Aberto'}'),
+                        subtitle: Padding(
+                          padding:
+                              const EdgeInsets.only(top: AppSpacing.xs),
+                          child: Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: AppSpacing.xs,
+                            children: [
+                              Text('$groupName | ${event.typeLabel}'),
+                              StatusBadge(event.isClosed
+                                  ? AppStatus.fechado
+                                  : AppStatus.aberto),
+                            ],
+                          ),
+                        ),
                         leading: Icon(event.isClosed
                             ? Icons.lock_outline
                             : Icons.event_available),
@@ -137,9 +163,12 @@ class EventsPage extends ConsumerWidget {
                   },
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) =>
-                  Center(child: Text('Erro ao carregar eventos: $error')),
+              loading: () => const LoadingState(),
+              error: (error, _) => ErrorState(
+                message: friendlyApiError(error,
+                    fallback: 'Não foi possível carregar os eventos.'),
+                onRetry: () => ref.invalidate(eventsProvider),
+              ),
             ),
           ),
         ],
@@ -157,19 +186,70 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
   var type = 'SPORADIC';
   String? selectedGroupId = ref.read(selectedGroupIdProvider);
 
-  final saved = await showDialog<bool>(
-    barrierDismissible: false,
+  final saved = await showModalBottomSheet<bool>(
     context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
     builder: (context) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: const Text('Novo evento'),
-            content: SizedBox(
-              width: 420,
+      return Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.xl,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.outline,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                    ),
+                  ),
+                  Text('Novo evento',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text('O que você está criando?',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: AppSpacing.sm),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'MONTHLY',
+                        label: Text('Mês do grupo'),
+                        icon: Icon(Icons.calendar_month_outlined),
+                      ),
+                      ButtonSegment(
+                        value: 'SPORADIC',
+                        label: Text('Evento avulso'),
+                        icon: Icon(Icons.celebration_outlined),
+                      ),
+                    ],
+                    selected: {type},
+                    onSelectionChanged: (selection) =>
+                        setState(() => type = selection.first),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    type == 'MONTHLY'
+                        ? 'Reúne as despesas do mês a mês do grupo e permite parcelamentos automáticos.'
+                        : 'Uma ocasião pontual (viagem, festa, jantar). Sem parcelamento.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
                   FutureBuilder(
                     future: ref.read(groupsProvider.future),
                     builder: (context, snapshot) {
@@ -198,34 +278,25 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                       );
                     },
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   TextField(
                     controller: nameController,
-                    decoration: const InputDecoration(labelText: 'Nome'),
+                    decoration: InputDecoration(
+                      labelText: type == 'MONTHLY' ? 'Nome (opcional)' : 'Nome',
+                      hintText: type == 'MONTHLY'
+                          ? '${now.month.toString().padLeft(2, '0')}/${now.year}'
+                          : 'Ex.: Viagem para a praia',
+                    ),
                     autofocus: true,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   TextField(
                     controller: descriptionController,
-                    decoration: const InputDecoration(labelText: 'Descricao'),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: type,
-                    decoration: const InputDecoration(labelText: 'Tipo'),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'SPORADIC', child: Text('Esporadico')),
-                      DropdownMenuItem(value: 'MONTHLY', child: Text('Mensal')),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => type = value);
-                      }
-                    },
+                    decoration:
+                        const InputDecoration(labelText: 'Descrição (opcional)'),
                   ),
                   if (type == 'MONTHLY') ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     Row(
                       children: [
                         Expanded(
@@ -235,7 +306,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                             decoration: const InputDecoration(labelText: 'Mes'),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: AppSpacing.md),
                         Expanded(
                           child: TextField(
                             controller: yearController,
@@ -246,19 +317,29 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                       ],
                     ),
                   ],
+                  const SizedBox(height: AppSpacing.xl),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text('Cancelar'),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: const Text('Salvar'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
-            ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancelar')),
-              FilledButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Salvar')),
-            ],
-          );
-        },
+            );
+          },
+        ),
       );
     },
   );
@@ -322,7 +403,8 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel criar evento: $error')));
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível criar o evento.'))));
     }
   } finally {
     nameController.dispose();
@@ -398,7 +480,8 @@ Future<void> _closeEvent(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel fechar evento: $error')));
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível fechar o evento.'))));
     }
   }
 }
@@ -411,7 +494,8 @@ Future<void> _reopenEvent(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel reabrir evento: $error')));
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível reabrir o evento.'))));
     }
   }
 }
@@ -444,7 +528,8 @@ Future<void> _deleteEvent(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel deletar evento: $error')));
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível deletar o evento.'))));
     }
   }
 }

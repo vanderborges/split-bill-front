@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_provider.dart';
+import '../../../shared/ptbr_sort.dart';
 import '../models/user_model.dart';
 
 final usersRepositoryProvider = Provider<UsersRepository>((ref) {
@@ -19,9 +20,10 @@ class UsersRepository {
 
   Future<List<UserModel>> list() async {
     final response = await dio.get<List<dynamic>>('/users');
-    return response.data!
+    final users = response.data!
         .map((item) => UserModel.fromJson(item as Map<String, dynamic>))
         .toList();
+    return sortedByNamePtBr(users, (user) => user.fullName);
   }
 
   Future<UserModel> get(String id) async {

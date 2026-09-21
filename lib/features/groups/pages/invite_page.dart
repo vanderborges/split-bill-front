@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/api_error.dart';
 import '../../auth/services/auth_repository.dart';
 import '../models/group_invite_preview_model.dart';
 import '../services/group_invite_repository.dart';
@@ -161,7 +162,10 @@ class _JoinGroupState extends ConsumerState<_JoinGroup> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel entrar no grupo: $error')),
+          SnackBar(
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível entrar no grupo.')),
+        ),
         );
       }
     } finally {

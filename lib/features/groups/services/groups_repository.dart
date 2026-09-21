@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_provider.dart';
+import '../../../shared/ptbr_sort.dart';
 import '../../auth/services/auth_repository.dart';
 import '../models/group_member_model.dart';
 import '../models/group_model.dart';
@@ -90,9 +91,10 @@ class GroupsRepository {
         if (viewerUserId != null) 'viewerUserId': viewerUserId,
       },
     );
-    return response.data!
+    final members = response.data!
         .map((item) => GroupMemberModel.fromJson(item as Map<String, dynamic>))
         .toList();
+    return sortedByNamePtBr(members, (member) => member.nickname);
   }
 
   Future<GroupMemberModel> addMember({

@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_spacing.dart';
+import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/error_state.dart';
+import '../../../shared/widgets/loading_state.dart';
+import '../../../shared/widgets/person_avatar.dart';
+import '../../../shared/widgets/status_badge.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../users/models/user_model.dart';
 import '../../users/services/users_repository.dart';
@@ -18,12 +24,50 @@ class ProfilePage extends ConsumerWidget {
       child: userAsync.when(
         data: (user) {
           if (user == null) {
-            return const Center(
-                child: Text('Sessao expirada. Entre novamente.'));
+            return ErrorState(
+              message: 'Sessão expirada. Entre novamente.',
+              onRetry: () => ref.invalidate(currentUserProvider),
+            );
           }
           return ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
+              Row(
+                children: [
+                  PersonAvatar(name: user.nickname, seed: user.id, radius: 32),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.fullName,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Wrap(
+                          spacing: AppSpacing.xs,
+                          runSpacing: AppSpacing.xs,
+                          children: [
+                            StatusBadge(
+                              user.active
+                                  ? AppStatus.confirmado
+                                  : AppStatus.fechado,
+                              label: user.active ? 'Ativo' : 'Inativo',
+                            ),
+                            if (user.admin)
+                              const Chip(
+                                avatar: Icon(Icons.shield_outlined, size: 16),
+                                label: Text('Administrador'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.xl),
               ListTile(
                   title: const Text('Nome'), subtitle: Text(user.fullName)),
               ListTile(
@@ -33,13 +77,13 @@ class ProfilePage extends ConsumerWidget {
                   title: const Text('Telefone'), subtitle: Text(user.phone)),
               ListTile(
                   title: const Text('Chave PIX'), subtitle: Text(user.pixKey)),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               FilledButton.icon(
                 onPressed: () => _showEditProfileDialog(context, ref, user),
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Editar perfil'),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               OutlinedButton.icon(
                 onPressed: () => _showChangePasswordDialog(context, ref),
                 icon: const Icon(Icons.lock_reset_outlined),
@@ -48,9 +92,11 @@ class ProfilePage extends ConsumerWidget {
             ],
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) =>
-            Center(child: Text('Erro ao carregar perfil: $error')),
+        loading: () => const LoadingState(),
+        error: (error, _) => ErrorState(
+          message: 'Não foi possível carregar seu perfil.',
+          onRetry: () => ref.invalidate(currentUserProvider),
+        ),
       ),
     );
   }
@@ -128,7 +174,8 @@ Future<void> _showChangePasswordDialog(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel alterar senha: $error')));
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível alterar a senha.'))));
     }
   } finally {
     _disposeControllers([
@@ -245,7 +292,8 @@ Future<void> _showEditProfileDialog(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel atualizar perfil: $error')));
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível atualizar o perfil.'))));
     }
   } finally {
     _disposeControllers([

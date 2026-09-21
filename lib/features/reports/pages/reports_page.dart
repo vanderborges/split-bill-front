@@ -1,8 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
+import 'package:share_plus/share_plus.dart';
 
+import '../../../core/theme/app_semantic_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../shared/api_error.dart';
+import '../../../shared/ptbr_sort.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/error_state.dart';
+import '../../../shared/widgets/loading_state.dart';
+import '../../../shared/widgets/money_text.dart';
+import '../../../shared/widgets/person_avatar.dart';
+import '../../../shared/widgets/status_badge.dart';
+import '../../auth/services/auth_repository.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../events/services/events_repository.dart';
 import '../../expenses/services/expenses_repository.dart';
@@ -37,9 +49,11 @@ class ReportsPage extends ConsumerWidget {
       child: reportAsync.when(
         data: (report) {
           if (report == null) {
-            return const Center(
-                child: Text(
-                    'Crie ou selecione um evento antes de visualizar o relatorio.'));
+            return const EmptyState(
+              icon: Icons.bar_chart_outlined,
+              title: 'Nenhum relatório para mostrar.',
+              message: 'Crie ou selecione um evento para ver o relatório.',
+            );
           }
 
           return ListView(
@@ -104,9 +118,18 @@ class ReportsPage extends ConsumerWidget {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
-                  Chip(
-                      label: Text(
-                          report.status == 'CLOSED' ? 'Fechado' : 'Aberto')),
+                  IconButton(
+                    tooltip: 'Compartilhar resumo',
+                    onPressed: settlementsAsync.valueOrNull == null
+                        ? null
+                        : () => _shareReport(
+                            report, settlementsAsync.valueOrNull!),
+                    icon: const Icon(Icons.share_outlined),
+                  ),
+                  StatusBadge(
+                      report.status == 'CLOSED'
+                          ? AppStatus.fechado
+                          : AppStatus.aberto),
                   const SizedBox(width: 8),
                   if (report.status == 'OPEN' && isGroupAdmin)
                     FilledButton(
@@ -119,7 +142,13 @@ class ReportsPage extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              Text('Total de despesas: ${_formatMoney(report.totalExpenses)}'),
+              Row(
+                children: [
+                  Text('Total de despesas: ',
+                      style: Theme.of(context).textTheme.bodyMedium),
+                  MoneyText(report.totalExpenses),
+                ],
+              ),
               const SizedBox(height: 16),
               settlementsAsync.when(
                 data: (settlements) => _ReportTable(
@@ -128,16 +157,26 @@ class ReportsPage extends ConsumerWidget {
                   settlements: settlements,
                   canUpdateSettlements: isGroupAdmin,
                 ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) =>
-                    Text('Erro ao carregar pagamentos: $error'),
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(AppSpacing.xl),
+                  child: LoadingState(),
+                ),
+                error: (error, _) => ErrorState(
+                  message: friendlyApiError(error,
+                      fallback: 'Não foi possível carregar os pagamentos.'),
+                  onRetry: () =>
+                      ref.invalidate(selectedEventSettlementsProvider),
+                ),
               ),
             ],
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) =>
-            Center(child: Text('Erro ao carregar relatorio: $error')),
+        loading: () => const LoadingState(),
+        error: (error, _) => ErrorState(
+          message: friendlyApiError(error,
+              fallback: 'Não foi possível carregar o relatório.'),
+          onRetry: () => ref.invalidate(selectedEventReportProvider),
+        ),
       ),
     );
   }
@@ -165,6 +204,8 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUserId = ref.watch(currentUserProvider).valueOrNull?.id;
+    final semantic = context.semanticColors;
     final settlementsByUser = {
       for (final settlement in widget.settlements)
         settlement.userId: settlement,
@@ -184,24 +225,26 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
       children: sortedBalances.map((balance) {
         final settlement = settlementsByUser[balance.userId];
         final expanded = expandedUserIds.contains(balance.userId);
+        final isCurrentUser = balance.userId == currentUserId;
         final color = balance.balance < 0
-            ? const Color.fromRGBO(244, 67, 54, 0.14)
+            ? semantic.negative.withValues(alpha: 0.12)
             : balance.balance > 0
-                ? const Color.fromRGBO(76, 175, 80, 0.14)
+                ? semantic.positive.withValues(alpha: 0.12)
                 : Colors.transparent;
-        final balanceColor = balance.balance < 0
-            ? Colors.red.shade700
-            : balance.balance > 0
-                ? Colors.green.shade700
-                : null;
 
         return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md, vertical: AppSpacing.sm + 2),
           decoration: BoxDecoration(
             color: color,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Theme.of(context).dividerColor),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: isCurrentUser
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).dividerColor,
+              width: isCurrentUser ? 1.5 : 1,
+            ),
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -215,40 +258,37 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
               );
               final name = InkWell(
                 onTap: () => _toggle(balance.userId),
-                child: Text(
-                  balance.nickname,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PersonAvatar(
+                        name: balance.nickname, seed: balance.userId, radius: 14),
+                    const SizedBox(width: AppSpacing.sm),
+                    Flexible(
+                      child: Text(
+                        isCurrentUser ? 'Você' : balance.nickname,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
                 ),
               );
-              final amount = Text(
-                _formatMoney(balance.balance),
-                textAlign: compact ? TextAlign.left : TextAlign.right,
+              final amount = MoneyText(
+                balance.balance,
+                colorBySign: true,
+                showSign: true,
                 style: TextStyle(
-                  color: balanceColor,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
                 ),
               );
-              final status = DropdownButton<String>(
-                value: settlement?.normalizedStatus ?? 'PENDING',
-                isDense: true,
-                underline: const SizedBox.shrink(),
-                items: const [
-                  DropdownMenuItem(value: 'PENDING', child: Text('Pendente')),
-                  DropdownMenuItem(value: 'PAID', child: Text('Pago')),
-                ],
-                onChanged: !widget.canUpdateSettlements ||
-                        settlement == null ||
-                        settlement.amount == 0
-                    ? null
-                    : (value) async {
-                        if (value == null) {
-                          return;
-                        }
-                        await _updateSettlement(
-                            context, ref, settlement, value);
-                      },
+              final status = _SettlementStatus(
+                settlement: settlement,
+                canUpdate: widget.canUpdateSettlements,
+                onChanged: (value) =>
+                    _updateSettlement(context, ref, settlement!, value),
               );
 
               if (compact) {
@@ -264,7 +304,7 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Expanded(child: amount),
+                        Expanded(child: Align(alignment: Alignment.centerLeft, child: amount)),
                         const SizedBox(width: 12),
                         status,
                       ],
@@ -280,10 +320,14 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                     children: [
                       toggle,
                       Expanded(child: name),
-                      SizedBox(width: 110, child: amount),
+                      SizedBox(
+                        width: 110,
+                        child: Align(
+                            alignment: Alignment.centerRight, child: amount),
+                      ),
                       const SizedBox(width: 16),
                       SizedBox(
-                        width: 112,
+                        width: 130,
                         child: Align(
                           alignment: Alignment.centerRight,
                           child: status,
@@ -329,6 +373,54 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
   }
 }
 
+/// Mostra o status de pagamento de um participante: um badge simples para
+/// quem só pode visualizar, ou um controle editável (só para admin do
+/// grupo) quando há saldo de fato para acertar.
+class _SettlementStatus extends StatelessWidget {
+  const _SettlementStatus({
+    required this.settlement,
+    required this.canUpdate,
+    required this.onChanged,
+  });
+
+  final EventSettlementModel? settlement;
+  final bool canUpdate;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (settlement == null || settlement!.amount == 0) {
+      return const StatusBadge(AppStatus.quitado);
+    }
+
+    final isPaid = settlement!.normalizedStatus == 'PAID';
+
+    if (!canUpdate) {
+      return StatusBadge(isPaid ? AppStatus.confirmado : AppStatus.pendente,
+          label: isPaid ? 'Pago' : 'Pendente');
+    }
+
+    return DropdownButton<String>(
+      value: isPaid ? 'PAID' : 'PENDING',
+      isDense: true,
+      underline: const SizedBox.shrink(),
+      selectedItemBuilder: (context) => const [
+        StatusBadge(AppStatus.pendente),
+        StatusBadge(AppStatus.confirmado, label: 'Pago'),
+      ],
+      items: const [
+        DropdownMenuItem(value: 'PENDING', child: Text('Pendente')),
+        DropdownMenuItem(value: 'PAID', child: Text('Pago')),
+      ],
+      onChanged: (value) {
+        if (value != null) {
+          onChanged(value);
+        }
+      },
+    );
+  }
+}
+
 class _BalanceDetails extends StatelessWidget {
   const _BalanceDetails({required this.details});
 
@@ -348,26 +440,25 @@ class _BalanceDetails extends StatelessWidget {
         if (snapshot.hasError) {
           return Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text('Erro ao carregar despesas: ${snapshot.error}'),
+            child: Text(
+              friendlyApiError(snapshot.error!,
+                  fallback: 'Não foi possível carregar as despesas.'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           );
         }
         final items = snapshot.data ?? [];
         if (items.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text('Nenhuma despesa encontrada.'),
+          return Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('Nenhuma despesa encontrada.',
+                style: Theme.of(context).textTheme.bodySmall),
           );
         }
         return Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Column(
             children: items.map((detail) {
-              final impact = detail.impact;
-              final impactColor = impact < 0
-                  ? Colors.red.shade700
-                  : impact > 0
-                      ? Colors.green.shade700
-                      : null;
               return Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Row(
@@ -389,20 +480,26 @@ class _BalanceDetails extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          Text(
-                            'Consumiu ${_formatMoney(detail.consumed)} | Pagou ${_formatMoney(detail.paid)}',
-                            style: Theme.of(context).textTheme.bodySmall,
+                          Row(
+                            children: [
+                              Text('Consumiu ',
+                                  style: Theme.of(context).textTheme.bodySmall),
+                              MoneyText(detail.consumed,
+                                  style: Theme.of(context).textTheme.bodySmall),
+                              Text(' | Pagou ',
+                                  style: Theme.of(context).textTheme.bodySmall),
+                              MoneyText(detail.paid,
+                                  style: Theme.of(context).textTheme.bodySmall),
+                            ],
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      _formatMoney(impact),
-                      style: TextStyle(
-                        color: impactColor,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    MoneyText(
+                      detail.impact,
+                      colorBySign: true,
+                      showSign: true,
                     ),
                   ],
                 ),
@@ -420,6 +517,54 @@ int _statusOrder(EventSettlementModel? settlement) {
     return 1;
   }
   return 0;
+}
+
+/// Compartilha um resumo em texto do relatório (Etapa 11 do roteiro de
+/// UX) pelo share sheet nativo — WhatsApp é uma das opções, não a única.
+/// Não menciona chave PIX: o backend hoje não expõe a chave do
+/// administrador para participantes comuns, então o texto orienta a
+/// falar com o administrador em vez de inventar um dado que pode faltar.
+void _shareReport(
+  MonthlyReportModel report,
+  List<EventSettlementModel> settlements,
+) {
+  final settlementsByUser = {
+    for (final settlement in settlements) settlement.userId: settlement,
+  };
+  final sortedBalances =
+      sortedByNamePtBr(report.balances, (balance) => balance.nickname);
+  final title = report.eventName ??
+      '${report.month.toString().padLeft(2, '0')}/${report.year}';
+
+  final buffer = StringBuffer()
+    ..writeln('$title — ${report.groupName}')
+    ..writeln()
+    ..writeln('Total de despesas: ${formatCurrencyBRL(report.totalExpenses)}')
+    ..writeln()
+    ..writeln('Saldos:');
+
+  for (final balance in sortedBalances) {
+    final settlement = settlementsByUser[balance.userId];
+    final statusLabel = settlement == null || settlement.amount == 0
+        ? 'quitado'
+        : settlement.normalizedStatus == 'PAID'
+            ? 'pago'
+            : 'pendente';
+    final verb = balance.balance > 0
+        ? 'recebe'
+        : balance.balance < 0
+            ? 'paga'
+            : 'sem saldo';
+    buffer.writeln(
+        '• ${balance.nickname}: $verb ${formatCurrencyBRL(balance.balance.abs())} ($statusLabel)');
+  }
+
+  buffer
+    ..writeln()
+    ..write(
+        'Pagamentos são combinados com o administrador do grupo. Consulte o DividiAí para mais detalhes.');
+
+  SharePlus.instance.share(ShareParams(text: buffer.toString()));
 }
 
 Future<void> _updateSettlement(
@@ -510,14 +655,12 @@ Future<void> _confirmCloseEvent(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel fechar o evento: $error')),
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível fechar o evento.'))),
       );
     }
   }
-}
-
-String _formatMoney(double value) {
-  return 'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
 }
 
 String _formatDate(DateTime value) {

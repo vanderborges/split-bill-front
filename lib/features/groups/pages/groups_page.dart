@@ -3,7 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/environment.dart';
+import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/error_state.dart';
+import '../../../shared/widgets/person_avatar.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../events/services/events_repository.dart';
@@ -33,7 +37,11 @@ class GroupsPage extends ConsumerWidget {
           groupsAsync.when(
             data: (groups) {
               if (groups.isEmpty) {
-                return const Text('Nenhum grupo cadastrado.');
+                return const EmptyState(
+                  icon: Icons.groups_outlined,
+                  title: 'Nenhum grupo cadastrado.',
+                  message: 'Crie um grupo para começar a dividir despesas.',
+                );
               }
               final selectedId =
                   selectedGroupAsync.valueOrNull?.id ?? groups.first.id;
@@ -77,7 +85,11 @@ class GroupsPage extends ConsumerWidget {
               );
             },
             loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('Erro ao carregar grupos: $error'),
+            error: (error, _) => ErrorState(
+              message: friendlyApiError(error,
+                  fallback: 'Não foi possível carregar seus grupos.'),
+              onRetry: () => ref.invalidate(groupsProvider),
+            ),
           ),
           const SizedBox(height: 16),
           selectedGroupAsync.when(
@@ -85,7 +97,11 @@ class GroupsPage extends ConsumerWidget {
                 ? const SizedBox.shrink()
                 : _GroupMembers(group: group),
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => Text('Erro ao carregar grupo: $error'),
+            error: (error, _) => ErrorState(
+              message: friendlyApiError(error,
+                  fallback: 'Não foi possível carregar o grupo.'),
+              onRetry: () => ref.invalidate(selectedGroupProvider),
+            ),
           ),
         ],
       ),
@@ -106,7 +122,8 @@ Future<void> _deleteGroup(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel deletar grupo: $error')));
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível deletar o grupo.'))));
     }
   }
 }
@@ -149,13 +166,22 @@ class _GroupMembers extends ConsumerWidget {
             ),
             if (snapshot.connectionState != ConnectionState.done)
               const LinearProgressIndicator(),
-            if (members.isEmpty &&
+            if (snapshot.hasError && snapshot.connectionState == ConnectionState.done)
+              ErrorState(
+                message: friendlyApiError(snapshot.error!,
+                    fallback: 'Não foi possível carregar os integrantes.'),
+              )
+            else if (members.isEmpty &&
                 snapshot.connectionState == ConnectionState.done)
-              const Text('Nenhum integrante cadastrado.')
+              const EmptyState(
+                icon: Icons.person_add_alt_outlined,
+                message: 'Nenhum integrante cadastrado.',
+              )
             else
               ...members.map(
                 (member) => ListTile(
                   contentPadding: EdgeInsets.zero,
+                  leading: PersonAvatar(name: member.nickname, seed: member.userId),
                   title: Text(member.nickname),
                   subtitle: Text(member.roleLabel),
                   trailing: isGroupAdmin && member.userId != currentUser?.id
@@ -217,7 +243,8 @@ Future<void> _confirmRemoveMember(BuildContext context, WidgetRef ref,
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Nao foi possivel remover integrante: $error')));
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível remover o integrante.'))));
     }
   }
 }
@@ -254,7 +281,8 @@ Future<void> _confirmLeaveGroup(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel sair do grupo: $error')));
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível sair do grupo.'))));
     }
   }
 }
@@ -303,7 +331,8 @@ Future<void> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel alterar perfil: $error')));
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível alterar o perfil.'))));
     }
   }
 }
@@ -358,7 +387,8 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel criar grupo: $error')));
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível criar o grupo.'))));
     }
   } finally {
     nameController.dispose();
@@ -375,7 +405,8 @@ Future<void> _showInviteDialog(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Nao foi possivel gerar o convite: $error')));
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível gerar o convite.'))));
     }
     return;
   }

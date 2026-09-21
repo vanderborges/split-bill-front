@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_spacing.dart';
+import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/error_state.dart';
+import '../../../shared/widgets/loading_state.dart';
+import '../../../shared/widgets/money_text.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../events/services/events_repository.dart';
 import '../../expenses/services/expense_categories_repository.dart';
@@ -177,10 +183,17 @@ class _UserExpenseSummaryPageState
               future: summaryFuture ??= _summaryFuture(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Padding(
+                    padding: EdgeInsets.all(AppSpacing.xl),
+                    child: LoadingState(),
+                  );
                 }
                 if (snapshot.hasError) {
-                  return Text('Erro ao carregar extrato: ${snapshot.error}');
+                  return ErrorState(
+                    message: friendlyApiError(snapshot.error!,
+                        fallback: 'Não foi possível carregar o extrato.'),
+                    onRetry: () => setState(() => summaryFuture = null),
+                  );
                 }
                 return _SummaryContent(summary: snapshot.data!);
               },
@@ -243,18 +256,20 @@ class _SummaryContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: AppSpacing.md,
+          runSpacing: AppSpacing.md,
           children: [
-            _Metric(
-                label: 'Consumiu', value: _formatMoney(summary.totalConsumed)),
-            _Metric(label: 'Pagou', value: _formatMoney(summary.totalPaid)),
-            _Metric(label: 'Saldo', value: _formatMoney(summary.balance)),
+            _Metric(label: 'Consumiu', value: summary.totalConsumed),
+            _Metric(label: 'Pagou', value: summary.totalPaid),
+            _Metric(label: 'Saldo', value: summary.balance, colorBySign: true),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         if (summary.expenses.isEmpty)
-          const Text('Nenhuma despesa encontrada.')
+          const EmptyState(
+            icon: Icons.receipt_long_outlined,
+            message: 'Nenhuma despesa encontrada com esses filtros.',
+          )
         else
           ...summary.expenses.map(
             (expense) => ListTile(
@@ -262,7 +277,7 @@ class _SummaryContent extends StatelessWidget {
               title: Text(expense.description),
               subtitle: Text(
                   '${_formatDate(expense.expenseDate)} | ${expense.category}'),
-              trailing: Text(_formatMoney(expense.amount)),
+              trailing: MoneyText(expense.amount),
             ),
           ),
       ],
@@ -271,10 +286,15 @@ class _SummaryContent extends StatelessWidget {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value});
+  const _Metric({
+    required this.label,
+    required this.value,
+    this.colorBySign = false,
+  });
 
   final String label;
-  final String value;
+  final double value;
+  final bool colorBySign;
 
   @override
   Widget build(BuildContext context) {
@@ -282,23 +302,23 @@ class _Metric extends StatelessWidget {
       width: 160,
       child: Card(
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(label),
-              const SizedBox(height: 4),
-              Text(value, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: AppSpacing.xs),
+              MoneyText(
+                value,
+                colorBySign: colorBySign,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ],
           ),
         ),
       ),
     );
   }
-}
-
-String _formatMoney(double value) {
-  return 'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
 }
 
 String _formatDate(DateTime value) {

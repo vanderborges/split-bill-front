@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/services/auth_repository.dart';
+import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/error_state.dart';
+import '../../../shared/widgets/loading_state.dart';
+import '../../../shared/widgets/person_avatar.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../reports/services/reports_repository.dart';
 import '../../settlements/services/event_settlements_repository.dart';
@@ -29,10 +34,12 @@ class UsersPage extends ConsumerWidget {
       child: usersAsync.when(
         data: (users) {
           if (users.isEmpty) {
-            return Center(
-                child: Text(isAdmin
-                    ? 'Nenhum usuario cadastrado.'
-                    : 'Nenhum usuario disponivel.'));
+            return EmptyState(
+              icon: Icons.group_outlined,
+              message: isAdmin
+                  ? 'Nenhum usuario cadastrado.'
+                  : 'Nenhum usuario disponivel.',
+            );
           }
           return ListView.separated(
             padding: const EdgeInsets.all(16),
@@ -41,6 +48,7 @@ class UsersPage extends ConsumerWidget {
             itemBuilder: (context, index) {
               final user = users[index];
               return ListTile(
+                leading: PersonAvatar(name: user.nickname, seed: user.id),
                 title: Text(user.fullName),
                 subtitle: user.billingUserId == null
                     ? null
@@ -76,9 +84,12 @@ class UsersPage extends ConsumerWidget {
             },
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) =>
-            Center(child: Text('Erro ao carregar usuarios: $error')),
+        loading: () => const LoadingState(),
+        error: (error, _) => ErrorState(
+          message: friendlyApiError(error,
+              fallback: 'Não foi possível carregar os usuários.'),
+          onRetry: () => ref.invalidate(usersProvider),
+        ),
       ),
     );
   }
@@ -98,7 +109,8 @@ Future<void> _openFreshUserDetails(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel atualizar usuario: $error')),
+        SnackBar(content: Text(friendlyApiError(error,
+            fallback: 'Não foi possível atualizar o usuário.'))),
       );
     }
   }
@@ -340,7 +352,8 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel salvar usuario: $error')),
+        SnackBar(content: Text(friendlyApiError(error,
+            fallback: 'Não foi possível salvar o usuário.'))),
       );
     }
   } finally {
@@ -408,7 +421,8 @@ Future<void> _showResetPasswordDialog(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel reiniciar senha: $error')),
+        SnackBar(content: Text(friendlyApiError(error,
+            fallback: 'Não foi possível reiniciar a senha.'))),
       );
     }
   }
@@ -449,7 +463,8 @@ Future<void> _confirmDeleteUser(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel apagar usuario: $error')),
+        SnackBar(content: Text(friendlyApiError(error,
+            fallback: 'Não foi possível apagar o usuário.'))),
       );
     }
   }
