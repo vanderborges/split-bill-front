@@ -148,8 +148,7 @@ class ExpensesPage extends ConsumerWidget {
                           isGroupAdmin,
                         );
                         final shareSummary = _expenseShareSummary(expense);
-                        final installmentLabel =
-                            _installmentLabel(expense, sortedExpenses);
+                        final installmentLabel = _installmentLabel(expense);
                         return ListTile(
                           leading: SizedBox(
                             width: 64,
@@ -1191,23 +1190,20 @@ String? _expenseShareSummary(ExpenseModel expense) {
 }
 
 /// Rótulo "1/3", "2/3"... para despesas parceladas — Etapa 12 do roteiro
-/// de UX. `installmentGroupId` já é usado para ordenar a lista; aqui só
-/// contamos a posição da parcela dentro do próprio grupo já carregado,
-/// sem nenhuma chamada nova à API.
-String? _installmentLabel(ExpenseModel expense, List<ExpenseModel> allExpenses) {
-  final groupId = expense.installmentGroupId;
-  if (groupId == null) {
+/// de UX. Usa os campos `installmentNumber`/`totalInstallments` retornados
+/// pela API (cada parcela vive em um mês/evento diferente, então não dá
+/// para recalcular o total contando "irmãos" só na lista já carregada).
+/// Despesas únicas (sem grupo, ou parceladas em 1x) não exibem rótulo.
+String? _installmentLabel(ExpenseModel expense) {
+  if (expense.installmentGroupId == null) {
     return null;
   }
-  final siblings = allExpenses
-      .where((item) => item.installmentGroupId == groupId)
-      .toList()
-    ..sort((a, b) => a.expenseDate.compareTo(b.expenseDate));
-  final index = siblings.indexWhere((item) => item.id == expense.id);
-  if (index < 0) {
+  final total = expense.totalInstallments;
+  final number = expense.installmentNumber;
+  if (total == null || total <= 1 || number == null) {
     return null;
   }
-  return 'Parcela ${index + 1}/${siblings.length}';
+  return 'Parcela $number/$total';
 }
 
 String _initialPayerAmount(String userId, ExpenseModel? expense) {
