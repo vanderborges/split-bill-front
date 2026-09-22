@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../auth/services/auth_repository.dart';
+import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/error_state.dart';
+import '../../../shared/widgets/loading_state.dart';
+import '../../../shared/widgets/person_avatar.dart';
+import '../../dashboard/services/dashboard_repository.dart';
+import '../../reports/services/reports_repository.dart';
+import '../../settlements/services/event_settlements_repository.dart';
 import '../models/user_model.dart';
 import '../services/users_repository.dart';
 
@@ -11,22 +20,25 @@ class UsersPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final usersAsync = ref.watch(usersProvider);
+    final currentUser = ref.watch(currentUserProvider).valueOrNull;
+    final isAdmin = currentUser?.admin ?? false;
 
     return AppScaffold(
       title: 'Usuarios',
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showUserDialog(context, ref),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: isAdmin
+          ? FloatingActionButton(
+              onPressed: () => _showUserDialog(context, ref),
+              child: const Icon(Icons.add),
+            )
+          : null,
       child: usersAsync.when(
         data: (users) {
           if (users.isEmpty) {
-            return Center(
-              child: FilledButton.icon(
-                onPressed: () => _showUserDialog(context, ref),
-                icon: const Icon(Icons.person_add),
-                label: const Text('Cadastrar usuario'),
-              ),
+            return EmptyState(
+              icon: Icons.group_outlined,
+              message: isAdmin
+                  ? 'Nenhum usuario cadastrado.'
+                  : 'Nenhum usuario disponivel.',
             );
           }
           return ListView.separated(
@@ -36,47 +48,133 @@ class UsersPage extends ConsumerWidget {
             itemBuilder: (context, index) {
               final user = users[index];
               return ListTile(
-                leading: CircleAvatar(
-                  child: Text(user.nickname.isEmpty ? '?' : user.nickname[0].toUpperCase()),
-                ),
+                leading: PersonAvatar(name: user.nickname, seed: user.id),
                 title: Text(user.fullName),
-                subtitle: Text('${user.email} | PIX: ${user.pixKey}'),
-                trailing: Wrap(
-                  spacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (user.admin) const Chip(label: Text('Admin')),
-                    IconButton(
-                      tooltip: 'Editar usuario',
-                      onPressed: () => _showUserDialog(context, ref, user),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                    IconButton(
-                      tooltip: 'Apagar usuario',
-                      onPressed: () => _confirmDeleteUser(context, ref, user.id, user.fullName),
-                      icon: const Icon(Icons.delete_outline),
-                    ),
-                  ],
-                ),
+                subtitle: user.billingUserId == null
+                    ? null
+                    : Text(
+                        'Saldo junto com ${_billingUserLabel(users, user.billingUserId)}'),
+                onTap: () => _openFreshUserDetails(context, ref, user.id),
+                trailing: isAdmin
+                    ? Wrap(
+                        spacing: 8,
+                        children: [
+                          IconButton(
+                            tooltip: 'Reiniciar senha',
+                            onPressed: () =>
+                                _showResetPasswordDialog(context, ref, user),
+                            icon: const Icon(Icons.lock_reset_outlined),
+                          ),
+                          IconButton(
+                            tooltip: 'Editar usuario',
+                            onPressed: () =>
+                                _showUserDialog(context, ref, user),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                          IconButton(
+                            tooltip: 'Apagar usuario',
+                            onPressed: () => _confirmDeleteUser(
+                                context, ref, user.id, user.fullName),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      )
+                    : null,
               );
             },
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Erro ao carregar usuarios: $error')),
+        loading: () => const LoadingState(),
+        error: (error, _) => ErrorState(
+          message: friendlyApiError(error,
+              fallback: 'Não foi possível carregar os usuários.'),
+          onRetry: () => ref.invalidate(usersProvider),
+        ),
       ),
     );
   }
 }
 
-Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? user]) async {
+Future<void> _openFreshUserDetails(
+  BuildContext context,
+  WidgetRef ref,
+  String userId,
+) async {
+  try {
+    final user = await ref.read(usersRepositoryProvider).get(userId);
+    final users = await ref.read(usersProvider.future);
+    if (context.mounted) {
+      await _showUserDetailsDialog(context, user, users);
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyApiError(error,
+            fallback: 'Não foi possível atualizar o usuário.'))),
+      );
+    }
+  }
+}
+
+Future<void> _showUserDetailsDialog(
+    BuildContext context, UserModel user, List<UserModel> users) {
+  return showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(user.fullName),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Apelido: ${user.nickname}'),
+          Text('Email: ${user.email}'),
+          Text('Telefone: ${user.phone}'),
+          Text('Chave PIX: ${user.pixKey}'),
+          if (user.billingUserId != null)
+            Text(
+                'Saldo junto com: ${_billingUserLabel(users, user.billingUserId)}'),
+          Text('Perfil: ${user.admin ? 'Administrador' : 'Usuario'}'),
+          Text('Status: ${user.active ? 'Ativo' : 'Inativo'}'),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Fechar')),
+      ],
+    ),
+  );
+}
+
+Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
+    [UserModel? user]) async {
   final fullNameController = TextEditingController(text: user?.fullName ?? '');
   final nicknameController = TextEditingController(text: user?.nickname ?? '');
   final emailController = TextEditingController(text: user?.email ?? '');
   final phoneController = TextEditingController(text: user?.phone ?? '');
   final pixKeyController = TextEditingController(text: user?.pixKey ?? '');
+  final passwordController = TextEditingController();
+  final users = await ref.read(usersProvider.future);
+  if (!context.mounted) {
+    _disposeControllers([
+      fullNameController,
+      nicknameController,
+      emailController,
+      phoneController,
+      pixKeyController,
+      passwordController,
+    ]);
+    return;
+  }
+  final billingCandidates = users
+      .where((item) =>
+          item.id != user?.id &&
+          item.active &&
+          (item.billingUserId == null || item.id == user?.billingUserId))
+      .toList();
   bool admin = user?.admin ?? false;
   bool active = user?.active ?? true;
+  String? billingUserId = user?.billingUserId;
 
   final saved = await showDialog<bool>(
     barrierDismissible: false,
@@ -94,7 +192,8 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
                   children: [
                     TextField(
                       controller: fullNameController,
-                      decoration: const InputDecoration(labelText: 'Nome completo'),
+                      decoration:
+                          const InputDecoration(labelText: 'Nome completo'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -118,6 +217,30 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
                       controller: pixKeyController,
                       decoration: const InputDecoration(labelText: 'Chave PIX'),
                     ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String?>(
+                      initialValue: billingUserId,
+                      decoration: const InputDecoration(
+                          labelText: 'Cobrar saldo junto com'),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                            value: null, child: Text('Ninguem')),
+                        ...billingCandidates.map((candidate) =>
+                            DropdownMenuItem<String?>(
+                                value: candidate.id,
+                                child: Text(candidate.nickname))),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => billingUserId = value),
+                    ),
+                    if (user == null) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(labelText: 'Senha'),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     SwitchListTile(
                       value: admin,
@@ -134,8 +257,12 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-              FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Salvar')),
+              TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancelar')),
+              FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Salvar')),
             ],
           );
         },
@@ -150,6 +277,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
       emailController,
       phoneController,
       pixKeyController,
+      passwordController,
     ]);
     return;
   }
@@ -161,6 +289,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
       emailController,
       phoneController,
       pixKeyController,
+      passwordController,
     ]);
     return;
   }
@@ -170,10 +299,15 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
   final email = emailController.text.trim();
   final phone = phoneController.text.trim();
   final pixKey = pixKeyController.text.trim();
+  final password = passwordController.text;
 
-  if ([fullName, nickname, email, phone, pixKey].any((value) => value.isEmpty)) {
+  if ([fullName, nickname, email, phone, pixKey]
+          .any((value) => value.isEmpty) ||
+      (user == null && password.length < 6)) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Preencha todos os campos.')),
+      const SnackBar(
+          content: Text(
+              'Preencha todos os campos. Senha deve ter ao menos 6 caracteres.')),
     );
     _disposeControllers([
       fullNameController,
@@ -181,6 +315,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
       emailController,
       phoneController,
       pixKeyController,
+      passwordController,
     ]);
     return;
   }
@@ -193,6 +328,8 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
             email: email,
             phone: phone,
             pixKey: pixKey,
+            password: password,
+            billingUserId: billingUserId,
             admin: admin,
           );
     } else {
@@ -203,15 +340,20 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
             email: email,
             phone: phone,
             pixKey: pixKey,
+            billingUserId: billingUserId,
             admin: admin,
             active: active,
           );
     }
     ref.invalidate(usersProvider);
+    ref.invalidate(selectedEventReportProvider);
+    ref.invalidate(selectedEventSettlementsProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel salvar usuario: $error')),
+        SnackBar(content: Text(friendlyApiError(error,
+            fallback: 'Não foi possível salvar o usuário.'))),
       );
     }
   } finally {
@@ -221,7 +363,68 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref, [UserModel? us
       emailController,
       phoneController,
       pixKeyController,
+      passwordController,
     ]);
+  }
+}
+
+Future<void> _showResetPasswordDialog(
+  BuildContext context,
+  WidgetRef ref,
+  UserModel user,
+) async {
+  final passwordController = TextEditingController();
+  final saved = await showDialog<bool>(
+    barrierDismissible: false,
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Reiniciar senha de ${user.fullName}'),
+      content: TextField(
+        controller: passwordController,
+        obscureText: true,
+        decoration: const InputDecoration(labelText: 'Nova senha'),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Salvar')),
+      ],
+    ),
+  );
+
+  if (saved != true || !context.mounted) {
+    passwordController.dispose();
+    return;
+  }
+
+  final password = passwordController.text;
+  passwordController.dispose();
+  if (password.length < 6) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Senha deve ter ao menos 6 caracteres.')),
+    );
+    return;
+  }
+
+  try {
+    await ref
+        .read(usersRepositoryProvider)
+        .resetPassword(id: user.id, newPassword: password);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Senha reiniciada com sucesso.')),
+      );
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyApiError(error,
+            fallback: 'Não foi possível reiniciar a senha.'))),
+      );
+    }
   }
 }
 
@@ -239,8 +442,12 @@ Future<void> _confirmDeleteUser(
         title: const Text('Apagar usuario'),
         content: Text('Deseja apagar $fullName?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-          FilledButton.tonal(onPressed: () => Navigator.of(context).pop(true), child: const Text('Apagar')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar')),
+          FilledButton.tonal(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Apagar')),
         ],
       );
     },
@@ -256,7 +463,8 @@ Future<void> _confirmDeleteUser(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Nao foi possivel apagar usuario: $error')),
+        SnackBar(content: Text(friendlyApiError(error,
+            fallback: 'Não foi possível apagar o usuário.'))),
       );
     }
   }
@@ -266,4 +474,16 @@ void _disposeControllers(List<TextEditingController> controllers) {
   for (final controller in controllers) {
     controller.dispose();
   }
+}
+
+String _billingUserLabel(List<UserModel> users, String? billingUserId) {
+  if (billingUserId == null) {
+    return '';
+  }
+  for (final user in users) {
+    if (user.id == billingUserId) {
+      return user.nickname;
+    }
+  }
+  return billingUserId;
 }

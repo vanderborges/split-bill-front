@@ -12,7 +12,7 @@ class UserExpenseSummaryModel {
     required this.expenses,
   });
 
-  final String userId;
+  final String? userId;
   final String nickname;
   final DateTime from;
   final DateTime to;
@@ -23,7 +23,7 @@ class UserExpenseSummaryModel {
 
   factory UserExpenseSummaryModel.fromJson(Map<String, dynamic> json) {
     return UserExpenseSummaryModel(
-      userId: json['userId'] as String,
+      userId: json['userId'] as String?,
       nickname: json['nickname'] as String,
       from: DateTime.parse(json['from'] as String),
       to: DateTime.parse(json['to'] as String),

@@ -64,7 +64,6 @@ class EventsRepository {
     int? month,
     int? year,
     required String groupId,
-    required String adminUserId,
   }) async {
     final response = await dio.post<Map<String, dynamic>>(
       '/events',
@@ -76,7 +75,6 @@ class EventsRepository {
         'month': month,
         'year': year,
         'groupId': groupId,
-        'adminUserId': adminUserId,
       },
     );
     return EventModel.fromJson(response.data!);
@@ -95,10 +93,7 @@ class EventsRepository {
     return EventModel.fromJson(response.data!);
   }
 
-  Future<void> delete(String id, String adminUserId) async {
-    await dio.delete<void>(
-      '/events/$id',
-      queryParameters: {'adminUserId': adminUserId},
-    );
+  Future<void> delete(String id) async {
+    await dio.delete<void>('/events/$id');
   }
 }

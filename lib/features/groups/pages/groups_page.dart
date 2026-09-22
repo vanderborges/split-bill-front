@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/environment.dart';
+import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/error_state.dart';
+import '../../../shared/widgets/person_avatar.dart';
+import '../../dashboard/services/dashboard_repository.dart';
+import '../../auth/services/auth_repository.dart';
 import '../../events/services/events_repository.dart';
-import '../../users/services/users_repository.dart';
+import '../models/group_invite_model.dart';
 import '../models/group_member_model.dart';
 import '../models/group_model.dart';
+import '../services/group_invite_repository.dart';
 import '../services/groups_repository.dart';
 
 class GroupsPage extends ConsumerWidget {
@@ -28,18 +37,35 @@ class GroupsPage extends ConsumerWidget {
           groupsAsync.when(
             data: (groups) {
               if (groups.isEmpty) {
-                return const Text('Nenhum grupo cadastrado.');
+                return const EmptyState(
+                  icon: Icons.groups_outlined,
+                  title: 'Nenhum grupo cadastrado.',
+                  message: 'Crie um grupo para começar a dividir despesas.',
+                );
               }
-              final selectedId = selectedGroupAsync.valueOrNull?.id ?? groups.first.id;
+              final selectedId =
+                  selectedGroupAsync.valueOrNull?.id ?? groups.first.id;
+              final isSelectedGroupAdmin =
+                  selectedGroupAsync.valueOrNull == null
+                      ? false
+                      : ref
+                              .watch(groupRoleProvider(
+                                  selectedGroupAsync.valueOrNull!.id))
+                              .valueOrNull ==
+                          'ADMIN';
               return Row(
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: selectedId,
+                      initialValue: selectedId,
                       decoration: const InputDecoration(labelText: 'Grupo'),
-                      items: groups.map((group) => DropdownMenuItem(value: group.id, child: Text(group.name))).toList(),
+                      items: groups
+                          .map((group) => DropdownMenuItem(
+                              value: group.id, child: Text(group.name)))
+                          .toList(),
                       onChanged: (value) {
-                        ref.read(selectedGroupIdProvider.notifier).state = value;
+                        ref.read(selectedGroupIdProvider.notifier).state =
+                            value;
                         ref.invalidate(selectedGroupProvider);
                         ref.invalidate(eventsProvider);
                         ref.invalidate(selectedEventProvider);
@@ -48,22 +74,34 @@ class GroupsPage extends ConsumerWidget {
                   ),
                   IconButton(
                     tooltip: 'Deletar grupo',
-                    onPressed: selectedGroupAsync.valueOrNull == null
+                    onPressed: selectedGroupAsync.valueOrNull == null ||
+                            !isSelectedGroupAdmin
                         ? null
-                        : () => _deleteGroup(context, ref, selectedGroupAsync.valueOrNull!),
+                        : () => _deleteGroup(
+                            context, ref, selectedGroupAsync.valueOrNull!),
                     icon: const Icon(Icons.delete_outline),
                   ),
                 ],
               );
             },
             loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('Erro ao carregar grupos: $error'),
+            error: (error, _) => ErrorState(
+              message: friendlyApiError(error,
+                  fallback: 'Não foi possível carregar seus grupos.'),
+              onRetry: () => ref.invalidate(groupsProvider),
+            ),
           ),
           const SizedBox(height: 16),
           selectedGroupAsync.when(
-            data: (group) => group == null ? const SizedBox.shrink() : _GroupMembers(group: group),
+            data: (group) => group == null
+                ? const SizedBox.shrink()
+                : _GroupMembers(group: group),
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => Text('Erro ao carregar grupo: $error'),
+            error: (error, _) => ErrorState(
+              message: friendlyApiError(error,
+                  fallback: 'Não foi possível carregar o grupo.'),
+              onRetry: () => ref.invalidate(selectedGroupProvider),
+            ),
           ),
         ],
       ),
@@ -71,23 +109,21 @@ class GroupsPage extends ConsumerWidget {
   }
 }
 
-Future<void> _deleteGroup(BuildContext context, WidgetRef ref, GroupModel group) async {
+Future<void> _deleteGroup(
+    BuildContext context, WidgetRef ref, GroupModel group) async {
   try {
-    final members = await ref.read(groupsRepositoryProvider).listMembers(group.id);
-    final admins = members.where((member) => member.role == 'ADMIN').toList();
-    if (admins.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Apenas admin do grupo pode deletar.')));
-      return;
-    }
-    await ref.read(groupsRepositoryProvider).delete(group.id, admins.first.userId);
+    await ref.read(groupsRepositoryProvider).delete(group.id);
     ref.read(selectedGroupIdProvider.notifier).state = null;
     ref.invalidate(groupsProvider);
     ref.invalidate(selectedGroupProvider);
     ref.invalidate(eventsProvider);
     ref.invalidate(selectedEventProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Nao foi possivel deletar grupo: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível deletar o grupo.'))));
     }
   }
 }
@@ -99,6 +135,9 @@ class _GroupMembers extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isGroupAdmin =
+        ref.watch(groupRoleProvider(group.id)).valueOrNull == 'ADMIN';
+    final currentUser = ref.watch(currentUserProvider).valueOrNull;
     return FutureBuilder<List<GroupMemberModel>>(
       future: ref.watch(groupsRepositoryProvider).listMembers(group.id),
       builder: (context, snapshot) {
@@ -108,29 +147,193 @@ class _GroupMembers extends ConsumerWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text('Integrantes', style: Theme.of(context).textTheme.titleMedium)),
-                TextButton.icon(
-                  onPressed: () => _showAddMemberDialog(context, ref, group),
-                  icon: const Icon(Icons.person_add),
-                  label: const Text('Adicionar'),
-                ),
+                Expanded(
+                    child: Text('Integrantes',
+                        style: Theme.of(context).textTheme.titleMedium)),
+                if (isGroupAdmin)
+                  TextButton.icon(
+                    onPressed: () => _showInviteDialog(context, ref, group),
+                    icon: const Icon(Icons.person_add),
+                    label: const Text('Convidar'),
+                  ),
+                if (currentUser != null)
+                  TextButton.icon(
+                    onPressed: () => _confirmLeaveGroup(context, ref, group),
+                    icon: const Icon(Icons.exit_to_app),
+                    label: const Text('Sair'),
+                  ),
               ],
             ),
-            if (snapshot.connectionState != ConnectionState.done) const LinearProgressIndicator(),
-            if (members.isEmpty && snapshot.connectionState == ConnectionState.done)
-              const Text('Nenhum integrante cadastrado.')
+            if (snapshot.connectionState != ConnectionState.done)
+              const LinearProgressIndicator(),
+            if (snapshot.hasError && snapshot.connectionState == ConnectionState.done)
+              ErrorState(
+                message: friendlyApiError(snapshot.error!,
+                    fallback: 'Não foi possível carregar os integrantes.'),
+              )
+            else if (members.isEmpty &&
+                snapshot.connectionState == ConnectionState.done)
+              const EmptyState(
+                icon: Icons.person_add_alt_outlined,
+                message: 'Nenhum integrante cadastrado.',
+              )
             else
               ...members.map(
                 (member) => ListTile(
                   contentPadding: EdgeInsets.zero,
+                  leading: PersonAvatar(name: member.nickname, seed: member.userId),
                   title: Text(member.nickname),
                   subtitle: Text(member.roleLabel),
+                  trailing: isGroupAdmin && member.userId != currentUser?.id
+                      ? Wrap(
+                          children: [
+                            IconButton(
+                              tooltip: 'Alterar perfil no grupo',
+                              icon: const Icon(Icons.manage_accounts_outlined),
+                              onPressed: () => _showEditMemberRoleDialog(
+                                  context, ref, group, member),
+                            ),
+                            IconButton(
+                              tooltip: 'Remover integrante',
+                              icon: const Icon(Icons.person_remove_outlined),
+                              onPressed: () => _confirmRemoveMember(
+                                  context, ref, group, member),
+                            ),
+                          ],
+                        )
+                      : null,
                 ),
               ),
           ],
         );
       },
     );
+  }
+}
+
+Future<void> _confirmRemoveMember(BuildContext context, WidgetRef ref,
+    GroupModel group, GroupMemberModel member) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Remover integrante'),
+      content: Text('Deseja remover ${member.nickname} deste grupo?'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remover')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+  try {
+    await ref
+        .read(groupsRepositoryProvider)
+        .removeMember(group.id, member.userId);
+    ref.invalidate(selectedGroupProvider);
+    ref.invalidate(groupRoleProvider(group.id));
+    ref.invalidate(groupsProvider);
+    ref.invalidate(eventsProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível remover o integrante.'))));
+    }
+  }
+}
+
+Future<void> _confirmLeaveGroup(
+    BuildContext context, WidgetRef ref, GroupModel group) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Sair do grupo'),
+      content: const Text(
+          'Voce so pode sair se nao tiver saldo pendente em eventos abertos.'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sair')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+  try {
+    await ref.read(groupsRepositoryProvider).leave(group.id);
+    ref.read(selectedGroupIdProvider.notifier).state = null;
+    ref.invalidate(groupsProvider);
+    ref.invalidate(selectedGroupProvider);
+    ref.invalidate(eventsProvider);
+    ref.invalidate(selectedEventProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível sair do grupo.'))));
+    }
+  }
+}
+
+Future<void> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
+    GroupModel group, GroupMemberModel member) async {
+  var role = member.role;
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: Text('Perfil de ${member.nickname}'),
+        content: DropdownButtonFormField<String>(
+          initialValue: role,
+          decoration: const InputDecoration(labelText: 'Perfil no grupo'),
+          items: const [
+            DropdownMenuItem(value: 'MEMBER', child: Text('Integrante')),
+            DropdownMenuItem(value: 'ADMIN', child: Text('Admin')),
+          ],
+          onChanged: (value) => setState(() => role = value ?? role),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Salvar')),
+        ],
+      ),
+    ),
+  );
+  if (saved != true || !context.mounted) return;
+  try {
+    final currentUser = await ref.read(currentUserProvider.future);
+    if (currentUser == null) throw Exception('Sessao expirada');
+    await ref.read(groupsRepositoryProvider).addMember(
+          groupId: group.id,
+          userId: member.userId,
+          role: role,
+        );
+    ref.invalidate(selectedGroupProvider);
+    ref.invalidate(groupRoleProvider(group.id));
+    ref.invalidate(groupsProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível alterar o perfil.'))));
+    }
   }
 }
 
@@ -145,13 +348,21 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Nome')),
-          TextField(controller: descriptionController, decoration: const InputDecoration(labelText: 'Descricao')),
+          TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Nome')),
+          TextField(
+              controller: descriptionController,
+              decoration: const InputDecoration(labelText: 'Descricao')),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Salvar')),
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Salvar')),
       ],
     ),
   );
@@ -161,22 +372,23 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
     return;
   }
   try {
-    final users = await ref.read(usersProvider.future);
-    final admins = users.where((user) => user.admin).toList();
-    if (admins.isEmpty) {
-      throw Exception('Nenhum admin cadastrado');
-    }
+    final currentUser = await ref.read(currentUserProvider.future);
+    if (currentUser == null) throw Exception('Sessao expirada');
     final group = await ref.read(groupsRepositoryProvider).create(
           name: nameController.text.trim(),
-          description: descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
-          adminUserId: admins.first.id,
+          description: descriptionController.text.trim().isEmpty
+              ? null
+              : descriptionController.text.trim(),
         );
     ref.read(selectedGroupIdProvider.notifier).state = group.id;
     ref.invalidate(groupsProvider);
     ref.invalidate(selectedGroupProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Nao foi possivel criar grupo: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível criar o grupo.'))));
     }
   } finally {
     nameController.dispose();
@@ -184,74 +396,66 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
   }
 }
 
-Future<void> _showAddMemberDialog(BuildContext context, WidgetRef ref, GroupModel group) async {
-  final users = await ref.read(usersProvider.future);
-  if (!context.mounted || users.isEmpty) {
-    return;
-  }
-  var userId = users.first.id;
-  var role = 'MEMBER';
-  final saved = await showDialog<bool>(
-    barrierDismissible: false,
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const Text('Adicionar integrante'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              value: userId,
-              decoration: const InputDecoration(labelText: 'Usuario'),
-              items: users.map((user) => DropdownMenuItem(value: user.id, child: Text(user.nickname))).toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => userId = value);
-                }
-              },
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: role,
-              decoration: const InputDecoration(labelText: 'Perfil no grupo'),
-              items: const [
-                DropdownMenuItem(value: 'MEMBER', child: Text('Integrante')),
-                DropdownMenuItem(value: 'ADMIN', child: Text('Admin')),
-              ],
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() => role = value);
-                }
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Salvar')),
-        ],
-      ),
-    ),
-  );
-  if (saved != true || !context.mounted) {
-    return;
-  }
+Future<void> _showInviteDialog(
+    BuildContext context, WidgetRef ref, GroupModel group) async {
+  GroupInviteModel invite;
   try {
-    final members = await ref.read(groupsRepositoryProvider).listMembers(group.id);
-    final admins = members.where((member) => member.role == 'ADMIN').toList();
-    if (admins.isEmpty) {
-      throw Exception('Nenhum admin no grupo');
-    }
-    await ref.read(groupsRepositoryProvider).addMember(
-          groupId: group.id,
-          adminUserId: admins.first.userId,
-          userId: userId,
-          role: role,
-        );
-    ref.invalidate(selectedGroupProvider);
+    invite =
+        await ref.read(groupInviteRepositoryProvider).getOrCreate(group.id);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Nao foi possivel adicionar: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível gerar o convite.'))));
     }
+    return;
   }
+  if (!context.mounted) {
+    return;
+  }
+  await showDialog<void>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) {
+        final url = '${Environment.webBaseUrl}/invite/${invite.id}';
+        return AlertDialog(
+          title: const Text('Convidar para o grupo'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Envie este link para adicionar alguem ao grupo:'),
+              const SizedBox(height: 12),
+              SelectableText(url),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                final regenerated = await ref
+                    .read(groupInviteRepositoryProvider)
+                    .regenerate(group.id);
+                setState(() => invite = regenerated);
+              },
+              child: const Text('Gerar novo link'),
+            ),
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: url));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Link copiado.')));
+                }
+              },
+              child: const Text('Copiar link'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Fechar'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
 }

@@ -6,6 +6,7 @@ class UserModel {
     required this.email,
     required this.phone,
     required this.pixKey,
+    required this.billingUserId,
     required this.admin,
     required this.active,
   });
@@ -16,6 +17,7 @@ class UserModel {
   final String email;
   final String phone;
   final String pixKey;
+  final String? billingUserId;
   final bool admin;
   final bool active;
 
@@ -27,6 +29,7 @@ class UserModel {
       email: json['email'] as String,
       phone: json['phone'] as String,
       pixKey: json['pixKey'] as String,
+      billingUserId: json['billingUserId'] as String?,
       admin: json['admin'] as bool,
       active: json['active'] as bool,
     );

@@ -3,6 +3,8 @@ class MonthlyReportModel {
     required this.monthId,
     required this.eventId,
     required this.eventName,
+    required this.groupId,
+    required this.groupName,
     required this.month,
     required this.year,
     required this.status,
@@ -13,6 +15,8 @@ class MonthlyReportModel {
   final String? monthId;
   final String? eventId;
   final String? eventName;
+  final String groupId;
+  final String groupName;
   final int month;
   final int year;
   final String status;
@@ -24,12 +28,15 @@ class MonthlyReportModel {
       monthId: json['monthId'] as String?,
       eventId: json['eventId'] as String?,
       eventName: json['eventName'] as String?,
+      groupId: json['groupId'] as String,
+      groupName: json['groupName'] as String,
       month: json['month'] as int,
       year: json['year'] as int,
       status: json['status'] as String? ?? 'OPEN',
       totalExpenses: double.parse(json['totalExpenses'].toString()),
       balances: (json['balances'] as List<dynamic>)
-          .map((item) => MonthlyBalanceModel.fromJson(item as Map<String, dynamic>))
+          .map((item) =>
+              MonthlyBalanceModel.fromJson(item as Map<String, dynamic>))
           .toList(),
     );
   }

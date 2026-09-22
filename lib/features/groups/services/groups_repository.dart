@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_provider.dart';
+import '../../../shared/ptbr_sort.dart';
+import '../../auth/services/auth_repository.dart';
 import '../models/group_member_model.dart';
 import '../models/group_model.dart';
 
@@ -9,8 +11,28 @@ final groupsRepositoryProvider = Provider<GroupsRepository>((ref) {
   return GroupsRepository(ref.watch(dioProvider));
 });
 
-final groupsProvider = FutureProvider<List<GroupModel>>((ref) {
+final groupsProvider = FutureProvider<List<GroupModel>>((ref) async {
+  final user = await ref.watch(currentUserProvider.future);
+  if (user == null) {
+    return [];
+  }
   return ref.watch(groupsRepositoryProvider).list();
+});
+
+final groupRoleProvider =
+    FutureProvider.family<String?, String>((ref, groupId) async {
+  final user = await ref.watch(currentUserProvider.future);
+  if (user == null) {
+    return null;
+  }
+  final members =
+      await ref.watch(groupsRepositoryProvider).listMembers(groupId);
+  for (final member in members) {
+    if (member.userId == user.id) {
+      return member.role;
+    }
+  }
+  return null;
 });
 
 final selectedGroupIdProvider = StateProvider<String?>((ref) => null);
@@ -50,41 +72,39 @@ class GroupsRepository {
   Future<GroupModel> create({
     required String name,
     String? description,
-    required String adminUserId,
   }) async {
     final response = await dio.post<Map<String, dynamic>>(
       '/groups',
       data: {
         'name': name,
         'description': description,
-        'adminUserId': adminUserId,
       },
     );
     return GroupModel.fromJson(response.data!);
   }
 
-  Future<List<GroupMemberModel>> listMembers(String groupId, {String? viewerUserId}) async {
+  Future<List<GroupMemberModel>> listMembers(String groupId,
+      {String? viewerUserId}) async {
     final response = await dio.get<List<dynamic>>(
       '/groups/$groupId/members',
       queryParameters: {
         if (viewerUserId != null) 'viewerUserId': viewerUserId,
       },
     );
-    return response.data!
+    final members = response.data!
         .map((item) => GroupMemberModel.fromJson(item as Map<String, dynamic>))
         .toList();
+    return sortedByNamePtBr(members, (member) => member.nickname);
   }
 
   Future<GroupMemberModel> addMember({
     required String groupId,
-    required String adminUserId,
     required String userId,
     required String role,
   }) async {
     final response = await dio.post<Map<String, dynamic>>(
       '/groups/$groupId/members',
       data: {
-        'adminUserId': adminUserId,
         'userId': userId,
         'role': role,
       },
@@ -92,10 +112,15 @@ class GroupsRepository {
     return GroupMemberModel.fromJson(response.data!);
   }
 
-  Future<void> delete(String groupId, String adminUserId) async {
-    await dio.delete<void>(
-      '/groups/$groupId',
-      queryParameters: {'adminUserId': adminUserId},
-    );
+  Future<void> delete(String groupId) async {
+    await dio.delete<void>('/groups/$groupId');
+  }
+
+  Future<void> removeMember(String groupId, String userId) {
+    return dio.delete<void>('/groups/$groupId/members/$userId');
+  }
+
+  Future<void> leave(String groupId) {
+    return dio.post<void>('/groups/$groupId/leave');
   }
 }

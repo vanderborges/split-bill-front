@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_provider.dart';
+import '../../../shared/ptbr_sort.dart';
 import '../models/user_model.dart';
 
 final usersRepositoryProvider = Provider<UsersRepository>((ref) {
@@ -19,9 +20,15 @@ class UsersRepository {
 
   Future<List<UserModel>> list() async {
     final response = await dio.get<List<dynamic>>('/users');
-    return response.data!
+    final users = response.data!
         .map((item) => UserModel.fromJson(item as Map<String, dynamic>))
         .toList();
+    return sortedByNamePtBr(users, (user) => user.fullName);
+  }
+
+  Future<UserModel> get(String id) async {
+    final response = await dio.get<Map<String, dynamic>>('/users/$id');
+    return UserModel.fromJson(response.data!);
   }
 
   Future<UserModel> create({
@@ -30,6 +37,8 @@ class UsersRepository {
     required String email,
     required String phone,
     required String pixKey,
+    required String password,
+    String? billingUserId,
     required bool admin,
   }) async {
     final response = await dio.post<Map<String, dynamic>>(
@@ -40,6 +49,8 @@ class UsersRepository {
         'email': email,
         'phone': phone,
         'pixKey': pixKey,
+        'password': password,
+        'billingUserId': billingUserId,
         'admin': admin,
       },
     );
@@ -53,6 +64,7 @@ class UsersRepository {
     required String email,
     required String phone,
     required String pixKey,
+    required String? billingUserId,
     required bool admin,
     required bool active,
   }) async {
@@ -64,6 +76,7 @@ class UsersRepository {
         'email': email,
         'phone': phone,
         'pixKey': pixKey,
+        'billingUserId': billingUserId,
         'admin': admin,
         'active': active,
       },
@@ -73,5 +86,28 @@ class UsersRepository {
 
   Future<void> delete(String id) async {
     await dio.delete<void>('/users/$id');
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await dio.put<void>(
+      '/users/me/password',
+      data: {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      },
+    );
+  }
+
+  Future<void> resetPassword({
+    required String id,
+    required String newPassword,
+  }) async {
+    await dio.put<void>(
+      '/users/$id/password/reset',
+      data: {'newPassword': newPassword},
+    );
   }
 }

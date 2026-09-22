@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: split-bill-front
+    runtime: static
+    plan: free
+    buildCommand: bash render-build.sh
+    staticPublishPath: build/web
+    envVars:
+      - key: API_BASE_URL
+        sync: false

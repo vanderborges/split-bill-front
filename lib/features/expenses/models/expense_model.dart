@@ -7,6 +7,7 @@ class ExpenseModel {
     required this.category,
     required this.payerId,
     required this.payerNickname,
+    required this.createdByUserId,
     required this.monthId,
     required this.eventId,
     required this.sourceEventId,
@@ -24,6 +25,7 @@ class ExpenseModel {
   final String category;
   final String payerId;
   final String payerNickname;
+  final String createdByUserId;
   final String? monthId;
   final String? eventId;
   final String? sourceEventId;
@@ -42,6 +44,8 @@ class ExpenseModel {
       category: json['category'] as String,
       payerId: json['payerId'] as String,
       payerNickname: json['payerNickname'] as String,
+      createdByUserId:
+          json['createdByUserId'] as String? ?? json['payerId'] as String,
       monthId: json['monthId'] as String?,
       eventId: json['eventId'] as String?,
       sourceEventId: json['sourceEventId'] as String?,
@@ -49,10 +53,12 @@ class ExpenseModel {
       installmentNumber: json['installmentNumber'] as int?,
       totalInstallments: json['totalInstallments'] as int?,
       payers: (json['payers'] as List<dynamic>? ?? [])
-          .map((item) => ExpensePayerModel.fromJson(item as Map<String, dynamic>))
+          .map((item) =>
+              ExpensePayerModel.fromJson(item as Map<String, dynamic>))
           .toList(),
       participants: (json['participants'] as List<dynamic>)
-          .map((item) => ExpenseParticipantModel.fromJson(item as Map<String, dynamic>))
+          .map((item) =>
+              ExpenseParticipantModel.fromJson(item as Map<String, dynamic>))
           .toList(),
     );
   }
@@ -83,17 +89,23 @@ class ExpenseParticipantModel {
     required this.userId,
     required this.nickname,
     required this.shareAmount,
+    required this.shareCount,
+    required this.shareDescription,
   });
 
   final String userId;
   final String nickname;
   final double shareAmount;
+  final int shareCount;
+  final String? shareDescription;
 
   factory ExpenseParticipantModel.fromJson(Map<String, dynamic> json) {
     return ExpenseParticipantModel(
       userId: json['userId'] as String,
       nickname: json['nickname'] as String,
       shareAmount: double.parse(json['shareAmount'].toString()),
+      shareCount: json['shareCount'] as int? ?? 1,
+      shareDescription: json['shareDescription'] as String?,
     );
   }
 }

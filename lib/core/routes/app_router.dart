@@ -7,6 +7,7 @@ import '../../features/dashboard/pages/dashboard_page.dart';
 import '../../features/events/pages/events_page.dart';
 import '../../features/expenses/pages/expenses_page.dart';
 import '../../features/groups/pages/groups_page.dart';
+import '../../features/groups/pages/invite_page.dart';
 import '../../features/profile/pages/profile_page.dart';
 import '../../features/reports/pages/reports_page.dart';
 import '../../features/summary/pages/user_expense_summary_page.dart';
@@ -21,6 +22,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path: '/register', builder: (context, state) => const RegisterPage()),
       GoRoute(path: '/', builder: (context, state) => const DashboardPage()),
       GoRoute(path: '/groups', builder: (context, state) => const GroupsPage()),
+      GoRoute(
+          path: '/invite/:inviteId',
+          builder: (context, state) => InvitePage(
+              inviteId: state.pathParameters['inviteId']!)),
       GoRoute(path: '/events', builder: (context, state) => const EventsPage()),
       GoRoute(
           path: '/expenses', builder: (context, state) => const ExpensesPage()),

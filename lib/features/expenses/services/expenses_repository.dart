@@ -10,7 +10,8 @@ final expensesRepositoryProvider = Provider<ExpensesRepository>((ref) {
   return ExpensesRepository(ref.watch(dioProvider));
 });
 
-final currentMonthExpensesProvider = FutureProvider<List<ExpenseModel>>((ref) async {
+final currentMonthExpensesProvider =
+    FutureProvider<List<ExpenseModel>>((ref) async {
   final month = await ref.watch(currentMonthProvider.future);
   if (month == null) {
     return [];
@@ -18,7 +19,8 @@ final currentMonthExpensesProvider = FutureProvider<List<ExpenseModel>>((ref) as
   return ref.watch(expensesRepositoryProvider).listByMonth(month.id);
 });
 
-final selectedEventExpensesProvider = FutureProvider<List<ExpenseModel>>((ref) async {
+final selectedEventExpensesProvider =
+    FutureProvider<List<ExpenseModel>>((ref) async {
   final event = await ref.watch(selectedEventProvider.future);
   if (event == null) {
     return [];
@@ -60,6 +62,8 @@ class ExpensesRepository {
     String? eventId,
     int? installments,
     required List<String> participantIds,
+    required Map<String, int> participantShareCounts,
+    required Map<String, String> participantShareDescriptions,
     required Map<String, double> payerAmounts,
   }) async {
     try {
@@ -74,6 +78,8 @@ class ExpensesRepository {
           eventId: eventId,
           installments: installments,
           participantIds: participantIds,
+          participantShareCounts: participantShareCounts,
+          participantShareDescriptions: participantShareDescriptions,
           payerAmounts: payerAmounts,
         ),
       );
@@ -92,6 +98,8 @@ class ExpensesRepository {
     String? monthId,
     String? eventId,
     required List<String> participantIds,
+    required Map<String, int> participantShareCounts,
+    required Map<String, String> participantShareDescriptions,
     required Map<String, double> payerAmounts,
   }) async {
     try {
@@ -105,6 +113,8 @@ class ExpensesRepository {
           monthId: monthId,
           eventId: eventId,
           participantIds: participantIds,
+          participantShareCounts: participantShareCounts,
+          participantShareDescriptions: participantShareDescriptions,
           payerAmounts: payerAmounts,
         ),
       );
@@ -114,12 +124,9 @@ class ExpensesRepository {
     }
   }
 
-  Future<void> delete(String id, String adminUserId) async {
+  Future<void> delete(String id) async {
     try {
-      await dio.delete<void>(
-        '/expenses/$id',
-        queryParameters: {'adminUserId': adminUserId},
-      );
+      await dio.delete<void>('/expenses/$id');
     } on DioException catch (error) {
       throw Exception(_errorMessage(error));
     }
@@ -134,12 +141,24 @@ class ExpensesRepository {
     String? eventId,
     int? installments,
     required List<String> participantIds,
+    required Map<String, int> participantShareCounts,
+    required Map<String, String> participantShareDescriptions,
     required Map<String, double> payerAmounts,
   }) {
     final payers = payerAmounts.entries
         .where((entry) => entry.value > 0)
         .map((entry) => {'userId': entry.key, 'amount': entry.value})
         .toList();
+    final participants = participantIds
+        .map((id) => {
+              'userId': id,
+              'shareCount': participantShareCounts[id] ?? 1,
+              'shareDescription': participantShareDescriptions[id],
+            })
+        .toList();
+    final hasCustomShares = participants.any((participant) =>
+        participant['shareCount'] != 1 ||
+        participant['shareDescription'] != null);
     return {
       'description': description,
       'amount': amount,
@@ -148,7 +167,8 @@ class ExpensesRepository {
       'payerId': payers.isEmpty ? null : payers.first['userId'],
       'monthId': monthId,
       'eventId': eventId,
-      'participantIds': participantIds,
+      if (!hasCustomShares) 'participantIds': participantIds,
+      'participants': participants,
       'payers': payers,
       'installments': installments,
     };

@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_spacing.dart';
+import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/error_state.dart';
+import '../../../shared/widgets/loading_state.dart';
+import '../../../shared/widgets/money_text.dart';
+import '../../auth/services/auth_repository.dart';
 import '../../events/services/events_repository.dart';
 import '../../expenses/services/expense_categories_repository.dart';
-import '../../users/services/users_repository.dart';
+import '../../groups/services/groups_repository.dart';
 import '../models/user_expense_summary_model.dart';
 import '../services/user_expense_summary_repository.dart';
 
@@ -12,11 +19,14 @@ class UserExpenseSummaryPage extends ConsumerStatefulWidget {
   const UserExpenseSummaryPage({super.key});
 
   @override
-  ConsumerState<UserExpenseSummaryPage> createState() => _UserExpenseSummaryPageState();
+  ConsumerState<UserExpenseSummaryPage> createState() =>
+      _UserExpenseSummaryPageState();
 }
 
-class _UserExpenseSummaryPageState extends ConsumerState<UserExpenseSummaryPage> {
+class _UserExpenseSummaryPageState
+    extends ConsumerState<UserExpenseSummaryPage> {
   String? userId;
+  String? groupId;
   String? eventId;
   String? category;
   DateTime? from;
@@ -25,7 +35,8 @@ class _UserExpenseSummaryPageState extends ConsumerState<UserExpenseSummaryPage>
 
   @override
   Widget build(BuildContext context) {
-    final usersAsync = ref.watch(usersProvider);
+    final currentUserAsync = ref.watch(currentUserProvider);
+    final groupsAsync = ref.watch(groupsProvider);
     final eventsAsync = ref.watch(eventsProvider);
     final categoriesAsync = ref.watch(expenseCategoriesProvider);
 
@@ -34,31 +45,93 @@ class _UserExpenseSummaryPageState extends ConsumerState<UserExpenseSummaryPage>
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          usersAsync.when(
-            data: (users) {
-              if (userId == null && users.isNotEmpty) {
-                userId = users.first.id;
+          groupsAsync.when(
+            data: (groups) {
+              if (groups.isEmpty) {
+                return const Text('Voce nao participa de nenhum grupo.');
+              }
+              if (groupId == null ||
+                  groups.every((group) => group.id != groupId)) {
+                groupId = groups.first.id;
+                ref.read(selectedGroupIdProvider.notifier).state = groupId;
               }
               return DropdownButtonFormField<String>(
-                value: userId,
-                decoration: const InputDecoration(labelText: 'Usuario'),
-                items: users.map((user) => DropdownMenuItem(value: user.id, child: Text(user.nickname))).toList(),
-                onChanged: (value) => setState(() => userId = value),
+                initialValue: groupId,
+                decoration: const InputDecoration(labelText: 'Grupo'),
+                items: groups
+                    .map((group) => DropdownMenuItem(
+                        value: group.id, child: Text(group.name)))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      groupId = value;
+                      userId = null;
+                      eventId = null;
+                      summaryFuture = null;
+                    });
+                    ref.read(selectedGroupIdProvider.notifier).state = value;
+                    ref.invalidate(eventsProvider);
+                  }
+                },
               );
             },
             loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('Erro ao carregar usuarios: $error'),
+            error: (error, _) => Text('Erro ao carregar grupos: $error'),
           ),
+          const SizedBox(height: 12),
+          if (groupId != null)
+            currentUserAsync.when(
+              data: (currentUser) {
+                if (currentUser == null) {
+                  return const SizedBox.shrink();
+                }
+                final role = ref.watch(groupRoleProvider(groupId!)).valueOrNull;
+                if (role != 'ADMIN') {
+                  userId = currentUser.id;
+                  return Text('Extrato: ${currentUser.nickname}');
+                }
+                return FutureBuilder(
+                  future:
+                      ref.read(groupsRepositoryProvider).listMembers(groupId!),
+                  builder: (context, snapshot) {
+                    final members = snapshot.data ?? [];
+                    return DropdownButtonFormField<String?>(
+                      initialValue: userId,
+                      decoration: const InputDecoration(labelText: 'Extrato'),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                            value: null, child: Text('Consolidado do grupo')),
+                        ...members.map((member) => DropdownMenuItem<String?>(
+                            value: member.userId,
+                            child: Text(member.nickname))),
+                      ],
+                      onChanged: (value) => setState(() {
+                        userId = value;
+                        summaryFuture = null;
+                      }),
+                    );
+                  },
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) => const SizedBox.shrink(),
+            ),
           const SizedBox(height: 12),
           eventsAsync.when(
             data: (events) => DropdownButtonFormField<String?>(
-              value: eventId,
+              initialValue: eventId,
               decoration: const InputDecoration(labelText: 'Evento'),
               items: [
-                const DropdownMenuItem<String?>(value: null, child: Text('Todos')),
-                ...events.map((event) => DropdownMenuItem<String?>(value: event.id, child: Text(event.name))),
+                const DropdownMenuItem<String?>(
+                    value: null, child: Text('Todos')),
+                ...events.map((event) => DropdownMenuItem<String?>(
+                    value: event.id, child: Text(event.name))),
               ],
-              onChanged: (value) => setState(() => eventId = value),
+              onChanged: (value) => setState(() {
+                eventId = value;
+                summaryFuture = null;
+              }),
             ),
             loading: () => const LinearProgressIndicator(),
             error: (error, _) => Text('Erro ao carregar eventos: $error'),
@@ -66,13 +139,18 @@ class _UserExpenseSummaryPageState extends ConsumerState<UserExpenseSummaryPage>
           const SizedBox(height: 12),
           categoriesAsync.when(
             data: (categories) => DropdownButtonFormField<String?>(
-              value: category,
+              initialValue: category,
               decoration: const InputDecoration(labelText: 'Tipo de despesa'),
               items: [
-                const DropdownMenuItem<String?>(value: null, child: Text('Todos')),
-                ...categories.map((item) => DropdownMenuItem<String?>(value: item.name, child: Text(item.name))),
+                const DropdownMenuItem<String?>(
+                    value: null, child: Text('Todos')),
+                ...categories.map((item) => DropdownMenuItem<String?>(
+                    value: item.name, child: Text(item.name))),
               ],
-              onChanged: (value) => setState(() => category = value),
+              onChanged: (value) => setState(() {
+                category = value;
+                summaryFuture = null;
+              }),
             ),
             loading: () => const LinearProgressIndicator(),
             error: (error, _) => Text('Erro ao carregar tipos: $error'),
@@ -92,23 +170,30 @@ class _UserExpenseSummaryPageState extends ConsumerState<UserExpenseSummaryPage>
                 icon: const Icon(Icons.date_range),
                 label: Text(to == null ? 'Data final' : _formatDate(to!)),
               ),
-              FilledButton.icon(
-                onPressed: _loadSummary,
-                icon: const Icon(Icons.search),
-                label: const Text('Buscar'),
+              OutlinedButton.icon(
+                onPressed: _clearFilters,
+                icon: const Icon(Icons.filter_alt_off_outlined),
+                label: const Text('Limpar filtros'),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          if (summaryFuture != null)
+          if (groupId != null && currentUserAsync.valueOrNull != null)
             FutureBuilder<UserExpenseSummaryModel>(
-              future: summaryFuture,
+              future: summaryFuture ??= _summaryFuture(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Padding(
+                    padding: EdgeInsets.all(AppSpacing.xl),
+                    child: LoadingState(),
+                  );
                 }
                 if (snapshot.hasError) {
-                  return Text('Erro ao carregar extrato: ${snapshot.error}');
+                  return ErrorState(
+                    message: friendlyApiError(snapshot.error!,
+                        fallback: 'Não foi possível carregar o extrato.'),
+                    onRetry: () => setState(() => summaryFuture = null),
+                  );
                 }
                 return _SummaryContent(summary: snapshot.data!);
               },
@@ -132,22 +217,30 @@ class _UserExpenseSummaryPageState extends ConsumerState<UserExpenseSummaryPage>
         } else {
           to = selected;
         }
+        summaryFuture = null;
       });
     }
   }
 
-  void _loadSummary() {
-    if (userId == null) {
-      return;
-    }
+  Future<UserExpenseSummaryModel> _summaryFuture() {
+    return ref.read(userExpenseSummaryRepositoryProvider).get(
+          groupId: groupId!,
+          userId: userId,
+          from: from,
+          to: to,
+          category: category,
+          eventId: eventId,
+        );
+  }
+
+  void _clearFilters() {
     setState(() {
-      summaryFuture = ref.read(userExpenseSummaryRepositoryProvider).get(
-            userId: userId!,
-            from: from,
-            to: to,
-            category: category,
-            eventId: eventId,
-          );
+      userId = null;
+      eventId = null;
+      category = null;
+      from = null;
+      to = null;
+      summaryFuture = null;
     });
   }
 }
@@ -163,24 +256,28 @@ class _SummaryContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: AppSpacing.md,
+          runSpacing: AppSpacing.md,
           children: [
-            _Metric(label: 'Consumiu', value: _formatMoney(summary.totalConsumed)),
-            _Metric(label: 'Pagou', value: _formatMoney(summary.totalPaid)),
-            _Metric(label: 'Saldo', value: _formatMoney(summary.balance)),
+            _Metric(label: 'Consumiu', value: summary.totalConsumed),
+            _Metric(label: 'Pagou', value: summary.totalPaid),
+            _Metric(label: 'Saldo', value: summary.balance, colorBySign: true),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         if (summary.expenses.isEmpty)
-          const Text('Nenhuma despesa encontrada.')
+          const EmptyState(
+            icon: Icons.receipt_long_outlined,
+            message: 'Nenhuma despesa encontrada com esses filtros.',
+          )
         else
           ...summary.expenses.map(
             (expense) => ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(expense.description),
-              subtitle: Text('${_formatDate(expense.expenseDate)} | ${expense.category}'),
-              trailing: Text(_formatMoney(expense.amount)),
+              subtitle: Text(
+                  '${_formatDate(expense.expenseDate)} | ${expense.category}'),
+              trailing: MoneyText(expense.amount),
             ),
           ),
       ],
@@ -189,10 +286,15 @@ class _SummaryContent extends StatelessWidget {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value});
+  const _Metric({
+    required this.label,
+    required this.value,
+    this.colorBySign = false,
+  });
 
   final String label;
-  final String value;
+  final double value;
+  final bool colorBySign;
 
   @override
   Widget build(BuildContext context) {
@@ -200,23 +302,23 @@ class _Metric extends StatelessWidget {
       width: 160,
       child: Card(
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(label),
-              const SizedBox(height: 4),
-              Text(value, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: AppSpacing.xs),
+              MoneyText(
+                value,
+                colorBySign: colorBySign,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ],
           ),
         ),
       ),
     );
   }
-}
-
-String _formatMoney(double value) {
-  return 'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
 }
 
 String _formatDate(DateTime value) {
