@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
+import '../../../shared/session_reset.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
@@ -88,6 +90,18 @@ class ProfilePage extends ConsumerWidget {
                 onPressed: () => _showChangePasswordDialog(context, ref),
                 icon: const Icon(Icons.lock_reset_outlined),
                 label: const Text('Alterar senha'),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              const Divider(),
+              const SizedBox(height: AppSpacing.md),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                  side: BorderSide(color: Theme.of(context).colorScheme.error),
+                ),
+                onPressed: () => _showDeleteAccountDialog(context, ref, user),
+                icon: const Icon(Icons.delete_forever_outlined),
+                label: const Text('Excluir conta'),
               ),
             ],
           );
@@ -309,5 +323,86 @@ Future<void> _showEditProfileDialog(
 void _disposeControllers(List<TextEditingController> controllers) {
   for (final controller in controllers) {
     controller.dispose();
+  }
+}
+
+Future<void> _showDeleteAccountDialog(
+    BuildContext context, WidgetRef ref, UserModel user) async {
+  final confirmationController = TextEditingController();
+
+  final confirmed = await showDialog<bool>(
+    barrierDismissible: false,
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Excluir conta'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Esta ação é permanente. Sua conta, seus dados de perfil e seu '
+            'acesso ao DividiAi serão excluídos e não podem ser recuperados. '
+            'Despesas e grupos compartilhados com outras pessoas podem '
+            'continuar visíveis para elas.',
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Para confirmar, digite EXCLUIR abaixo:',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: confirmationController,
+            decoration: const InputDecoration(hintText: 'EXCLUIR'),
+            textCapitalization: TextCapitalization.characters,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Excluir definitivamente'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed != true ||
+      confirmationController.text.trim().toUpperCase() != 'EXCLUIR') {
+    confirmationController.dispose();
+    if (confirmed == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:
+              Text('Digite EXCLUIR para confirmar a exclusão da conta.')));
+    }
+    return;
+  }
+  confirmationController.dispose();
+
+  try {
+    await ref.read(usersRepositoryProvider).delete(user.id);
+    await ref.read(authRepositoryProvider).logout();
+    resetSessionScopedProviders(ref);
+    if (context.mounted) {
+      context.go('/login');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Sua conta foi excluída.')));
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível excluir sua conta.')),
+        ),
+      );
+    }
   }
 }

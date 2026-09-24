@@ -409,6 +409,7 @@ Future<void> _openExpenseForm(
   final installmentsController = TextEditingController(text: '1');
   var installments = 1;
   var showInstallments = false;
+  var isSaving = false;
   final currentUserId = ref.read(currentUserProvider).valueOrNull?.id;
   final defaultPayerId = users.any((user) => user.id == currentUserId)
       ? currentUserId!
@@ -451,6 +452,144 @@ Future<void> _openExpenseForm(
           final shareValue = dialogAmount == null || totalShares == 0
               ? null
               : dialogAmount / totalShares;
+
+          // Valida e salva sem fechar a tela: só sai (pop) em caso de
+          // sucesso, pra não perder tudo que foi digitado quando algo dá
+          // errado (validação local ou erro do backend).
+          Future<void> handleSave() async {
+            final amount = parseAmountFieldText(amountController.text);
+            if (amount == null) {
+              ScaffoldMessenger.of(routeContext).showSnackBar(
+                const SnackBar(content: Text('Informe o valor da despesa.')),
+              );
+              return;
+            }
+
+            if (descriptionController.text.trim().isEmpty) {
+              ScaffoldMessenger.of(routeContext).showSnackBar(
+                const SnackBar(
+                    content: Text('Informe uma descrição para a despesa.')),
+              );
+              return;
+            }
+
+            if (selectedParticipants.isEmpty) {
+              ScaffoldMessenger.of(routeContext).showSnackBar(
+                const SnackBar(
+                    content: Text('Selecione ao menos um participante.')),
+              );
+              return;
+            }
+
+            final participantShareCounts = _readParticipantShareCounts(
+                selectedParticipants, shareCountControllers);
+            final participantShareDescriptions =
+                _readParticipantShareDescriptions(
+              selectedParticipants,
+              shareDescriptionControllers,
+            );
+            if (participantShareCounts.length != selectedParticipants.length) {
+              ScaffoldMessenger.of(routeContext).showSnackBar(
+                const SnackBar(
+                    content:
+                        Text('Defina as cotas dos participantes selecionados.')),
+              );
+              return;
+            }
+
+            final payerAmounts = splitPaymentByUser
+                ? _readPayerAmounts(payerControllers)
+                : {singlePayerId: amount};
+            if (payerAmounts.isEmpty) {
+              ScaffoldMessenger.of(routeContext).showSnackBar(
+                const SnackBar(content: Text('Informe quem pagou a despesa.')),
+              );
+              return;
+            }
+
+            final totalPaid = payerAmounts.values
+                .fold<double>(0.0, (total, value) => total + value);
+            if ((totalPaid - amount).abs() > 0.009) {
+              ScaffoldMessenger.of(routeContext).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      'A soma dos pagadores (${formatCurrencyBRL(totalPaid)}) precisa bater com o valor total (${formatCurrencyBRL(amount)}).'),
+                ),
+              );
+              return;
+            }
+
+            final installmentsToSave =
+                int.tryParse(installmentsController.text.trim());
+            if (installmentsToSave == null || installmentsToSave < 1) {
+              ScaffoldMessenger.of(routeContext).showSnackBar(
+                const SnackBar(
+                    content: Text('Informe um número de parcelas válido.')),
+              );
+              return;
+            }
+
+            if (installmentsToSave > 1 && splitPaymentByUser) {
+              ScaffoldMessenger.of(routeContext).showSnackBar(
+                const SnackBar(
+                    content:
+                        Text('Despesa parcelada permite apenas um pagador.')),
+              );
+              return;
+            }
+
+            setState(() => isSaving = true);
+            try {
+              if (expense == null) {
+                await ref.read(expensesRepositoryProvider).create(
+                      description: descriptionController.text.trim(),
+                      amount: amount,
+                      expenseDate: selectedExpenseDate,
+                      category: selectedCategory,
+                      monthId: event.monthId,
+                      eventId: event.id,
+                      participantIds: selectedParticipants.toList(),
+                      participantShareCounts: participantShareCounts,
+                      participantShareDescriptions:
+                          participantShareDescriptions,
+                      payerAmounts: payerAmounts,
+                      installments: installmentsToSave,
+                    );
+              } else {
+                await ref.read(expensesRepositoryProvider).update(
+                      id: expense.id,
+                      description: descriptionController.text.trim(),
+                      amount: amount,
+                      expenseDate: selectedExpenseDate,
+                      category: selectedCategory,
+                      monthId: event.monthId,
+                      eventId: event.id,
+                      participantIds: selectedParticipants.toList(),
+                      participantShareCounts: participantShareCounts,
+                      participantShareDescriptions:
+                          participantShareDescriptions,
+                      payerAmounts: payerAmounts,
+                    );
+              }
+              ref.invalidate(currentMonthExpensesProvider);
+              ref.invalidate(selectedEventExpensesProvider);
+              ref.invalidate(currentMonthReportProvider);
+              ref.invalidate(selectedEventReportProvider);
+              ref.invalidate(dashboardGroupBalancesProvider);
+              if (routeContext.mounted) {
+                Navigator.of(routeContext).pop(true);
+              }
+            } catch (error) {
+              if (routeContext.mounted) {
+                ScaffoldMessenger.of(routeContext).showSnackBar(
+                  SnackBar(
+                      content: Text(friendlyApiError(error,
+                          fallback: 'Não foi possível salvar a despesa.'))),
+                );
+                setState(() => isSaving = false);
+              }
+            }
+          }
 
           return Scaffold(
             appBar: AppBar(
@@ -914,15 +1053,24 @@ Future<void> _openExpenseForm(
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => Navigator.of(routeContext).pop(false),
+                        onPressed: isSaving
+                            ? null
+                            : () => Navigator.of(routeContext).pop(false),
                         child: const Text('Cancelar'),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: FilledButton(
-                        onPressed: () => Navigator.of(routeContext).pop(true),
-                        child: const Text('Salvar'),
+                        onPressed: isSaving ? null : () => handleSave(),
+                        child: isSaving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2),
+                              )
+                            : const Text('Salvar'),
                       ),
                     ),
                   ],
@@ -935,148 +1083,22 @@ Future<void> _openExpenseForm(
     ),
   );
 
+  // A validação e o salvamento já rodaram dentro de handleSave, com a tela
+  // ainda aberta — só chegamos aqui com saved == true depois de sucesso
+  // real, então só falta avisar e liberar os controllers.
   if (saved != true || !context.mounted) {
     disposeControllers();
     return;
   }
 
-  final amount = parseAmountFieldText(amountController.text);
-  if (amount == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Informe o valor da despesa.')),
-    );
-    disposeControllers();
-    return;
-  }
-
-  if (descriptionController.text.trim().isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Informe uma descrição para a despesa.')),
-    );
-    disposeControllers();
-    return;
-  }
-
-  if (selectedParticipants.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Selecione ao menos um participante.')),
-    );
-    disposeControllers();
-    return;
-  }
-
-  final participantShareCounts =
-      _readParticipantShareCounts(selectedParticipants, shareCountControllers);
-  final participantShareDescriptions = _readParticipantShareDescriptions(
-    selectedParticipants,
-    shareDescriptionControllers,
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(expense == null
+          ? 'Despesa cadastrada com sucesso.'
+          : 'Despesa atualizada com sucesso.'),
+    ),
   );
-  if (participantShareCounts.length != selectedParticipants.length) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Defina as cotas dos participantes selecionados.')),
-    );
-    disposeControllers();
-    return;
-  }
-
-  final payerAmounts = splitPaymentByUser
-      ? _readPayerAmounts(payerControllers)
-      : {singlePayerId: amount};
-  if (payerAmounts.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Informe quem pagou a despesa.')),
-    );
-    disposeControllers();
-    return;
-  }
-
-  final totalPaid =
-      payerAmounts.values.fold<double>(0.0, (total, value) => total + value);
-  if ((totalPaid - amount).abs() > 0.009) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-            'A soma dos pagadores (${formatCurrencyBRL(totalPaid)}) precisa bater com o valor total (${formatCurrencyBRL(amount)}).'),
-      ),
-    );
-    disposeControllers();
-    return;
-  }
-
-  final installmentsToSave = int.tryParse(installmentsController.text.trim());
-  if (installmentsToSave == null || installmentsToSave < 1) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Informe um número de parcelas válido.')),
-    );
-    disposeControllers();
-    return;
-  }
-
-  if (installmentsToSave > 1 && splitPaymentByUser) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Despesa parcelada permite apenas um pagador.')),
-    );
-    disposeControllers();
-    return;
-  }
-
-  try {
-    if (expense == null) {
-      await ref.read(expensesRepositoryProvider).create(
-            description: descriptionController.text.trim(),
-            amount: amount,
-            expenseDate: selectedExpenseDate,
-            category: selectedCategory,
-            monthId: event.monthId,
-            eventId: event.id,
-            participantIds: selectedParticipants.toList(),
-            participantShareCounts: participantShareCounts,
-            participantShareDescriptions: participantShareDescriptions,
-            payerAmounts: payerAmounts,
-            installments: installmentsToSave,
-          );
-    } else {
-      await ref.read(expensesRepositoryProvider).update(
-            id: expense.id,
-            description: descriptionController.text.trim(),
-            amount: amount,
-            expenseDate: selectedExpenseDate,
-            category: selectedCategory,
-            monthId: event.monthId,
-            eventId: event.id,
-            participantIds: selectedParticipants.toList(),
-            participantShareCounts: participantShareCounts,
-            participantShareDescriptions: participantShareDescriptions,
-            payerAmounts: payerAmounts,
-          );
-    }
-    ref.invalidate(currentMonthExpensesProvider);
-    ref.invalidate(selectedEventExpensesProvider);
-    ref.invalidate(currentMonthReportProvider);
-    ref.invalidate(selectedEventReportProvider);
-    ref.invalidate(dashboardGroupBalancesProvider);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(expense == null
-              ? 'Despesa cadastrada com sucesso.'
-              : 'Despesa atualizada com sucesso.'),
-        ),
-      );
-    }
-  } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyApiError(error,
-                fallback: 'Não foi possível salvar a despesa.'))),
-      );
-    }
-  } finally {
-    disposeControllers();
-  }
+  disposeControllers();
 }
 
 Future<String?> _showCreateCategoryDialog(
