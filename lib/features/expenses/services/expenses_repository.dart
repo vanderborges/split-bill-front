@@ -10,6 +10,10 @@ final expensesRepositoryProvider = Provider<ExpensesRepository>((ref) {
   return ExpensesRepository(ref.watch(dioProvider));
 });
 
+/// Filtro da tela de despesas: quando true, mostra só as despesas em que o
+/// usuário logado participa (pagou ou consumiu), em vez de todas do evento.
+final showOnlyMyExpensesProvider = StateProvider<bool>((ref) => false);
+
 final currentMonthExpensesProvider =
     FutureProvider<List<ExpenseModel>>((ref) async {
   final month = await ref.watch(currentMonthProvider.future);

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/session_reset.dart';
+import '../../../shared/validators.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
@@ -279,6 +280,19 @@ Future<void> _showEditProfileDialog(
   if (values.any((value) => value.isEmpty)) {
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Preencha todos os campos.')));
+    _disposeControllers([
+      fullNameController,
+      nicknameController,
+      emailController,
+      phoneController,
+      pixKeyController
+    ]);
+    return;
+  }
+
+  if (!isValidEmail(values[2])) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Informe um email valido.')));
     _disposeControllers([
       fullNameController,
       nicknameController,

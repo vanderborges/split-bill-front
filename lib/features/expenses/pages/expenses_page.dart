@@ -32,6 +32,7 @@ class ExpensesPage extends ConsumerWidget {
     final expensesAsync = ref.watch(selectedEventExpensesProvider);
     final groupsAsync = ref.watch(groupsProvider);
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
+    final showOnlyMine = ref.watch(showOnlyMyExpensesProvider);
 
     if (ref.read(pendingAutoOpenExpenseProvider)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -110,18 +111,39 @@ class ExpensesPage extends ConsumerWidget {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
+              CheckboxListTile(
+                value: showOnlyMine,
+                onChanged: (value) => ref
+                    .read(showOnlyMyExpensesProvider.notifier)
+                    .state = value ?? false,
+                controlAffinity: ListTileControlAffinity.leading,
+                dense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                title: const Text('Mostrar só minhas despesas'),
+              ),
               Expanded(
                 child: expensesAsync.when(
                   data: (expenses) {
-                    if (expenses.isEmpty) {
-                      return const EmptyState(
+                    final visibleExpenses = showOnlyMine
+                        ? expenses
+                            .where((expense) =>
+                                _isUserInvolved(expense, currentUser?.id))
+                            .toList()
+                        : expenses;
+                    if (visibleExpenses.isEmpty) {
+                      return EmptyState(
                         icon: Icons.receipt_long_outlined,
-                        title: 'Nenhuma despesa cadastrada.',
-                        message:
-                            'Toque em "+" para registrar o primeiro gasto deste evento.',
+                        title: showOnlyMine
+                            ? 'Você não participa de nenhuma despesa deste evento.'
+                            : 'Nenhuma despesa cadastrada.',
+                        message: showOnlyMine
+                            ? 'Desmarque o filtro para ver as despesas de todo o grupo.'
+                            : 'Toque em "+" para registrar o primeiro gasto deste evento.',
                       );
                     }
-                    final sortedExpenses = [...expenses]..sort((first, second) {
+                    final sortedExpenses = [...visibleExpenses]
+                      ..sort((first, second) {
                         final firstIsInstallment =
                             first.installmentGroupId != null;
                         final secondIsInstallment =
@@ -161,27 +183,28 @@ class ExpensesPage extends ConsumerWidget {
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ),
-                          onTap: !canChange
-                              ? null
-                              : () async {
-                                  if (event.status == 'CLOSED') {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text(
-                                              'Evento fechado nao permite editar despesas.')),
-                                    );
-                                    return;
-                                  }
-                                  final users =
-                                      await _loadEventUsers(ref, event);
-                                  final categories =
-                                      await _loadCategoryNames(ref);
-                                  if (context.mounted) {
-                                    await _openExpenseForm(
-                                        context, ref, event, users, categories,
-                                        expense: expense);
-                                  }
-                                },
+                          onTap: () async {
+                            if (!canChange) {
+                              await _openExpenseDetails(context, expense);
+                              return;
+                            }
+                            if (event.status == 'CLOSED') {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Evento fechado nao permite editar despesas.')),
+                              );
+                              return;
+                            }
+                            final users = await _loadEventUsers(ref, event);
+                            final categories =
+                                await _loadCategoryNames(ref);
+                            if (context.mounted) {
+                              await _openExpenseForm(
+                                  context, ref, event, users, categories,
+                                  expense: expense);
+                            }
+                          },
                           title: Text(expense.description),
                           subtitle: [shareSummary, installmentLabel]
                                   .whereType<String>()
@@ -240,6 +263,18 @@ bool _canChangeExpense(
   bool isGroupAdmin,
 ) {
   return isGroupAdmin || expense.createdByUserId == currentUserId;
+}
+
+/// Usado pelo filtro "Mostrar só minhas despesas": considera o usuário
+/// envolvido se ele pagou (pagador único ou em uma divisão de pagadores)
+/// ou se está entre os participantes que consomem a despesa.
+bool _isUserInvolved(ExpenseModel expense, String? userId) {
+  if (userId == null) {
+    return false;
+  }
+  return expense.payerId == userId ||
+      expense.payers.any((payer) => payer.userId == userId) ||
+      expense.participants.any((participant) => participant.userId == userId);
 }
 
 Future<void> _deleteExpense(
@@ -1099,6 +1134,89 @@ Future<void> _openExpenseForm(
     ),
   );
   disposeControllers();
+}
+
+/// Tela somente leitura para quem não é Adm nem cadastrou a despesa — pode
+/// ver os detalhes, mas não tem acesso a nenhum campo editável ou ação de
+/// excluir/salvar.
+Future<void> _openExpenseDetails(
+  BuildContext context,
+  ExpenseModel expense,
+) async {
+  final installmentLabel = _installmentLabel(expense);
+  await Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (routeContext) => Scaffold(
+        appBar: AppBar(title: const Text('Detalhes da despesa')),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(expense.description,
+                    style: Theme.of(routeContext).textTheme.titleLarge),
+                const SizedBox(height: AppSpacing.xs),
+                MoneyText(expense.amount,
+                    style: Theme.of(routeContext).textTheme.headlineSmall),
+                const SizedBox(height: AppSpacing.md),
+                _detailRow(routeContext, 'Data', _formatDate(expense.expenseDate)),
+                _detailRow(routeContext, 'Tipo de despesa', expense.category),
+                if (installmentLabel != null)
+                  _detailRow(routeContext, 'Parcela', installmentLabel),
+                const SizedBox(height: AppSpacing.md),
+                const Divider(),
+                const SizedBox(height: AppSpacing.md),
+                Text('Quem pagou',
+                    style: Theme.of(routeContext).textTheme.titleSmall),
+                const SizedBox(height: AppSpacing.sm),
+                ...expense.payers.map((payer) => _detailRow(
+                    routeContext, payer.nickname, formatCurrencyBRL(payer.amount))),
+                const SizedBox(height: AppSpacing.md),
+                const Divider(),
+                const SizedBox(height: AppSpacing.md),
+                Text('Participantes',
+                    style: Theme.of(routeContext).textTheme.titleSmall),
+                const SizedBox(height: AppSpacing.sm),
+                ...expense.participants.map((participant) => _detailRow(
+                    routeContext,
+                    participant.shareCount > 1
+                        ? '${participant.nickname} (x${participant.shareCount})'
+                        : participant.nickname,
+                    formatCurrencyBRL(participant.shareAmount))),
+              ],
+            ),
+          ),
+        ),
+        bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(routeContext).pop(),
+                child: const Text('Fechar'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _detailRow(BuildContext context, String label, String value) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        Text(value, style: Theme.of(context).textTheme.bodyMedium),
+      ],
+    ),
+  );
 }
 
 Future<String?> _showCreateCategoryDialog(

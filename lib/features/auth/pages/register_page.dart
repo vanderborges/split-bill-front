@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/validators.dart';
 import '../../users/services/users_repository.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
@@ -190,7 +191,7 @@ String? _email(String? value) {
   if (requiredMessage != null) {
     return requiredMessage;
   }
-  if (!value!.contains('@')) {
+  if (!isValidEmail(value!)) {
     return 'Email invalido';
   }
   return null;

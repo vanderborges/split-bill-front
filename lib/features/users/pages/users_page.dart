@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/services/auth_repository.dart';
 import '../../../shared/api_error.dart';
+import '../../../shared/validators.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
@@ -308,6 +309,21 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
       const SnackBar(
           content: Text(
               'Preencha todos os campos. Senha deve ter ao menos 6 caracteres.')),
+    );
+    _disposeControllers([
+      fullNameController,
+      nicknameController,
+      emailController,
+      phoneController,
+      pixKeyController,
+      passwordController,
+    ]);
+    return;
+  }
+
+  if (!isValidEmail(email)) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Informe um email valido.')),
     );
     _disposeControllers([
       fullNameController,
