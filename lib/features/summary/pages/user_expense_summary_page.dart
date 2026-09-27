@@ -275,8 +275,10 @@ class _SummaryContent extends StatelessWidget {
             (expense) => ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(expense.description),
-              subtitle: Text(
-                  '${_formatDate(expense.expenseDate)} | ${expense.category}'),
+              subtitle: Text([
+                '${_formatDate(expense.expenseDate)} | ${expense.category}',
+                if (expense.installmentLabel != null) expense.installmentLabel!,
+              ].join(' | ')),
               trailing: MoneyText(expense.amount),
             ),
           ),

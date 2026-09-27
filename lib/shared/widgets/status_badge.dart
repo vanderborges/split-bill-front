@@ -7,6 +7,7 @@ import '../../core/theme/app_spacing.dart';
 /// Ver docs/ux-roadmap-dividiai.md > Design System > Paleta.
 enum AppStatus {
   aberto,
+  aguardandoPagamento,
   fechado,
   pendente,
   pagamentoInformado,
@@ -31,6 +32,7 @@ class StatusBadge extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final (color, defaultLabel) = switch (status) {
       AppStatus.aberto => (scheme.primary, 'Aberto'),
+      AppStatus.aguardandoPagamento => (semantic.warning, 'Aguardando pagamento'),
       AppStatus.fechado => (semantic.neutral, 'Fechado'),
       AppStatus.pendente => (semantic.warning, 'Pendente'),
       AppStatus.pagamentoInformado => (semantic.warning, 'Pagamento informado'),

@@ -170,7 +170,7 @@ class ExpensesPage extends ConsumerWidget {
                           isGroupAdmin,
                         );
                         final shareSummary = _expenseShareSummary(expense);
-                        final installmentLabel = _installmentLabel(expense);
+                        final installmentLabel = expense.installmentLabel;
                         return ListTile(
                           leading: SizedBox(
                             width: 64,
@@ -188,11 +188,11 @@ class ExpensesPage extends ConsumerWidget {
                               await _openExpenseDetails(context, expense);
                               return;
                             }
-                            if (event.status == 'CLOSED') {
+                            if (!event.isOpen) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                     content: Text(
-                                        'Evento fechado nao permite editar despesas.')),
+                                        'Este evento nao esta aberto para edicao de despesas.')),
                               );
                               return;
                             }
@@ -351,10 +351,10 @@ Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
     }
   }
 
-  if (event.status == 'CLOSED') {
+  if (!event.isOpen) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-          content: Text('Evento fechado nao permite novas despesas.')),
+          content: Text('Este evento nao esta aberto para novas despesas.')),
     );
     return;
   }
@@ -632,8 +632,17 @@ Future<void> _openExpenseForm(
             ),
             body: SafeArea(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
-                    AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
+                // Soma a altura do teclado ao padding inferior — sem isso,
+                // com o teclado numérico aberto, dava pra rolar só até onde
+                // o teclado cobria a tela, sem alcançar os campos de baixo
+                // (mesmo problema que o bottom sheet de "Novo evento" já
+                // resolve com esse mesmo padrão).
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.xxl + MediaQuery.of(routeContext).viewInsets.bottom,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1143,7 +1152,7 @@ Future<void> _openExpenseDetails(
   BuildContext context,
   ExpenseModel expense,
 ) async {
-  final installmentLabel = _installmentLabel(expense);
+  final installmentLabel = expense.installmentLabel;
   await Navigator.of(context).push(
     MaterialPageRoute(
       builder: (routeContext) => Scaffold(
@@ -1329,22 +1338,6 @@ String? _expenseShareSummary(ExpenseModel expense) {
   return '$totalShares cotas | $users';
 }
 
-/// Rótulo "1/3", "2/3"... para despesas parceladas — Etapa 12 do roteiro
-/// de UX. Usa os campos `installmentNumber`/`totalInstallments` retornados
-/// pela API (cada parcela vive em um mês/evento diferente, então não dá
-/// para recalcular o total contando "irmãos" só na lista já carregada).
-/// Despesas únicas (sem grupo, ou parceladas em 1x) não exibem rótulo.
-String? _installmentLabel(ExpenseModel expense) {
-  if (expense.installmentGroupId == null) {
-    return null;
-  }
-  final total = expense.totalInstallments;
-  final number = expense.installmentNumber;
-  if (total == null || total <= 1 || number == null) {
-    return null;
-  }
-  return 'Parcela $number/$total';
-}
 
 String _initialPayerAmount(String userId, ExpenseModel? expense) {
   if (expense == null) {

@@ -23,6 +23,12 @@ class EventModel {
 
   bool get isClosed => status == 'CLOSED';
 
+  bool get isOpen => status == 'OPEN';
+
+  /// Aberto para pagamento: despesas congeladas, aguardando confirmação de
+  /// todo mundo antes do fechamento definitivo.
+  bool get isSettling => status == 'SETTLING';
+
   String get typeLabel {
     return switch (type) {
       'MONTHLY' => 'Mensal',

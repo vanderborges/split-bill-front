@@ -112,13 +112,17 @@ class EventsPage extends ConsumerWidget {
                               Text('$groupName | ${event.typeLabel}'),
                               StatusBadge(event.isClosed
                                   ? AppStatus.fechado
-                                  : AppStatus.aberto),
+                                  : event.isSettling
+                                      ? AppStatus.aguardandoPagamento
+                                      : AppStatus.aberto),
                             ],
                           ),
                         ),
                         leading: Icon(event.isClosed
                             ? Icons.lock_outline
-                            : Icons.event_available),
+                            : event.isSettling
+                                ? Icons.hourglass_top_outlined
+                                : Icons.event_available),
                         onTap: () {
                           ref.read(selectedEventIdProvider.notifier).state =
                               event.id;
@@ -134,8 +138,10 @@ class EventsPage extends ConsumerWidget {
                               ref.read(selectedEventIdProvider.notifier).state =
                                   event.id;
                               context.go('/reports');
+                            } else if (value == 'start-settlement') {
+                              await _startSettlement(context, ref, event, events);
                             } else if (value == 'close') {
-                              await _closeEvent(context, ref, event, events);
+                              await _closeEvent(context, ref, event);
                             } else if (value == 'reopen') {
                               await _reopenEvent(context, ref, event);
                             } else if (value == 'delete') {
@@ -147,10 +153,14 @@ class EventsPage extends ConsumerWidget {
                                 value: 'expenses', child: Text('Ver despesas')),
                             const PopupMenuItem(
                                 value: 'report', child: Text('Ver relatorio')),
-                            if (isEventAdmin && !event.isClosed)
+                            if (isEventAdmin && event.isOpen)
+                              const PopupMenuItem(
+                                  value: 'start-settlement',
+                                  child: Text('Abrir para pagamento')),
+                            if (isEventAdmin && event.isSettling)
                               const PopupMenuItem(
                                   value: 'close', child: Text('Fechar')),
-                            if (isEventAdmin && event.isClosed)
+                            if (isEventAdmin && !event.isOpen)
                               const PopupMenuItem(
                                   value: 'reopen', child: Text('Reabrir')),
                             if (isEventAdmin)
@@ -414,7 +424,10 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
   }
 }
 
-Future<void> _closeEvent(
+/// Primeira etapa: congela o evento pra novas despesas e abre a janela de
+/// pagamento (status SETTLING). Opcionalmente consolida o saldo como
+/// despesa em outro evento ainda aberto.
+Future<void> _startSettlement(
   BuildContext context,
   WidgetRef ref,
   EventModel event,
@@ -431,19 +444,20 @@ Future<void> _closeEvent(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: Text('Fechar ${event.name}'),
+            title: Text('Abrir ${event.name} para pagamento'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                    'Voce pode fechar apenas ou consolidar o saldo como despesa em outro evento.'),
+                    'Depois desta etapa nao e mais possivel adicionar ou editar despesas neste evento. '
+                    'Voce pode so abrir para pagamento ou consolidar o saldo como despesa em outro evento.'),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String?>(
                   initialValue: targetId,
                   decoration: const InputDecoration(labelText: 'Consolidar em'),
                   items: [
                     const DropdownMenuItem<String?>(
-                        value: null, child: Text('Fechar apenas')),
+                        value: null, child: Text('Nao consolidar')),
                     ...targets.map((target) => DropdownMenuItem<String?>(
                         value: target.id, child: Text(target.name))),
                   ],
@@ -457,7 +471,7 @@ Future<void> _closeEvent(
                   child: const Text('Cancelar')),
               FilledButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Fechar')),
+                  child: const Text('Abrir para pagamento')),
             ],
           );
         },
@@ -470,7 +484,53 @@ Future<void> _closeEvent(
   try {
     await ref
         .read(eventsRepositoryProvider)
-        .close(event.id, consolidateToEventId: targetId);
+        .startSettlement(event.id, consolidateToEventId: targetId);
+    _invalidateEventState(ref);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Evento aberto para pagamento. '
+                'Despesas novas ficam bloqueadas a partir de agora.')),
+      );
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível abrir o evento para pagamento.'))));
+    }
+  }
+}
+
+/// Fechamento definitivo, depois de todos os pagamentos confirmados na tela
+/// de acertos. Backend bloqueia se ainda houver pendencia.
+Future<void> _closeEvent(
+  BuildContext context,
+  WidgetRef ref,
+  EventModel event,
+) async {
+  final confirmed = await showDialog<bool>(
+    barrierDismissible: false,
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Fechar ${event.name}'),
+      content: const Text(
+          'Confirma que todos os pagamentos ja foram acertados? Depois de fechado, o evento nao pode mais ser alterado.'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Fechar')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+  try {
+    await ref.read(eventsRepositoryProvider).close(event.id);
     _invalidateEventState(ref);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

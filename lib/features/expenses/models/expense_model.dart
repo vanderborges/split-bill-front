@@ -35,6 +35,22 @@ class ExpenseModel {
   final List<ExpensePayerModel> payers;
   final List<ExpenseParticipantModel> participants;
 
+  /// Rótulo "1/3", "2/3"... para despesas de fato parceladas. Despesas
+  /// únicas (sem grupo, ou parceladas em 1x) retornam null — usa os campos
+  /// vindos da API em vez de recalcular, já que cada parcela vive num
+  /// mês/evento diferente.
+  String? get installmentLabel {
+    if (installmentGroupId == null) {
+      return null;
+    }
+    final total = totalInstallments;
+    final number = installmentNumber;
+    if (total == null || total <= 1 || number == null) {
+      return null;
+    }
+    return 'Parcela $number/$total';
+  }
+
   factory ExpenseModel.fromJson(Map<String, dynamic> json) {
     return ExpenseModel(
       id: json['id'] as String,

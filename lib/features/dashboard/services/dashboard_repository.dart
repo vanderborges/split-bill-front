@@ -53,9 +53,12 @@ Future<List<DashboardGroupBalanceModel>> _fallbackGroupBalances(
 
     try {
       final events = await eventsRepository.list(groupId: group.id);
-      final openEvents = events.where((event) => event.status == 'OPEN');
+      // Inclui SETTLING junto com OPEN: saldo ainda pendente de pagamento
+      // ate o evento fechar de fato.
+      final activeEvents =
+          events.where((event) => event.status != 'CLOSED');
 
-      for (final event in openEvents) {
+      for (final event in activeEvents) {
         try {
           final report = await reportsRepository.getEventReport(event.id);
           final userBalances =

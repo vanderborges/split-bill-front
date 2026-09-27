@@ -126,12 +126,21 @@ class ReportsPage extends ConsumerWidget {
                             report, settlementsAsync.valueOrNull!),
                     icon: const Icon(Icons.share_outlined),
                   ),
-                  StatusBadge(
-                      report.status == 'CLOSED'
-                          ? AppStatus.fechado
-                          : AppStatus.aberto),
+                  StatusBadge(switch (report.status) {
+                    'CLOSED' => AppStatus.fechado,
+                    'SETTLING' => AppStatus.aguardandoPagamento,
+                    _ => AppStatus.aberto,
+                  }),
                   const SizedBox(width: 8),
                   if (report.status == 'OPEN' && isGroupAdmin)
+                    FilledButton(
+                      onPressed: report.eventId == null
+                          ? null
+                          : () => _confirmStartSettlement(
+                              context, ref, report.eventId!),
+                      child: const Text('Abrir para pagamento'),
+                    ),
+                  if (report.status == 'SETTLING' && isGroupAdmin)
                     FilledButton(
                       onPressed: report.eventId == null
                           ? null
@@ -607,6 +616,62 @@ String _errorMessage(Object error) {
     }
   }
   return error.toString();
+}
+
+Future<void> _confirmStartSettlement(
+    BuildContext context, WidgetRef ref, String eventId) async {
+  final confirmed = await showDialog<bool>(
+    barrierDismissible: false,
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Abrir para pagamento'),
+        content: const Text(
+            'A partir de agora nao e mais possivel adicionar ou editar despesas neste evento. '
+            'Use a tela de Eventos se quiser consolidar o saldo em outro evento antes disso. Deseja continuar?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Abrir para pagamento')),
+        ],
+      );
+    },
+  );
+
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+
+  try {
+    await ref.read(eventsRepositoryProvider).startSettlement(eventId);
+    ref.invalidate(monthsProvider);
+    ref.invalidate(currentMonthProvider);
+    ref.invalidate(currentMonthReportProvider);
+    ref.invalidate(currentMonthExpensesProvider);
+    ref.invalidate(eventsProvider);
+    ref.invalidate(selectedEventProvider);
+    ref.invalidate(selectedEventReportProvider);
+    ref.invalidate(selectedEventExpensesProvider);
+    ref.invalidate(selectedEventSettlementsProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Evento aberto para pagamento com sucesso.')),
+      );
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível abrir o evento para pagamento.'))),
+      );
+    }
+  }
 }
 
 Future<void> _confirmCloseEvent(

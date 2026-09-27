@@ -33,8 +33,12 @@ final selectedEventProvider = FutureProvider<EventModel?>((ref) async {
       return selected.first;
     }
   }
-  final openEvents = events.where((event) => event.status == 'OPEN').toList();
-  final source = openEvents.isNotEmpty ? openEvents : events;
+  // Prefere qualquer evento ainda não fechado (OPEN ou SETTLING) como
+  // padrão de exibição, já que SETTLING ainda precisa de atenção (pagamento
+  // pendente) mesmo sem aceitar novas despesas.
+  final activeEvents =
+      events.where((event) => event.status != 'CLOSED').toList();
+  final source = activeEvents.isNotEmpty ? activeEvents : events;
   return source.last;
 });
 
@@ -80,11 +84,21 @@ class EventsRepository {
     return EventModel.fromJson(response.data!);
   }
 
-  Future<EventModel> close(String id, {String? consolidateToEventId}) async {
+  /// Primeira etapa do fechamento: congela o evento para novas despesas e
+  /// abre a janela de pagamento (status SETTLING).
+  Future<EventModel> startSettlement(String id,
+      {String? consolidateToEventId}) async {
     final response = await dio.put<Map<String, dynamic>>(
-      '/events/$id/close',
+      '/events/$id/start-settlement',
       data: {'consolidateToEventId': consolidateToEventId},
     );
+    return EventModel.fromJson(response.data!);
+  }
+
+  /// Fechamento definitivo: só funciona depois de [startSettlement] e com
+  /// todos os pagamentos confirmados.
+  Future<EventModel> close(String id) async {
+    final response = await dio.put<Map<String, dynamic>>('/events/$id/close');
     return EventModel.fromJson(response.data!);
   }
 
