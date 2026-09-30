@@ -144,13 +144,6 @@ class ExpensesPage extends ConsumerWidget {
                     }
                     final sortedExpenses = [...visibleExpenses]
                       ..sort((first, second) {
-                        final firstIsInstallment =
-                            first.installmentGroupId != null;
-                        final secondIsInstallment =
-                            second.installmentGroupId != null;
-                        if (firstIsInstallment != secondIsInstallment) {
-                          return firstIsInstallment ? 1 : -1;
-                        }
                         final dateComparison =
                             second.expenseDate.compareTo(first.expenseDate);
                         if (dateComparison != 0) {
@@ -328,6 +321,51 @@ Future<bool> _confirmDeleteExpense(
   return false;
 }
 
+/// Finaliza a assinatura a partir do mês corrente — a despesa deste mês
+/// continua existindo, só para de gerar a próxima automaticamente.
+Future<bool> _confirmCancelSubscription(
+  BuildContext context,
+  WidgetRef ref,
+  ExpenseModel expense,
+) async {
+  final confirmed = await showDialog<bool>(
+    barrierDismissible: false,
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Finalizar assinatura'),
+      content: Text(
+          'A partir do mês que vem, "${expense.description}" não vai mais ser lançada automaticamente. A despesa deste mês continua normal. Deseja continuar?'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Finalizar')),
+      ],
+    ),
+  );
+
+  if (confirmed != true || !context.mounted) {
+    return false;
+  }
+  try {
+    await ref.read(expensesRepositoryProvider).cancelSubscription(expense.id);
+    ref.invalidate(currentMonthExpensesProvider);
+    ref.invalidate(selectedEventExpensesProvider);
+    return true;
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível finalizar a assinatura.'))),
+      );
+    }
+    return false;
+  }
+}
+
 /// Fluxo único de "adicionar despesa": resolve o evento atual (criando o
 /// mês corrente automaticamente se ainda não existir) e abre o formulário —
 /// usado pelo FAB desta tela, pelo botão de estado vazio e pelo CTA "Nova
@@ -335,6 +373,23 @@ Future<bool> _confirmDeleteExpense(
 /// nenhum desses pontos de entrada exija um segundo toque para chegar ao
 /// formulário.
 Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
+  final groups = await ref.read(groupsProvider.future);
+  if (!context.mounted) {
+    return;
+  }
+  if (groups.length > 1) {
+    final pickedGroupId = await _pickGroup(context, groups);
+    if (pickedGroupId == null || !context.mounted) {
+      return;
+    }
+    if (pickedGroupId != ref.read(selectedGroupIdProvider)) {
+      ref.read(selectedGroupIdProvider.notifier).state = pickedGroupId;
+      ref.read(selectedEventIdProvider.notifier).state = null;
+      ref.invalidate(eventsProvider);
+      ref.invalidate(selectedEventProvider);
+    }
+  }
+
   var event = await ref.read(selectedEventProvider.future);
   if (!context.mounted) {
     return;
@@ -366,12 +421,49 @@ Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
   }
 }
 
+/// Pergunta em qual grupo cadastrar a despesa quando o usuário está em
+/// mais de um — evita lançar no grupo errado por engano. Retorna null se
+/// cancelado (toque fora do popup).
+Future<String?> _pickGroup(BuildContext context, List<dynamic> groups) {
+  return showDialog<String>(
+    context: context,
+    builder: (context) => SimpleDialog(
+      title: const Text('Em qual grupo?'),
+      children: groups
+          .map((group) => SimpleDialogOption(
+                onPressed: () => Navigator.of(context).pop(group.id as String),
+                child: Text(group.name as String),
+              ))
+          .toList(),
+    ),
+  );
+}
+
 Future<bool> _createCurrentMonth(BuildContext context, WidgetRef ref) async {
   final now = DateTime.now();
+  // O mês/evento é criado dentro de um grupo específico — sem grupo
+  // selecionado (ex.: primeiro acesso), usa o primeiro grupo do usuário.
+  var groupId = ref.read(selectedGroupIdProvider);
+  if (groupId == null) {
+    final groups = await ref.read(groupsProvider.future);
+    if (groups.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Entre em um grupo antes de criar despesas.')),
+        );
+      }
+      return false;
+    }
+    groupId = groups.first.id;
+    ref.read(selectedGroupIdProvider.notifier).state = groupId;
+  }
   try {
-    await ref
-        .read(monthsRepositoryProvider)
-        .create(month: now.month, year: now.year);
+    await ref.read(monthsRepositoryProvider).create(
+          month: now.month,
+          year: now.year,
+          groupId: groupId,
+        );
     ref.invalidate(monthsProvider);
     ref.invalidate(currentMonthProvider);
     ref.invalidate(currentMonthExpensesProvider);
@@ -444,6 +536,7 @@ Future<void> _openExpenseForm(
   final installmentsController = TextEditingController(text: '1');
   var installments = 1;
   var showInstallments = false;
+  var isSubscription = false;
   var isSaving = false;
   final currentUserId = ref.read(currentUserProvider).valueOrNull?.id;
   final defaultPayerId = users.any((user) => user.id == currentUserId)
@@ -573,6 +666,14 @@ Future<void> _openExpenseForm(
               return;
             }
 
+            if (isSubscription && splitPaymentByUser) {
+              ScaffoldMessenger.of(routeContext).showSnackBar(
+                const SnackBar(
+                    content: Text('Assinatura permite apenas um pagador.')),
+              );
+              return;
+            }
+
             setState(() => isSaving = true);
             try {
               if (expense == null) {
@@ -589,6 +690,7 @@ Future<void> _openExpenseForm(
                           participantShareDescriptions,
                       payerAmounts: payerAmounts,
                       installments: installmentsToSave,
+                      subscription: isSubscription,
                     );
               } else {
                 await ref.read(expensesRepositoryProvider).update(
@@ -1031,14 +1133,22 @@ Future<void> _openExpenseForm(
                       const SizedBox(height: AppSpacing.sm),
                       const Divider(),
                       const SizedBox(height: AppSpacing.md),
-                      if (!showInstallments)
+                      if (!showInstallments && !isSubscription) ...[
                         TextButton.icon(
                           onPressed: () =>
                               setState(() => showInstallments = true),
                           icon: const Icon(Icons.event_repeat),
                           label: const Text('Parcelar essa despesa'),
-                        )
-                      else ...[
+                        ),
+                        TextButton.icon(
+                          onPressed: () => setState(() {
+                            isSubscription = true;
+                            splitPaymentByUser = false;
+                          }),
+                          icon: const Icon(Icons.autorenew),
+                          label: const Text('Assinatura (repete todo mês)'),
+                        ),
+                      ] else if (showInstallments) ...[
                         TextField(
                           controller: installmentsController,
                           keyboardType: TextInputType.number,
@@ -1063,6 +1173,62 @@ Future<void> _openExpenseForm(
                           }),
                           icon: const Icon(Icons.close),
                           label: const Text('Não parcelar'),
+                        ),
+                      ] else if (isSubscription) ...[
+                        Text(
+                          'Essa despesa vai repetir todo mês automaticamente, com o mesmo valor e divisão, até alguém finalizar a assinatura.',
+                          style: Theme.of(routeContext).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        TextButton.icon(
+                          onPressed: () =>
+                              setState(() => isSubscription = false),
+                          icon: const Icon(Icons.close),
+                          label: const Text('Não é assinatura'),
+                        ),
+                      ],
+                    ],
+                    if (expense != null && expense.installmentGroupId != null) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      const Divider(),
+                      const SizedBox(height: AppSpacing.md),
+                      Row(
+                        children: [
+                          Icon(
+                              expense.isSubscription
+                                  ? Icons.autorenew
+                                  : Icons.event_repeat,
+                              size: 20),
+                          const SizedBox(width: AppSpacing.sm),
+                          Text(
+                            expense.installmentLabel ??
+                                (expense.isSubscription
+                                    ? 'Assinatura'
+                                    : 'Despesa parcelada'),
+                            style: Theme.of(routeContext).textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        expense.isSubscription
+                            ? 'Essa despesa repete todo mês automaticamente até ser finalizada.'
+                            : 'O número de parcelas não pode ser alterado depois de criada.',
+                        style: Theme.of(routeContext).textTheme.bodySmall,
+                      ),
+                      if (expense.isSubscription &&
+                          !expense.subscriptionCancelled) ...[
+                        const SizedBox(height: AppSpacing.xs),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final cancelled = await _confirmCancelSubscription(
+                                routeContext, ref, expense);
+                            if (cancelled && routeContext.mounted) {
+                              Navigator.of(routeContext).pop(false);
+                            }
+                          },
+                          icon: const Icon(Icons.cancel_outlined),
+                          label: const Text('Finalizar assinatura'),
                         ),
                       ],
                     ],

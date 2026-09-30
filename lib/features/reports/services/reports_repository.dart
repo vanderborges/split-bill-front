@@ -6,6 +6,7 @@ import '../../events/services/events_repository.dart';
 import '../../months/services/months_repository.dart';
 import '../models/balance_expense_detail_model.dart';
 import '../models/monthly_report_model.dart';
+import '../models/payment_suggestion_model.dart';
 
 final reportsRepositoryProvider = Provider<ReportsRepository>((ref) {
   return ReportsRepository(ref.watch(dioProvider));
@@ -55,6 +56,18 @@ class ReportsRepository {
     return response.data!
         .map((item) =>
             BalanceExpenseDetailModel.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Sugestão de "quem paga quanto pra quem" — só exibição, não afeta o
+  /// acerto/saldo calculado normalmente.
+  Future<List<PaymentSuggestionModel>> getPaymentSuggestions(
+      String eventId) async {
+    final response = await dio
+        .get<List<dynamic>>('/reports/events/$eventId/payment-suggestions');
+    return response.data!
+        .map((item) =>
+            PaymentSuggestionModel.fromJson(item as Map<String, dynamic>))
         .toList();
   }
 }

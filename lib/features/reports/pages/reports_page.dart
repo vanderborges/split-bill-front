@@ -24,6 +24,7 @@ import '../../settlements/models/event_settlement_model.dart';
 import '../../settlements/services/event_settlements_repository.dart';
 import '../models/balance_expense_detail_model.dart';
 import '../models/monthly_report_model.dart';
+import '../models/payment_suggestion_model.dart';
 import '../services/reports_repository.dart';
 
 class ReportsPage extends ConsumerWidget {
@@ -46,147 +47,340 @@ class ReportsPage extends ConsumerWidget {
 
     return AppScaffold(
       title: 'Relatorios',
-      child: reportAsync.when(
-        data: (report) {
-          if (report == null) {
-            return const EmptyState(
-              icon: Icons.bar_chart_outlined,
-              title: 'Nenhum relatório para mostrar.',
-              message: 'Crie ou selecione um evento para ver o relatório.',
-            );
-          }
-
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              groupsAsync.when(
-                data: (groups) => DropdownButtonFormField<String?>(
-                  initialValue: selectedGroupId,
-                  decoration: const InputDecoration(labelText: 'Grupo'),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                        value: null, child: Text('Todos os grupos')),
-                    ...groups.map((group) => DropdownMenuItem<String?>(
-                        value: group.id, child: Text(group.name))),
+      // Os seletores de grupo/evento ficam sempre visíveis, mesmo sem
+      // nenhum relatório ainda — antes ficavam escondidos atrás do estado
+      // vazio, e quem não tinha nada cadastrado não via nem a lista de
+      // grupos pra navegar.
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          groupsAsync.when(
+            data: (groups) => DropdownButtonFormField<String?>(
+              initialValue: selectedGroupId,
+              decoration: const InputDecoration(labelText: 'Grupo'),
+              items: [
+                const DropdownMenuItem<String?>(
+                    value: null, child: Text('Todos os grupos')),
+                ...groups.map((group) => DropdownMenuItem<String?>(
+                    value: group.id, child: Text(group.name))),
+              ],
+              onChanged: (value) {
+                ref.read(selectedGroupIdProvider.notifier).state = value;
+                ref.read(selectedEventIdProvider.notifier).state = null;
+                ref.invalidate(selectedEventProvider);
+                ref.invalidate(selectedEventReportProvider);
+                ref.invalidate(selectedEventSettlementsProvider);
+              },
+            ),
+            loading: () => const LinearProgressIndicator(),
+            error: (error, _) => Text('Erro ao carregar grupos: $error'),
+          ),
+          const SizedBox(height: 12),
+          eventAsync.when(
+            data: (event) => eventsAsync.when(
+              data: (events) => events.isEmpty
+                  ? const Text('Nenhum evento cadastrado neste grupo.')
+                  : DropdownButtonFormField<String>(
+                      initialValue: event?.id,
+                      decoration: const InputDecoration(labelText: 'Evento'),
+                      items: events
+                          .map((item) => DropdownMenuItem(
+                              value: item.id,
+                              child: Text(_eventLabel(
+                                  item, groupsAsync.valueOrNull))))
+                          .toList(),
+                      onChanged: (value) {
+                        ref.read(selectedEventIdProvider.notifier).state =
+                            value;
+                        ref.invalidate(selectedEventProvider);
+                        ref.invalidate(selectedEventReportProvider);
+                        ref.invalidate(selectedEventSettlementsProvider);
+                        ref.invalidate(selectedEventExpensesProvider);
+                      },
+                    ),
+              loading: () => const LinearProgressIndicator(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+            loading: () => const LinearProgressIndicator(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 16),
+          reportAsync.when(
+            data: (report) {
+              if (report == null) {
+                return const EmptyState(
+                  icon: Icons.bar_chart_outlined,
+                  title: 'Nenhum relatório para mostrar.',
+                  message: 'Crie ou selecione um evento para ver o relatório.',
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${report.groupName} | ${report.eventName ?? ''}',
+                      style: Theme.of(context).textTheme.bodySmall),
+                  const SizedBox(height: 8),
+                  // Sem o título "Relatório <nome>" aqui — é redundante com
+                  // a linha acima (grupo | evento) e, junto com o ícone de
+                  // compartilhar, o badge de status e o botão de
+                  // abrir/fechar, quebrava a linha e ficava apertado. Wrap
+                  // no lugar de Row pra esses itens nunca ficarem espremidos
+                  // ou cortados em telas estreitas.
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.xs,
+                    children: [
+                      IconButton(
+                        tooltip: 'Compartilhar resumo',
+                        onPressed: settlementsAsync.valueOrNull == null
+                            ? null
+                            : () => _shareReport(
+                                report, settlementsAsync.valueOrNull!),
+                        icon: const Icon(Icons.share_outlined),
+                      ),
+                      StatusBadge(switch (report.status) {
+                        'CLOSED' => AppStatus.fechado,
+                        'SETTLING' => AppStatus.aguardandoPagamento,
+                        _ => AppStatus.aberto,
+                      }),
+                      if (report.status == 'OPEN' && isGroupAdmin)
+                        FilledButton(
+                          onPressed: report.eventId == null
+                              ? null
+                              : () => _confirmStartSettlement(
+                                  context, ref, report.eventId!),
+                          child: const Text('Abrir para pagamento'),
+                        ),
+                      if (report.status == 'SETTLING' && isGroupAdmin)
+                        OutlinedButton.icon(
+                          onPressed: report.eventId == null
+                              ? null
+                              : () => _sendBillingAlert(
+                                  context, ref, report.eventId!),
+                          icon: const Icon(Icons.campaign_outlined),
+                          label: const Text('Enviar alerta de cobrança'),
+                        ),
+                      if (report.status == 'SETTLING' && isGroupAdmin)
+                        FilledButton(
+                          onPressed: report.eventId == null
+                              ? null
+                              : () => _confirmCloseEvent(
+                                  context, ref, report.eventId!),
+                          child: const Text('Fechar evento'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Text('Total de despesas: ',
+                          style: Theme.of(context).textTheme.bodyMedium),
+                      MoneyText(report.totalExpenses),
+                    ],
+                  ),
+                  if (isGroupAdmin &&
+                      report.status != 'CLOSED' &&
+                      report.eventId != null) ...[
+                    const SizedBox(height: 12),
+                    _ReceiverSelector(
+                      key: ValueKey('receiver-${report.eventId}'),
+                      eventId: report.eventId!,
+                      groupId: report.groupId,
+                      currentReceiverId:
+                          eventAsync.valueOrNull?.receiverUserId,
+                    ),
                   ],
-                  onChanged: (value) {
-                    ref.read(selectedGroupIdProvider.notifier).state = value;
-                    ref.read(selectedEventIdProvider.notifier).state = null;
-                    ref.invalidate(selectedEventProvider);
-                    ref.invalidate(selectedEventReportProvider);
-                    ref.invalidate(selectedEventSettlementsProvider);
-                  },
-                ),
-                loading: () => const LinearProgressIndicator(),
-                error: (error, _) => Text('Erro ao carregar grupos: $error'),
-              ),
-              const SizedBox(height: 12),
-              eventAsync.when(
-                data: (event) => eventsAsync.when(
-                  data: (events) => DropdownButtonFormField<String>(
-                    initialValue: event?.id,
-                    decoration: const InputDecoration(labelText: 'Evento'),
-                    items: events
-                        .map((item) => DropdownMenuItem(
-                            value: item.id,
-                            child: Text(
-                                _eventLabel(item, groupsAsync.valueOrNull))))
-                        .toList(),
-                    onChanged: (value) {
-                      ref.read(selectedEventIdProvider.notifier).state = value;
-                      ref.invalidate(selectedEventProvider);
-                      ref.invalidate(selectedEventReportProvider);
-                      ref.invalidate(selectedEventSettlementsProvider);
-                      ref.invalidate(selectedEventExpensesProvider);
-                    },
-                  ),
-                  loading: () => const LinearProgressIndicator(),
-                  error: (_, __) => const SizedBox.shrink(),
-                ),
-                loading: () => const LinearProgressIndicator(),
-                error: (_, __) => const SizedBox.shrink(),
-              ),
-              const SizedBox(height: 16),
-              Text('${report.groupName} | ${report.eventName ?? ''}',
-                  style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Relatorio ${report.eventName ?? '${report.month.toString().padLeft(2, '0')}/${report.year}'}',
-                      style: Theme.of(context).textTheme.titleLarge,
+                  if (isGroupAdmin && report.eventId != null) ...[
+                    const SizedBox(height: 12),
+                    _PaymentSuggestions(
+                      key: ValueKey('suggestions-${report.eventId}'),
+                      eventId: report.eventId!,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  settlementsAsync.when(
+                    data: (settlements) => _ReportTable(
+                      key: ValueKey('${report.eventId}-${report.monthId}'),
+                      balances: report.balances,
+                      settlements: settlements,
+                      canUpdateSettlements: isGroupAdmin,
+                    ),
+                    loading: () => const Padding(
+                      padding: EdgeInsets.all(AppSpacing.xl),
+                      child: LoadingState(),
+                    ),
+                    error: (error, _) => ErrorState(
+                      message: friendlyApiError(error,
+                          fallback: 'Não foi possível carregar os pagamentos.'),
+                      onRetry: () =>
+                          ref.invalidate(selectedEventSettlementsProvider),
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Compartilhar resumo',
-                    onPressed: settlementsAsync.valueOrNull == null
-                        ? null
-                        : () => _shareReport(
-                            report, settlementsAsync.valueOrNull!),
-                    icon: const Icon(Icons.share_outlined),
-                  ),
-                  StatusBadge(switch (report.status) {
-                    'CLOSED' => AppStatus.fechado,
-                    'SETTLING' => AppStatus.aguardandoPagamento,
-                    _ => AppStatus.aberto,
-                  }),
-                  const SizedBox(width: 8),
-                  if (report.status == 'OPEN' && isGroupAdmin)
-                    FilledButton(
-                      onPressed: report.eventId == null
-                          ? null
-                          : () => _confirmStartSettlement(
-                              context, ref, report.eventId!),
-                      child: const Text('Abrir para pagamento'),
-                    ),
-                  if (report.status == 'SETTLING' && isGroupAdmin)
-                    FilledButton(
-                      onPressed: report.eventId == null
-                          ? null
-                          : () =>
-                              _confirmCloseEvent(context, ref, report.eventId!),
-                      child: const Text('Fechar evento'),
-                    ),
                 ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Text('Total de despesas: ',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                  MoneyText(report.totalExpenses),
-                ],
-              ),
-              const SizedBox(height: 16),
-              settlementsAsync.when(
-                data: (settlements) => _ReportTable(
-                  key: ValueKey('${report.eventId}-${report.monthId}'),
-                  balances: report.balances,
-                  settlements: settlements,
-                  canUpdateSettlements: isGroupAdmin,
-                ),
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(AppSpacing.xl),
-                  child: LoadingState(),
-                ),
-                error: (error, _) => ErrorState(
-                  message: friendlyApiError(error,
-                      fallback: 'Não foi possível carregar os pagamentos.'),
-                  onRetry: () =>
-                      ref.invalidate(selectedEventSettlementsProvider),
-                ),
-              ),
-            ],
-          );
-        },
-        loading: () => const LoadingState(),
-        error: (error, _) => ErrorState(
-          message: friendlyApiError(error,
-              fallback: 'Não foi possível carregar o relatório.'),
-          onRetry: () => ref.invalidate(selectedEventReportProvider),
-        ),
+              );
+            },
+            loading: () => const LoadingState(),
+            error: (error, _) => ErrorState(
+              message: friendlyApiError(error,
+                  fallback: 'Não foi possível carregar o relatório.'),
+              onRetry: () => ref.invalidate(selectedEventReportProvider),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+/// Admin-only: elege quem recebe os pagamentos deste evento. Quando
+/// eleito, a sugestão de pagamentos (abaixo) manda todo devedor direto pra
+/// essa pessoa, em vez de calcular quem paga quem entre todos.
+class _ReceiverSelector extends ConsumerWidget {
+  const _ReceiverSelector({
+    super.key,
+    required this.eventId,
+    required this.groupId,
+    required this.currentReceiverId,
+  });
+
+  final String eventId;
+  final String groupId;
+  final String? currentReceiverId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder(
+      future: ref.read(groupsRepositoryProvider).listMembers(groupId),
+      builder: (context, snapshot) {
+        final members = snapshot.data ?? [];
+        final value = members.any((member) => member.userId == currentReceiverId)
+            ? currentReceiverId
+            : null;
+        return DropdownButtonFormField<String?>(
+          key: ValueKey(value),
+          initialValue: value,
+          decoration:
+              const InputDecoration(labelText: 'Quem recebe os pagamentos'),
+          items: [
+            const DropdownMenuItem<String?>(
+                value: null, child: Text('Ninguém eleito')),
+            ...members.map((member) => DropdownMenuItem<String?>(
+                value: member.userId, child: Text(member.nickname))),
+          ],
+          onChanged: (value) => _setReceiver(context, ref, eventId, value),
+        );
+      },
+    );
+  }
+}
+
+Future<void> _setReceiver(
+  BuildContext context,
+  WidgetRef ref,
+  String eventId,
+  String? userId,
+) async {
+  try {
+    await ref.read(eventsRepositoryProvider).setReceiver(eventId, userId: userId);
+    ref.invalidate(selectedEventProvider);
+    ref.invalidate(eventsProvider);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível eleger o recebedor.'))),
+      );
+    }
+  }
+}
+
+/// Sugestão de pagamentos sob demanda ("Fulano paga R\$X pra Beltrano"),
+/// admin-only — não muda nada no cálculo de saldo/acerto, é só uma
+/// orientação visual de como fechar as contas com o menor número de
+/// transferências (ou tudo direto pro recebedor eleito).
+class _PaymentSuggestions extends ConsumerStatefulWidget {
+  const _PaymentSuggestions({super.key, required this.eventId});
+
+  final String eventId;
+
+  @override
+  ConsumerState<_PaymentSuggestions> createState() =>
+      _PaymentSuggestionsState();
+}
+
+class _PaymentSuggestionsState extends ConsumerState<_PaymentSuggestions> {
+  bool _expanded = false;
+  Future<List<PaymentSuggestionModel>>? _future;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextButton.icon(
+          onPressed: () => setState(() {
+            _expanded = !_expanded;
+            if (_expanded) {
+              _future ??= ref
+                  .read(reportsRepositoryProvider)
+                  .getPaymentSuggestions(widget.eventId);
+            }
+          }),
+          icon: Icon(_expanded ? Icons.expand_less : Icons.lightbulb_outline),
+          label: Text(_expanded
+              ? 'Ocultar sugestão de pagamentos'
+              : 'Sugerir pagamentos'),
+        ),
+        if (_expanded)
+          FutureBuilder<List<PaymentSuggestionModel>>(
+            future: _future,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.all(AppSpacing.md),
+                  child: LinearProgressIndicator(),
+                );
+              }
+              if (snapshot.hasError) {
+                return Padding(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Text(friendlyApiError(snapshot.error!,
+                      fallback: 'Não foi possível calcular a sugestão.')),
+                );
+              }
+              final suggestions = snapshot.data ?? [];
+              if (suggestions.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.only(top: AppSpacing.sm),
+                  child: Text('Nada a sugerir — todo mundo já está quitado.'),
+                );
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.sm),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: suggestions
+                      .map((suggestion) => Padding(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                      '${suggestion.fromNickname} paga ${suggestion.toNickname}'),
+                                ),
+                                MoneyText(suggestion.amount),
+                              ],
+                            ),
+                          ))
+                      .toList(),
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 }
@@ -669,6 +863,53 @@ Future<void> _confirmStartSettlement(
         SnackBar(
             content: Text(friendlyApiError(error,
                 fallback: 'Não foi possível abrir o evento para pagamento.'))),
+      );
+    }
+  }
+}
+
+/// Manda uma notificação in-app pra quem ainda está devendo no evento.
+/// Etapa 1 do alerta de cobrança — mensagem genérica; mais pra frente vai
+/// puxar a chave PIX de quem recebe (configurável por evento).
+Future<void> _sendBillingAlert(
+    BuildContext context, WidgetRef ref, String eventId) async {
+  final confirmed = await showDialog<bool>(
+    barrierDismissible: false,
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Enviar alerta de cobrança'),
+      content: const Text(
+          'Envia uma notificação no app para quem ainda está com pagamento pendente neste evento. Deseja continuar?'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Enviar')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+  try {
+    final recipients =
+        await ref.read(eventsRepositoryProvider).sendBillingAlert(eventId);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(recipients == 1
+                ? 'Alerta enviado para 1 pessoa.'
+                : 'Alerta enviado para $recipients pessoas.')),
+      );
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível enviar o alerta.'))),
       );
     }
   }

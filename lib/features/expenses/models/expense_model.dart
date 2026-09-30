@@ -16,6 +16,8 @@ class ExpenseModel {
     required this.totalInstallments,
     required this.payers,
     required this.participants,
+    required this.isSubscription,
+    required this.subscriptionCancelled,
   });
 
   final String id;
@@ -34,14 +36,21 @@ class ExpenseModel {
   final int? totalInstallments;
   final List<ExpensePayerModel> payers;
   final List<ExpenseParticipantModel> participants;
+  final bool isSubscription;
+  final bool subscriptionCancelled;
 
-  /// Rótulo "1/3", "2/3"... para despesas de fato parceladas. Despesas
-  /// únicas (sem grupo, ou parceladas em 1x) retornam null — usa os campos
-  /// vindos da API em vez de recalcular, já que cada parcela vive num
-  /// mês/evento diferente.
+  /// Rótulo "1/3", "2/3"... para despesas de fato parceladas, ou
+  /// "Assinatura (mês N)" para assinaturas — despesas únicas (sem grupo,
+  /// ou parceladas em 1x) retornam null. Usa os campos vindos da API em
+  /// vez de recalcular, já que cada parcela/mês vive num evento diferente.
   String? get installmentLabel {
     if (installmentGroupId == null) {
       return null;
+    }
+    if (isSubscription) {
+      final number = installmentNumber;
+      final base = number == null ? 'Assinatura' : 'Assinatura (mês $number)';
+      return subscriptionCancelled ? '$base — cancelada' : base;
     }
     final total = totalInstallments;
     final number = installmentNumber;
@@ -76,6 +85,8 @@ class ExpenseModel {
           .map((item) =>
               ExpenseParticipantModel.fromJson(item as Map<String, dynamic>))
           .toList(),
+      isSubscription: json['isSubscription'] as bool? ?? false,
+      subscriptionCancelled: json['subscriptionCancelled'] as bool? ?? false,
     );
   }
 }

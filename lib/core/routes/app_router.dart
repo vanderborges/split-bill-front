@@ -8,6 +8,7 @@ import '../../features/events/pages/events_page.dart';
 import '../../features/expenses/pages/expenses_page.dart';
 import '../../features/groups/pages/groups_page.dart';
 import '../../features/groups/pages/invite_page.dart';
+import '../../features/notifications/pages/notifications_page.dart';
 import '../../features/profile/pages/profile_page.dart';
 import '../../features/reports/pages/reports_page.dart';
 import '../../features/summary/pages/user_expense_summary_page.dart';
@@ -35,6 +36,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path: '/summary',
           builder: (context, state) => const UserExpenseSummaryPage()),
       GoRoute(path: '/users', builder: (context, state) => const UsersPage()),
+      GoRoute(
+          path: '/notifications',
+          builder: (context, state) => const NotificationsPage()),
       GoRoute(
           path: '/profile', builder: (context, state) => const ProfilePage()),
     ],

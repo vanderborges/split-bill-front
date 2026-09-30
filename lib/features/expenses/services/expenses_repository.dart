@@ -65,6 +65,7 @@ class ExpensesRepository {
     String? monthId,
     String? eventId,
     int? installments,
+    bool subscription = false,
     required List<String> participantIds,
     required Map<String, int> participantShareCounts,
     required Map<String, String> participantShareDescriptions,
@@ -81,12 +82,26 @@ class ExpensesRepository {
           monthId: monthId,
           eventId: eventId,
           installments: installments,
+          subscription: subscription,
           participantIds: participantIds,
           participantShareCounts: participantShareCounts,
           participantShareDescriptions: participantShareDescriptions,
           payerAmounts: payerAmounts,
         ),
       );
+      return ExpenseModel.fromJson(response.data!);
+    } on DioException catch (error) {
+      throw Exception(_errorMessage(error));
+    }
+  }
+
+  /// Finaliza uma assinatura a partir do mês corrente — admin ou quem
+  /// cadastrou. A despesa deste mês continua existindo, só para de gerar
+  /// a próxima no mês seguinte.
+  Future<ExpenseModel> cancelSubscription(String id) async {
+    try {
+      final response =
+          await dio.put<Map<String, dynamic>>('/expenses/$id/cancel-subscription');
       return ExpenseModel.fromJson(response.data!);
     } on DioException catch (error) {
       throw Exception(_errorMessage(error));
@@ -144,6 +159,7 @@ class ExpensesRepository {
     String? monthId,
     String? eventId,
     int? installments,
+    bool subscription = false,
     required List<String> participantIds,
     required Map<String, int> participantShareCounts,
     required Map<String, String> participantShareDescriptions,
@@ -175,6 +191,7 @@ class ExpensesRepository {
       'participants': participants,
       'payers': payers,
       'installments': installments,
+      'subscription': subscription,
     };
   }
 

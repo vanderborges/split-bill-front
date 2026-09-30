@@ -110,4 +110,23 @@ class EventsRepository {
   Future<void> delete(String id) async {
     await dio.delete<void>('/events/$id');
   }
+
+  /// Manda uma notificação in-app pra quem ainda está devendo nesse
+  /// evento. Retorna quantas pessoas receberam o alerta.
+  Future<int> sendBillingAlert(String id) async {
+    final response =
+        await dio.post<Map<String, dynamic>>('/events/$id/billing-alert');
+    return response.data!['recipients'] as int;
+  }
+
+  /// Elege quem recebe os pagamentos deste evento (null remove a eleição).
+  /// Todo devedor passa a ter como sugestão mandar o valor direto pra essa
+  /// pessoa — ver [ReportsRepository.getPaymentSuggestions].
+  Future<EventModel> setReceiver(String id, {String? userId}) async {
+    final response = await dio.put<Map<String, dynamic>>(
+      '/events/$id/receiver',
+      data: {'userId': userId},
+    );
+    return EventModel.fromJson(response.data!);
+  }
 }

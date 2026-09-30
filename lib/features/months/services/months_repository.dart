@@ -41,10 +41,14 @@ class MonthsRepository {
         .toList();
   }
 
-  Future<MonthModel> create({required int month, required int year}) async {
+  Future<MonthModel> create({
+    required int month,
+    required int year,
+    required String groupId,
+  }) async {
     final response = await dio.post<Map<String, dynamic>>(
       '/months',
-      data: {'month': month, 'year': year},
+      data: {'month': month, 'year': year, 'groupId': groupId},
     );
     return MonthModel.fromJson(response.data!);
   }

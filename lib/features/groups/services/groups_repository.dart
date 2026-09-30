@@ -83,6 +83,21 @@ class GroupsRepository {
     return GroupModel.fromJson(response.data!);
   }
 
+  Future<GroupModel> update({
+    required String groupId,
+    required String name,
+    String? description,
+  }) async {
+    final response = await dio.put<Map<String, dynamic>>(
+      '/groups/$groupId',
+      data: {
+        'name': name,
+        'description': description,
+      },
+    );
+    return GroupModel.fromJson(response.data!);
+  }
+
   Future<List<GroupMemberModel>> listMembers(String groupId,
       {String? viewerUserId}) async {
     final response = await dio.get<List<dynamic>>(

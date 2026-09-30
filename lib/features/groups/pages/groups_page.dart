@@ -73,6 +73,15 @@ class GroupsPage extends ConsumerWidget {
                     ),
                   ),
                   IconButton(
+                    tooltip: 'Editar grupo',
+                    onPressed: selectedGroupAsync.valueOrNull == null ||
+                            !isSelectedGroupAdmin
+                        ? null
+                        : () => _showEditGroupDialog(
+                            context, ref, selectedGroupAsync.valueOrNull!),
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                  IconButton(
                     tooltip: 'Deletar grupo',
                     onPressed: selectedGroupAsync.valueOrNull == null ||
                             !isSelectedGroupAdmin
@@ -334,6 +343,72 @@ Future<void> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
           SnackBar(content: Text(friendlyApiError(error,
               fallback: 'Não foi possível alterar o perfil.'))));
     }
+  }
+}
+
+Future<void> _showEditGroupDialog(
+    BuildContext context, WidgetRef ref, GroupModel group) async {
+  final nameController = TextEditingController(text: group.name);
+  final descriptionController =
+      TextEditingController(text: group.description ?? '');
+  final saved = await showDialog<bool>(
+    barrierDismissible: false,
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Editar grupo'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Nome')),
+          TextField(
+              controller: descriptionController,
+              decoration: const InputDecoration(labelText: 'Descricao')),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Salvar')),
+      ],
+    ),
+  );
+  if (saved != true || !context.mounted) {
+    nameController.dispose();
+    descriptionController.dispose();
+    return;
+  }
+  final name = nameController.text.trim();
+  if (name.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Informe um nome para o grupo.')));
+    nameController.dispose();
+    descriptionController.dispose();
+    return;
+  }
+  try {
+    await ref.read(groupsRepositoryProvider).update(
+          groupId: group.id,
+          name: name,
+          description: descriptionController.text.trim().isEmpty
+              ? null
+              : descriptionController.text.trim(),
+        );
+    ref.invalidate(groupsProvider);
+    ref.invalidate(selectedGroupProvider);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível atualizar o grupo.'))));
+    }
+  } finally {
+    nameController.dispose();
+    descriptionController.dispose();
   }
 }
 

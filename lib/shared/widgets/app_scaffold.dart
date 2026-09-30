@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../features/auth/services/auth_repository.dart';
 import '../../features/expenses/services/new_expense_intent.dart';
+import '../../features/notifications/services/notifications_repository.dart';
 import '../session_reset.dart';
 import 'person_avatar.dart';
 
@@ -92,7 +93,7 @@ class _WideScaffold extends ConsumerWidget {
     final selectedIndex = routes.indexOf(currentPath);
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(title: Text(title), actions: const [_NotificationBell()]),
       drawer: NavigationDrawer(
         selectedIndex: selectedIndex < 0 ? null : selectedIndex,
         onDestinationSelected: (index) async {
@@ -204,6 +205,7 @@ class _NarrowScaffold extends ConsumerWidget {
       appBar: AppBar(
         title: Text(title),
         actions: [
+          const _NotificationBell(),
           if (currentUser != null)
             InkWell(
               borderRadius: BorderRadius.circular(999),
@@ -298,6 +300,26 @@ class _NarrowScaffold extends ConsumerWidget {
       ),
       floatingActionButton: floatingActionButton,
       body: SafeArea(child: child),
+    );
+  }
+}
+
+/// Sino de notificações com badge de não lidas, usado nas duas variantes
+/// de AppBar (larga e estreita). Sempre leva pra /notifications.
+class _NotificationBell extends ConsumerWidget {
+  const _NotificationBell();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadCount = ref.watch(unreadNotificationsCountProvider);
+    return IconButton(
+      tooltip: 'Notificações',
+      onPressed: () => context.go('/notifications'),
+      icon: Badge(
+        label: Text('$unreadCount'),
+        isLabelVisible: unreadCount > 0,
+        child: const Icon(Icons.notifications_outlined),
+      ),
     );
   }
 }
