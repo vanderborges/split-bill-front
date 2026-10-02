@@ -243,6 +243,7 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
   final Set<String> expandedUserIds = {};
   final Map<String, Future<List<BalanceExpenseDetailModel>>> detailsByUser = {};
   Future<List<PaymentSuggestionModel>>? _suggestionsFuture;
+  var _showSuggestions = false;
 
   Future<List<PaymentSuggestionModel>> _suggestions(String eventId) {
     return _suggestionsFuture ??=
@@ -269,19 +270,43 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
       });
 
     final eventId = widget.eventId;
+    final canShowSuggestions = widget.canUpdateSettlements && eventId != null;
+
     // Sugestão de "quem paga quanto pra quem" (admin-only) — não muda nada
     // no cálculo de saldo/acerto, é só uma orientação visual de como
     // fechar as contas com o menor número de transferências (ou tudo
     // direto pro recebedor eleito). Aparece por baixo de cada pessoa
-    // envolvida, em vez de uma lista separada.
-    if (!widget.canUpdateSettlements || eventId == null) {
-      return _buildRows(
-          context, sortedBalances, settlementsByUser, currentUserId, semantic, const []);
-    }
-    return FutureBuilder<List<PaymentSuggestionModel>>(
-      future: _suggestions(eventId),
-      builder: (context, snapshot) => _buildRows(context, sortedBalances,
-          settlementsByUser, currentUserId, semantic, snapshot.data ?? const []),
+    // envolvida só quando a opção é marcada — fica fora do caminho por
+    // padrão, já que boa parte das vezes ninguém quer ver.
+    final rows = !canShowSuggestions || !_showSuggestions
+        ? _buildRows(context, sortedBalances, settlementsByUser,
+            currentUserId, semantic, const [])
+        : FutureBuilder<List<PaymentSuggestionModel>>(
+            future: _suggestions(eventId),
+            builder: (context, snapshot) => _buildRows(
+                context,
+                sortedBalances,
+                settlementsByUser,
+                currentUserId,
+                semantic,
+                snapshot.data ?? const []),
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (canShowSuggestions)
+          CheckboxListTile(
+            value: _showSuggestions,
+            onChanged: (value) =>
+                setState(() => _showSuggestions = value ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Sugerir pagamentos'),
+          ),
+        rows,
+      ],
     );
   }
 

@@ -23,10 +23,13 @@ class NotificationModel {
       eventId: json['eventId'] as String?,
       eventName: json['eventName'] as String?,
       message: json['message'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      // O backend manda createdAt/readAt como instante UTC (sufixo "Z") -
+      // toLocal() converte pro fuso do aparelho, pra exibir o horário que
+      // a pessoa realmente vê no relógio dela, não o horário do servidor.
+      createdAt: DateTime.parse(json['createdAt'] as String).toLocal(),
       readAt: json['readAt'] == null
           ? null
-          : DateTime.parse(json['readAt'] as String),
+          : DateTime.parse(json['readAt'] as String).toLocal(),
     );
   }
 }
