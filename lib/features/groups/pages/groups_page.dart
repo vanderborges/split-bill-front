@@ -104,7 +104,13 @@ class GroupsPage extends ConsumerWidget {
           selectedGroupAsync.when(
             data: (group) => group == null
                 ? const SizedBox.shrink()
-                : _GroupMembers(group: group),
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _GroupReceiverSelector(group: group),
+                      _GroupMembers(group: group),
+                    ],
+                  ),
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, _) => ErrorState(
               message: friendlyApiError(error,
@@ -133,6 +139,72 @@ Future<void> _deleteGroup(
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(friendlyApiError(error,
               fallback: 'Não foi possível deletar o grupo.'))));
+    }
+  }
+}
+
+/// Admin-only: elege quem recebe os pagamentos deste grupo. Quando eleito,
+/// a sugestão de pagamentos (na tela de Relatórios) manda todo devedor, em
+/// qualquer evento do grupo, direto pra essa pessoa.
+class _GroupReceiverSelector extends ConsumerWidget {
+  const _GroupReceiverSelector({required this.group});
+
+  final GroupModel group;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isGroupAdmin =
+        ref.watch(groupRoleProvider(group.id)).valueOrNull == 'ADMIN';
+    if (!isGroupAdmin) {
+      return const SizedBox.shrink();
+    }
+    return FutureBuilder<List<GroupMemberModel>>(
+      future: ref.read(groupsRepositoryProvider).listMembers(group.id),
+      builder: (context, snapshot) {
+        final members = snapshot.data ?? <GroupMemberModel>[];
+        final value =
+            members.any((member) => member.userId == group.receiverUserId)
+                ? group.receiverUserId
+                : null;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: DropdownButtonFormField<String?>(
+            key: ValueKey('receiver-${group.id}-$value'),
+            initialValue: value,
+            decoration: const InputDecoration(
+                labelText: 'Quem recebe os pagamentos do grupo'),
+            items: [
+              const DropdownMenuItem<String?>(
+                  value: null, child: Text('Ninguém eleito')),
+              ...members.map((member) => DropdownMenuItem<String?>(
+                  value: member.userId, child: Text(member.nickname))),
+            ],
+            onChanged: (value) =>
+                _setGroupReceiver(context, ref, group.id, value),
+          ),
+        );
+      },
+    );
+  }
+}
+
+Future<void> _setGroupReceiver(
+  BuildContext context,
+  WidgetRef ref,
+  String groupId,
+  String? userId,
+) async {
+  try {
+    await ref.read(groupsRepositoryProvider).setReceiver(groupId, userId: userId);
+    ref.invalidate(groupsProvider);
+    ref.invalidate(selectedGroupProvider);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível eleger o recebedor.'))),
+      );
     }
   }
 }

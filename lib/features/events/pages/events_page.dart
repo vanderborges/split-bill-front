@@ -16,6 +16,7 @@ import '../../months/services/months_repository.dart';
 import '../../reports/services/reports_repository.dart';
 import '../models/event_model.dart';
 import '../services/events_repository.dart';
+import '../services/new_event_intent.dart';
 
 class EventsPage extends ConsumerWidget {
   const EventsPage({super.key});
@@ -25,6 +26,19 @@ class EventsPage extends ConsumerWidget {
     final eventsAsync = ref.watch(eventsProvider);
     final groupsAsync = ref.watch(groupsProvider);
     final selectedGroupId = ref.watch(selectedGroupIdProvider);
+
+    if (ref.read(pendingAutoOpenEventProvider)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) {
+          return;
+        }
+        if (!ref.read(pendingAutoOpenEventProvider)) {
+          return;
+        }
+        ref.read(pendingAutoOpenEventProvider.notifier).state = false;
+        _showCreateEventDialog(context, ref);
+      });
+    }
 
     return AppScaffold(
       title: 'Eventos',

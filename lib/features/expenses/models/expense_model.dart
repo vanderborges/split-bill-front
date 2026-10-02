@@ -18,6 +18,7 @@ class ExpenseModel {
     required this.participants,
     required this.isSubscription,
     required this.subscriptionCancelled,
+    required this.createdAt,
   });
 
   final String id;
@@ -38,6 +39,7 @@ class ExpenseModel {
   final List<ExpenseParticipantModel> participants;
   final bool isSubscription;
   final bool subscriptionCancelled;
+  final DateTime createdAt;
 
   /// Rótulo "1/3", "2/3"... para despesas de fato parceladas, ou
   /// "Assinatura (mês N)" para assinaturas — despesas únicas (sem grupo,
@@ -87,6 +89,9 @@ class ExpenseModel {
           .toList(),
       isSubscription: json['isSubscription'] as bool? ?? false,
       subscriptionCancelled: json['subscriptionCancelled'] as bool? ?? false,
+      createdAt: json['createdAt'] == null
+          ? DateTime.parse(json['expenseDate'] as String)
+          : DateTime.parse(json['createdAt'] as String),
     );
   }
 }

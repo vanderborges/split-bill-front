@@ -5,6 +5,8 @@ class GroupModel {
     required this.description,
     required this.createdByUserId,
     required this.active,
+    required this.receiverUserId,
+    required this.receiverNickname,
   });
 
   final String id;
@@ -12,6 +14,8 @@ class GroupModel {
   final String? description;
   final String createdByUserId;
   final bool active;
+  final String? receiverUserId;
+  final String? receiverNickname;
 
   factory GroupModel.fromJson(Map<String, dynamic> json) {
     return GroupModel(
@@ -20,6 +24,8 @@ class GroupModel {
       description: json['description'] as String?,
       createdByUserId: json['createdByUserId'] as String,
       active: json['active'] as bool,
+      receiverUserId: json['receiverUserId'] as String?,
+      receiverNickname: json['receiverNickname'] as String?,
     );
   }
 }

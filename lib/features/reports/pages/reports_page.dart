@@ -162,12 +162,18 @@ class ReportsPage extends ConsumerWidget {
                           label: const Text('Enviar alerta de cobrança'),
                         ),
                       if (report.status == 'SETTLING' && isGroupAdmin)
-                        FilledButton(
-                          onPressed: report.eventId == null
-                              ? null
-                              : () => _confirmCloseEvent(
-                                  context, ref, report.eventId!),
-                          child: const Text('Fechar evento'),
+                        Tooltip(
+                          message: _hasPendingSettlement(settlementsAsync)
+                              ? 'Confirme todos os pagamentos antes de fechar o evento.'
+                              : '',
+                          child: FilledButton(
+                            onPressed: report.eventId == null ||
+                                    _hasPendingSettlement(settlementsAsync)
+                                ? null
+                                : () => _confirmCloseEvent(
+                                    context, ref, report.eventId!),
+                            child: const Text('Fechar evento'),
+                          ),
                         ),
                     ],
                   ),
@@ -179,18 +185,6 @@ class ReportsPage extends ConsumerWidget {
                       MoneyText(report.totalExpenses),
                     ],
                   ),
-                  if (isGroupAdmin &&
-                      report.status != 'CLOSED' &&
-                      report.eventId != null) ...[
-                    const SizedBox(height: 12),
-                    _ReceiverSelector(
-                      key: ValueKey('receiver-${report.eventId}'),
-                      eventId: report.eventId!,
-                      groupId: report.groupId,
-                      currentReceiverId:
-                          eventAsync.valueOrNull?.receiverUserId,
-                    ),
-                  ],
                   if (isGroupAdmin && report.eventId != null) ...[
                     const SizedBox(height: 12),
                     _PaymentSuggestions(
@@ -230,69 +224,6 @@ class ReportsPage extends ConsumerWidget {
         ],
       ),
     );
-  }
-}
-
-/// Admin-only: elege quem recebe os pagamentos deste evento. Quando
-/// eleito, a sugestão de pagamentos (abaixo) manda todo devedor direto pra
-/// essa pessoa, em vez de calcular quem paga quem entre todos.
-class _ReceiverSelector extends ConsumerWidget {
-  const _ReceiverSelector({
-    super.key,
-    required this.eventId,
-    required this.groupId,
-    required this.currentReceiverId,
-  });
-
-  final String eventId;
-  final String groupId;
-  final String? currentReceiverId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return FutureBuilder(
-      future: ref.read(groupsRepositoryProvider).listMembers(groupId),
-      builder: (context, snapshot) {
-        final members = snapshot.data ?? [];
-        final value = members.any((member) => member.userId == currentReceiverId)
-            ? currentReceiverId
-            : null;
-        return DropdownButtonFormField<String?>(
-          key: ValueKey(value),
-          initialValue: value,
-          decoration:
-              const InputDecoration(labelText: 'Quem recebe os pagamentos'),
-          items: [
-            const DropdownMenuItem<String?>(
-                value: null, child: Text('Ninguém eleito')),
-            ...members.map((member) => DropdownMenuItem<String?>(
-                value: member.userId, child: Text(member.nickname))),
-          ],
-          onChanged: (value) => _setReceiver(context, ref, eventId, value),
-        );
-      },
-    );
-  }
-}
-
-Future<void> _setReceiver(
-  BuildContext context,
-  WidgetRef ref,
-  String eventId,
-  String? userId,
-) async {
-  try {
-    await ref.read(eventsRepositoryProvider).setReceiver(eventId, userId: userId);
-    ref.invalidate(selectedEventProvider);
-    ref.invalidate(eventsProvider);
-  } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyApiError(error,
-                fallback: 'Não foi possível eleger o recebedor.'))),
-      );
-    }
   }
 }
 
@@ -674,6 +605,7 @@ class _BalanceDetails extends StatelessWidget {
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
+                    const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -810,6 +742,19 @@ String _errorMessage(Object error) {
     }
   }
   return error.toString();
+}
+
+/// Enquanto não sabemos o status dos acertos (carregando/erro) trata como
+/// pendente — só libera o "Fechar evento" quando confirma que está tudo
+/// pago, em vez de deixar tentar e falhar depois.
+bool _hasPendingSettlement(
+    AsyncValue<List<EventSettlementModel>> settlementsAsync) {
+  final settlements = settlementsAsync.valueOrNull;
+  if (settlements == null) {
+    return true;
+  }
+  return settlements
+      .any((settlement) => settlement.normalizedStatus == 'PENDING');
 }
 
 Future<void> _confirmStartSettlement(

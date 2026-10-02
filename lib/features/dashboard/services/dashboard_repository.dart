@@ -49,7 +49,7 @@ Future<List<DashboardGroupBalanceModel>> _fallbackGroupBalances(
 
   final balances = <DashboardGroupBalanceModel>[];
   for (final group in groups) {
-    var balance = 0.0;
+    final eventBalances = <DashboardEventBalanceModel>[];
 
     try {
       final events = await eventsRepository.list(groupId: group.id);
@@ -64,21 +64,26 @@ Future<List<DashboardGroupBalanceModel>> _fallbackGroupBalances(
           final userBalances =
               report.balances.where((item) => item.userId == user.id);
           if (userBalances.isNotEmpty) {
-            balance += userBalances.first.balance;
+            eventBalances.add(DashboardEventBalanceModel(
+              eventId: event.id,
+              eventName: event.name,
+              eventStatus: event.status,
+              balance: userBalances.first.balance,
+            ));
           }
         } catch (_) {
-          balance += 0;
+          // Sem relatório pra esse evento — não aparece no fallback.
         }
       }
     } catch (_) {
-      balance = 0;
+      // Sem eventos pra esse grupo no fallback.
     }
 
     balances.add(
       DashboardGroupBalanceModel(
         groupId: group.id,
         groupName: group.name,
-        balance: balance,
+        events: eventBalances,
       ),
     );
   }

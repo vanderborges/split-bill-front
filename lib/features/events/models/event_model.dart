@@ -9,8 +9,6 @@ class EventModel {
     required this.monthId,
     required this.month,
     required this.year,
-    required this.receiverUserId,
-    required this.receiverNickname,
   });
 
   final String id;
@@ -22,8 +20,6 @@ class EventModel {
   final String? monthId;
   final int? month;
   final int? year;
-  final String? receiverUserId;
-  final String? receiverNickname;
 
   bool get isClosed => status == 'CLOSED';
 
@@ -52,8 +48,6 @@ class EventModel {
       monthId: json['monthId'] as String?,
       month: json['month'] as int?,
       year: json['year'] as int?,
-      receiverUserId: json['receiverUserId'] as String?,
-      receiverNickname: json['receiverNickname'] as String?,
     );
   }
 }

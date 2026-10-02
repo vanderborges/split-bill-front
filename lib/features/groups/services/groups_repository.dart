@@ -138,4 +138,16 @@ class GroupsRepository {
   Future<void> leave(String groupId) {
     return dio.post<void>('/groups/$groupId/leave');
   }
+
+  /// Elege quem recebe os pagamentos deste grupo (null remove a eleição).
+  /// Todo devedor, em qualquer evento do grupo, passa a ter como sugestão
+  /// mandar o valor direto pra essa pessoa — ver
+  /// [ReportsRepository.getPaymentSuggestions].
+  Future<GroupModel> setReceiver(String groupId, {String? userId}) async {
+    final response = await dio.put<Map<String, dynamic>>(
+      '/groups/$groupId/receiver',
+      data: {'userId': userId},
+    );
+    return GroupModel.fromJson(response.data!);
+  }
 }

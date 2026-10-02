@@ -88,76 +88,118 @@ class _BalancesContent extends ConsumerWidget {
       );
     }
 
-    final total =
-        balances.fold<double>(0, (sum, group) => sum + group.balance);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _BalanceCard(
-          title: 'Saldo total',
-          balance: total,
-          icon: Icons.account_balance_wallet_outlined,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        ...balances.map(
-          (groupBalance) => Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-            child: _BalanceCard(
-              title: groupBalance.groupName,
-              balance: groupBalance.balance,
-              icon: Icons.groups_outlined,
-              onTap: () =>
-                  _openGroupExpenses(context, ref, groupBalance.groupId),
-            ),
-          ),
-        ),
-      ],
+      children: balances
+          .map((groupBalance) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: _GroupCard(groupBalance: groupBalance),
+              ))
+          .toList(),
     );
   }
 }
 
-void _openGroupExpenses(BuildContext context, WidgetRef ref, String groupId) {
+void _openEventExpenses(
+  BuildContext context,
+  WidgetRef ref,
+  String groupId,
+  String eventId,
+) {
   ref.read(selectedGroupIdProvider.notifier).state = groupId;
-  ref.read(selectedEventIdProvider.notifier).state = null;
+  ref.read(selectedEventIdProvider.notifier).state = eventId;
   ref.invalidate(selectedEventProvider);
   ref.invalidate(selectedEventExpensesProvider);
   context.go('/expenses');
 }
 
-class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({
-    required this.title,
-    required this.balance,
-    required this.icon,
-    this.onTap,
-  });
+/// Grupo como cartão expansível: um grupo pode ter mais de um evento em
+/// aberto ao mesmo tempo (ex.: dois meses, ou um mês + um avulso) — somar
+/// tudo num único saldo escondia o que estava acontecendo em cada evento.
+/// Aqui cada evento com despesa da pessoa aparece com o próprio saldo.
+class _GroupCard extends StatelessWidget {
+  const _GroupCard({required this.groupBalance});
 
-  final String title;
-  final double balance;
-  final IconData icon;
-  final VoidCallback? onTap;
+  final DashboardGroupBalanceModel groupBalance;
 
   @override
   Widget build(BuildContext context) {
-    final subtitle = balance < 0
-        ? 'Você tem a pagar'
-        : balance > 0
-            ? 'Você tem a receber'
-            : 'Sem saldo em aberto';
+    final events = groupBalance.events;
+
+    if (events.isEmpty) {
+      return Card(
+        child: ListTile(
+          leading: const Icon(Icons.groups_outlined),
+          title: Text(groupBalance.groupName),
+          subtitle: const Text('Sem despesas em eventos abertos.'),
+        ),
+      );
+    }
+
+    if (events.length == 1) {
+      return Card(
+        child: Consumer(
+          builder: (context, ref, _) => ListTile(
+            leading: const Icon(Icons.groups_outlined),
+            title: Text(groupBalance.groupName),
+            subtitle: Text(_eventSubtitle(events.first)),
+            trailing: MoneyText(
+              events.first.balance,
+              colorBySign: true,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            onTap: () => _openEventExpenses(
+                context, ref, groupBalance.groupId, events.first.eventId),
+          ),
+        ),
+      );
+    }
+
+    final total =
+        events.fold<double>(0, (sum, event) => sum + event.balance);
 
     return Card(
-      child: ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: MoneyText(
-          balance,
-          colorBySign: true,
-          style: Theme.of(context).textTheme.titleMedium,
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        leading: const Icon(Icons.groups_outlined),
+        title: Text(groupBalance.groupName),
+        subtitle: Text('${events.length} eventos em aberto'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            MoneyText(
+              total,
+              colorBySign: true,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const Icon(Icons.expand_more),
+          ],
         ),
-        onTap: onTap,
+        children: events
+            .map((event) => Consumer(
+                  builder: (context, ref, _) => ListTile(
+                    title: Text(event.eventName),
+                    subtitle: Text(_eventSubtitle(event)),
+                    trailing: MoneyText(event.balance, colorBySign: true),
+                    onTap: () => _openEventExpenses(context, ref,
+                        groupBalance.groupId, event.eventId),
+                  ),
+                ))
+            .toList(),
       ),
     );
   }
+}
+
+String _eventSubtitle(DashboardEventBalanceModel event) {
+  final status = switch (event.eventStatus) {
+    'SETTLING' => 'Aguardando pagamento — ',
+    _ => '',
+  };
+  final balance = event.balance < 0
+      ? 'Você tem a pagar'
+      : event.balance > 0
+          ? 'Você tem a receber'
+          : 'Sem saldo em aberto';
+  return '$status$balance';
 }

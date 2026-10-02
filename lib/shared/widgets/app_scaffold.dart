@@ -1,10 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_spacing.dart';
 import '../../features/auth/services/auth_repository.dart';
-import '../../features/expenses/services/new_expense_intent.dart';
 import '../../features/notifications/services/notifications_repository.dart';
 import '../session_reset.dart';
 import 'person_avatar.dart';
@@ -161,10 +162,12 @@ class _WideScaffold extends ConsumerWidget {
 }
 
 /// Layout para celular: barra inferior com os 5 destinos mais usados
-/// (Início, Eventos, [+] Nova despesa, Extrato, Relatório). O nome da
-/// pessoa logada aparece na AppBar e abre o Perfil ao tocar; Grupos,
-/// Despesas e Usuários (admin) ficam a um toque de distância no menu
-/// "Mais" — nenhuma rota deixou de existir, só mudou de onde é alcançada.
+/// (Início, Eventos, Grupos, Extrato, Relatório). Nova despesa já tem seu
+/// próprio botão (+) nas telas de Eventos/Despesas, então não duplicamos
+/// aqui. O nome da pessoa logada aparece na AppBar e abre o Perfil ao
+/// tocar; Despesas e Usuários (admin) ficam a um toque de distância no
+/// menu "Mais" — nenhuma rota deixou de existir, só mudou de onde é
+/// alcançada.
 class _NarrowScaffold extends ConsumerWidget {
   const _NarrowScaffold({
     required this.title,
@@ -180,8 +183,6 @@ class _NarrowScaffold extends ConsumerWidget {
   final Widget? floatingActionButton;
   final Widget child;
 
-  static const _quickAddIndex = 2;
-
   int _selectedIndex(String path) {
     switch (path) {
       case '/':
@@ -189,6 +190,8 @@ class _NarrowScaffold extends ConsumerWidget {
       case '/events':
       case '/expenses':
         return 1;
+      case '/groups':
+        return 2;
       case '/summary':
         return 3;
       case '/reports':
@@ -246,7 +249,6 @@ class _NarrowScaffold extends ConsumerWidget {
               context.go(value);
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(value: '/groups', child: Text('Grupos')),
               const PopupMenuItem(
                   value: '/expenses', child: Text('Despesas')),
               if (showUsers)
@@ -261,12 +263,7 @@ class _NarrowScaffold extends ConsumerWidget {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex(currentPath),
         onDestinationSelected: (index) {
-          if (index == _quickAddIndex) {
-            ref.read(pendingAutoOpenExpenseProvider.notifier).state = true;
-            context.go('/expenses');
-            return;
-          }
-          const paths = ['/', '/events', '', '/summary', '/reports'];
+          const paths = ['/', '/events', '/groups', '/summary', '/reports'];
           context.go(paths[index]);
         },
         destinations: const [
@@ -281,10 +278,9 @@ class _NarrowScaffold extends ConsumerWidget {
             label: 'Eventos',
           ),
           NavigationDestination(
-            icon: Icon(Icons.add_circle_outline),
-            selectedIcon: Icon(Icons.add_circle),
-            label: 'Nova',
-            tooltip: 'Nova despesa',
+            icon: Icon(Icons.groups_outlined),
+            selectedIcon: Icon(Icons.groups),
+            label: 'Grupos',
           ),
           NavigationDestination(
             icon: Icon(Icons.list_alt_outlined),
@@ -306,11 +302,46 @@ class _NarrowScaffold extends ConsumerWidget {
 
 /// Sino de notificações com badge de não lidas, usado nas duas variantes
 /// de AppBar (larga e estreita). Sempre leva pra /notifications.
-class _NotificationBell extends ConsumerWidget {
+///
+/// `notificationsProvider` é um FutureProvider comum: sem alguém chamar
+/// invalidate, ele nunca recarrega sozinho — então o contador ficava preso
+/// no valor do primeiro carregamento (geralmente 0) e um alerta de
+/// cobrança recebido durante o uso do app nunca aparecia, só depois de
+/// reiniciar. Como o AppScaffold (e esse sino) é recriado a cada troca de
+/// tela, um refresh a cada vez que o sino "nasce" já cobre o uso normal;
+/// o timer garante que também atualiza se a pessoa ficar parada na mesma
+/// tela por um tempo.
+class _NotificationBell extends ConsumerStatefulWidget {
   const _NotificationBell();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends ConsumerState<_NotificationBell> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+    _timer = Timer.periodic(const Duration(seconds: 60), (_) => _refresh());
+  }
+
+  void _refresh() {
+    if (mounted) {
+      ref.invalidate(notificationsProvider);
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final unreadCount = ref.watch(unreadNotificationsCountProvider);
     return IconButton(
       tooltip: 'Notificações',

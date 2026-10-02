@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
@@ -13,8 +14,8 @@ import '../../auth/services/auth_repository.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../events/models/event_model.dart';
 import '../../events/services/events_repository.dart';
+import '../../events/services/new_event_intent.dart';
 import '../../groups/services/groups_repository.dart';
-import '../../months/services/months_repository.dart';
 import '../../reports/services/reports_repository.dart';
 import '../../users/models/user_option_model.dart';
 import '../models/expense_model.dart';
@@ -28,7 +29,7 @@ class ExpensesPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final eventAsync = ref.watch(selectedEventProvider);
-    final openEventsAsync = ref.watch(openEventsProvider);
+    final eventsAsync = ref.watch(eventsProvider);
     final expensesAsync = ref.watch(selectedEventExpensesProvider);
     final groupsAsync = ref.watch(groupsProvider);
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
@@ -59,8 +60,8 @@ class ExpensesPage extends ConsumerWidget {
             return Center(
               child: FilledButton.icon(
                 onPressed: () => _openNewExpenseFlow(context, ref),
-                icon: const Icon(Icons.calendar_month),
-                label: const Text('Criar mes atual e adicionar gasto'),
+                icon: const Icon(Icons.add),
+                label: const Text('Adicionar despesa'),
               ),
             );
           }
@@ -75,9 +76,14 @@ class ExpensesPage extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                     AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
-                child: openEventsAsync.when(
-                  data: (openEvents) {
-                    final items = [...openEvents];
+                child: eventsAsync.when(
+                  data: (allEvents) {
+                    // Lista todos os eventos do grupo (não só os abertos) —
+                    // senão, ao sair de um evento fechado/aguardando
+                    // pagamento ele some do seletor e não dá pra voltar.
+                    // Quem controla se dá pra ADICIONAR despesa é o status
+                    // do evento selecionado, não essa lista.
+                    final items = [...allEvents];
                     if (items.every((item) => item.id != event.id)) {
                       items.add(event);
                     }
@@ -149,7 +155,7 @@ class ExpensesPage extends ConsumerWidget {
                         if (dateComparison != 0) {
                           return dateComparison;
                         }
-                        return first.description.compareTo(second.description);
+                        return second.createdAt.compareTo(first.createdAt);
                       });
                     return ListView.separated(
                       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -366,12 +372,13 @@ Future<bool> _confirmCancelSubscription(
   }
 }
 
-/// Fluxo único de "adicionar despesa": resolve o evento atual (criando o
-/// mês corrente automaticamente se ainda não existir) e abre o formulário —
-/// usado pelo FAB desta tela, pelo botão de estado vazio e pelo CTA "Nova
-/// despesa" da Home (via [pendingAutoOpenExpenseProvider]), para que
-/// nenhum desses pontos de entrada exija um segundo toque para chegar ao
-/// formulário.
+/// Fluxo único de "adicionar despesa": resolve o evento atual e abre o
+/// formulário — usado pelo FAB desta tela, pelo botão de estado vazio e
+/// pelo CTA "Nova despesa" da Home (via [pendingAutoOpenExpenseProvider]).
+///
+/// Sem evento aberto no grupo, pergunta se quer criar um evento (em vez de
+/// criar um mês em silêncio) — "Sim" leva pra tela de criação de evento,
+/// "Não" só avisa que não dá pra lançar despesa sem evento aberto.
 Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
   final groups = await ref.read(groupsProvider.future);
   if (!context.mounted) {
@@ -390,27 +397,26 @@ Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
     }
   }
 
-  var event = await ref.read(selectedEventProvider.future);
+  final event = await ref.read(selectedEventProvider.future);
   if (!context.mounted) {
     return;
   }
 
-  if (event == null) {
-    final created = await _createCurrentMonth(context, ref);
-    if (!created || !context.mounted) {
+  if (event == null || !event.isOpen) {
+    final wantsToCreate = await _confirmCreateEvent(context);
+    if (!context.mounted || wantsToCreate == null) {
       return;
     }
-    event = await ref.read(selectedEventProvider.future);
-    if (!context.mounted || event == null) {
-      return;
+    if (wantsToCreate) {
+      ref.read(pendingAutoOpenEventProvider.notifier).state = true;
+      context.go('/events');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Não é possível adicionar despesa: não há evento aberto neste grupo.')),
+      );
     }
-  }
-
-  if (!event.isOpen) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Este evento nao esta aberto para novas despesas.')),
-    );
     return;
   }
 
@@ -419,6 +425,26 @@ Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
   if (context.mounted) {
     await _openExpenseForm(context, ref, event, users, categories);
   }
+}
+
+/// null = popup fechado sem escolher (toque fora); true/false = resposta.
+Future<bool?> _confirmCreateEvent(BuildContext context) {
+  return showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Nenhum evento aberto'),
+      content: const Text(
+          'Este grupo não tem nenhum evento aberto no momento. Deseja criar um evento agora?'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Não')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sim, criar evento')),
+      ],
+    ),
+  );
 }
 
 /// Pergunta em qual grupo cadastrar a despesa quando o usuário está em
@@ -437,51 +463,6 @@ Future<String?> _pickGroup(BuildContext context, List<dynamic> groups) {
           .toList(),
     ),
   );
-}
-
-Future<bool> _createCurrentMonth(BuildContext context, WidgetRef ref) async {
-  final now = DateTime.now();
-  // O mês/evento é criado dentro de um grupo específico — sem grupo
-  // selecionado (ex.: primeiro acesso), usa o primeiro grupo do usuário.
-  var groupId = ref.read(selectedGroupIdProvider);
-  if (groupId == null) {
-    final groups = await ref.read(groupsProvider.future);
-    if (groups.isEmpty) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Entre em um grupo antes de criar despesas.')),
-        );
-      }
-      return false;
-    }
-    groupId = groups.first.id;
-    ref.read(selectedGroupIdProvider.notifier).state = groupId;
-  }
-  try {
-    await ref.read(monthsRepositoryProvider).create(
-          month: now.month,
-          year: now.year,
-          groupId: groupId,
-        );
-    ref.invalidate(monthsProvider);
-    ref.invalidate(currentMonthProvider);
-    ref.invalidate(currentMonthExpensesProvider);
-    ref.invalidate(eventsProvider);
-    ref.invalidate(openEventsProvider);
-    ref.invalidate(selectedEventProvider);
-    ref.invalidate(selectedEventExpensesProvider);
-    return true;
-  } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyApiError(error,
-                fallback: 'Não foi possível criar o mês.'))),
-      );
-    }
-    return false;
-  }
 }
 
 /// Abre o formulário de despesa em tela cheia (Etapa 8 do roteiro de UX):
