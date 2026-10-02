@@ -21,11 +21,16 @@ class AppScaffold extends ConsumerWidget {
     required this.title,
     required this.child,
     this.floatingActionButton,
+    this.actions,
   });
 
   final String title;
   final Widget child;
   final Widget? floatingActionButton;
+  // Ações extras no fim da AppBar, depois do sino de notificações e do
+  // menu padrão — usado por telas que precisam de um botão próprio (ex.:
+  // "Limpar notificações").
+  final List<Widget>? actions;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -40,6 +45,7 @@ class AppScaffold extends ConsumerWidget {
         showUsers: showUsers,
         currentPath: currentPath,
         floatingActionButton: floatingActionButton,
+        actions: actions,
         child: child,
       );
     }
@@ -49,6 +55,7 @@ class AppScaffold extends ConsumerWidget {
       showUsers: showUsers,
       currentPath: currentPath,
       floatingActionButton: floatingActionButton,
+      actions: actions,
       child: child,
     );
   }
@@ -70,6 +77,7 @@ class _WideScaffold extends ConsumerWidget {
     required this.showUsers,
     required this.currentPath,
     required this.floatingActionButton,
+    required this.actions,
     required this.child,
   });
 
@@ -77,6 +85,7 @@ class _WideScaffold extends ConsumerWidget {
   final bool showUsers;
   final String currentPath;
   final Widget? floatingActionButton;
+  final List<Widget>? actions;
   final Widget child;
 
   @override
@@ -94,7 +103,10 @@ class _WideScaffold extends ConsumerWidget {
     final selectedIndex = routes.indexOf(currentPath);
 
     return Scaffold(
-      appBar: AppBar(title: Text(title), actions: const [_NotificationBell()]),
+      appBar: AppBar(
+        title: Text(title),
+        actions: [const _NotificationBell(), ...?actions],
+      ),
       drawer: NavigationDrawer(
         selectedIndex: selectedIndex < 0 ? null : selectedIndex,
         onDestinationSelected: (index) async {
@@ -174,6 +186,7 @@ class _NarrowScaffold extends ConsumerWidget {
     required this.showUsers,
     required this.currentPath,
     required this.floatingActionButton,
+    required this.actions,
     required this.child,
   });
 
@@ -181,6 +194,7 @@ class _NarrowScaffold extends ConsumerWidget {
   final bool showUsers;
   final String currentPath;
   final Widget? floatingActionButton;
+  final List<Widget>? actions;
   final Widget child;
 
   int _selectedIndex(String path) {
@@ -258,6 +272,7 @@ class _NarrowScaffold extends ConsumerWidget {
               const PopupMenuItem(value: 'logout', child: Text('Sair')),
             ],
           ),
+          ...?actions,
         ],
       ),
       bottomNavigationBar: NavigationBar(

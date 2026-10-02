@@ -34,4 +34,12 @@ class NotificationsRepository {
   Future<void> markAsRead(String id) async {
     await dio.put<void>('/notifications/$id/read');
   }
+
+  Future<void> delete(String id) async {
+    await dio.delete<void>('/notifications/$id');
+  }
+
+  Future<void> clearAll() async {
+    await dio.delete<void>('/notifications');
+  }
 }
