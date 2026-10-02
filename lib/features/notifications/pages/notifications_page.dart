@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_spacing.dart';
@@ -50,6 +51,13 @@ class NotificationsPage extends ConsumerWidget {
                       : const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 subtitle: Text(_formatDateTime(notification.createdAt)),
+                trailing: notification.pixKey == null
+                    ? null
+                    : IconButton(
+                        tooltip: 'Copiar PIX de ${notification.receiverName}',
+                        icon: const Icon(Icons.copy_outlined),
+                        onPressed: () => _copyPixKey(context, notification),
+                      ),
                 onTap: notification.isRead
                     ? null
                     : () => _markAsRead(ref, notification),
@@ -75,6 +83,22 @@ Future<void> _markAsRead(WidgetRef ref, NotificationModel notification) async {
   } catch (_) {
     // Falha ao marcar como lida não é crítica — a notificação continua
     // visível e a pessoa pode tentar de novo.
+  }
+}
+
+Future<void> _copyPixKey(
+    BuildContext context, NotificationModel notification) async {
+  final pixKey = notification.pixKey;
+  if (pixKey == null) {
+    return;
+  }
+  await Clipboard.setData(ClipboardData(text: pixKey));
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+          content: Text(
+              'Chave PIX de ${notification.receiverName ?? "destinatário"} copiada.')),
+    );
   }
 }
 

@@ -6,6 +6,8 @@ class NotificationModel {
     required this.message,
     required this.createdAt,
     required this.readAt,
+    required this.pixKey,
+    required this.receiverName,
   });
 
   final String id;
@@ -14,6 +16,8 @@ class NotificationModel {
   final String message;
   final DateTime createdAt;
   final DateTime? readAt;
+  final String? pixKey;
+  final String? receiverName;
 
   bool get isRead => readAt != null;
 
@@ -30,6 +34,8 @@ class NotificationModel {
       readAt: json['readAt'] == null
           ? null
           : DateTime.parse(json['readAt'] as String).toLocal(),
+      pixKey: json['pixKey'] as String?,
+      receiverName: json['receiverName'] as String?,
     );
   }
 }
