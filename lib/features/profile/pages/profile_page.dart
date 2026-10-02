@@ -222,11 +222,13 @@ Future<void> _showEditProfileDialog(
             children: [
               TextField(
                   controller: fullNameController,
+                  textCapitalization: TextCapitalization.words,
                   decoration:
                       const InputDecoration(labelText: 'Nome completo')),
               const SizedBox(height: 12),
               TextField(
                   controller: nicknameController,
+                  textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(labelText: 'Apelido')),
               const SizedBox(height: 12),
               TextField(

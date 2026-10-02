@@ -5,6 +5,7 @@ import '../../auth/services/auth_repository.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/validators.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
@@ -27,9 +28,9 @@ class UsersPage extends ConsumerWidget {
     return AppScaffold(
       title: 'Usuarios',
       floatingActionButton: isAdmin
-          ? FloatingActionButton(
+          ? AutoCollapsingFab(
+              label: 'Novo usuário',
               onPressed: () => _showUserDialog(context, ref),
-              child: const Icon(Icons.add),
             )
           : null,
       child: usersAsync.when(
@@ -193,12 +194,14 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
                   children: [
                     TextField(
                       controller: fullNameController,
+                      textCapitalization: TextCapitalization.words,
                       decoration:
                           const InputDecoration(labelText: 'Nome completo'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: nicknameController,
+                      textCapitalization: TextCapitalization.words,
                       decoration: const InputDecoration(labelText: 'Apelido'),
                     ),
                     const SizedBox(height: 12),

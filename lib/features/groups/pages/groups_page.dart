@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/environment.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/person_avatar.dart';
@@ -27,9 +28,9 @@ class GroupsPage extends ConsumerWidget {
 
     return AppScaffold(
       title: 'Grupos',
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: AutoCollapsingFab(
+        label: 'Novo grupo',
         onPressed: () => _showCreateGroupDialog(context, ref),
-        child: const Icon(Icons.add),
       ),
       child: ListView(
         padding: const EdgeInsets.all(16),
@@ -108,6 +109,7 @@ class GroupsPage extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _GroupReceiverSelector(group: group),
+                      _GroupAutoSettlementSelector(group: group),
                       _GroupMembers(group: group),
                     ],
                   ),
@@ -204,6 +206,76 @@ Future<void> _setGroupReceiver(
         SnackBar(
             content: Text(friendlyApiError(error,
                 fallback: 'Não foi possível eleger o recebedor.'))),
+      );
+    }
+  }
+}
+
+/// Admin-only: dia do mês em que o grupo abre automaticamente pra
+/// pagamento o(s) evento(s) mensal(is) ainda abertos e já dispara o
+/// alerta de cobrança — os mesmos dois passos que o admin faria na mão.
+/// O fechamento definitivo continua manual (depende de todo mundo pagar).
+class _GroupAutoSettlementSelector extends ConsumerWidget {
+  const _GroupAutoSettlementSelector({required this.group});
+
+  final GroupModel group;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isGroupAdmin =
+        ref.watch(groupRoleProvider(group.id)).valueOrNull == 'ADMIN';
+    if (!isGroupAdmin) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<int?>(
+            key: ValueKey('auto-settlement-${group.id}-${group.autoSettlementDay}'),
+            initialValue: group.autoSettlementDay,
+            decoration: const InputDecoration(
+                labelText: 'Fechamento automático (dia do mês)'),
+            items: [
+              const DropdownMenuItem<int?>(
+                  value: null, child: Text('Desativado')),
+              ...List.generate(31, (index) => index + 1).map((day) =>
+                  DropdownMenuItem<int?>(value: day, child: Text('Dia $day'))),
+            ],
+            onChanged: (value) =>
+                _setAutoSettlementDay(context, ref, group.id, value),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'No dia escolhido, o(s) evento(s) mensal(is) ainda aberto(s) '
+            'deste grupo são abertos pra pagamento automaticamente e todo '
+            'mundo recebe o aviso de cobrança. O fechamento definitivo '
+            'continua manual, só depois que todos pagarem.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _setAutoSettlementDay(
+  BuildContext context,
+  WidgetRef ref,
+  String groupId,
+  int? day,
+) async {
+  try {
+    await ref.read(groupsRepositoryProvider).setAutoSettlementDay(groupId, day: day);
+    ref.invalidate(groupsProvider);
+    ref.invalidate(selectedGroupProvider);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível salvar o fechamento automático.'))),
       );
     }
   }
@@ -433,9 +505,11 @@ Future<void> _showEditGroupDialog(
         children: [
           TextField(
               controller: nameController,
+              textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(labelText: 'Nome')),
           TextField(
               controller: descriptionController,
+              textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(labelText: 'Descricao')),
         ],
       ),
@@ -497,9 +571,11 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
         children: [
           TextField(
               controller: nameController,
+              textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(labelText: 'Nome')),
           TextField(
               controller: descriptionController,
+              textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(labelText: 'Descricao')),
         ],
       ),

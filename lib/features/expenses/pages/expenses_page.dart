@@ -6,6 +6,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/widgets/amount_field.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
@@ -50,9 +51,9 @@ class ExpensesPage extends ConsumerWidget {
 
     return AppScaffold(
       title: 'Despesas',
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: AutoCollapsingFab(
+        label: 'Nova despesa',
         onPressed: () => _openNewExpenseFlow(context, ref),
-        child: const Icon(Icons.add),
       ),
       child: eventAsync.when(
         data: (event) {
@@ -842,6 +843,7 @@ Future<void> _openExpenseForm(
                     const SizedBox(height: AppSpacing.lg),
                     TextField(
                       controller: descriptionController,
+                      textCapitalization: TextCapitalization.sentences,
                       decoration: const InputDecoration(labelText: 'Descricao'),
                     ),
                     const SizedBox(height: AppSpacing.md),
@@ -950,7 +952,31 @@ Future<void> _openExpenseForm(
                       const SizedBox(height: AppSpacing.sm),
                       if (selectedPayerIds.isEmpty)
                         const Text('Selecione quem pagou.')
-                      else
+                      else ...[
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: dialogAmount == null
+                                ? null
+                                : () => setState(() {
+                                      final shares = _splitAmountEqually(
+                                          dialogAmount,
+                                          selectedPayerIds.length);
+                                      var shareIndex = 0;
+                                      for (final user in users) {
+                                        if (!selectedPayerIds
+                                            .contains(user.id)) {
+                                          continue;
+                                        }
+                                        payerControllers[user.id]!.text =
+                                            shares[shareIndex];
+                                        shareIndex++;
+                                      }
+                                    }),
+                            icon: const Icon(Icons.balance),
+                            label: const Text('Dividir igualmente'),
+                          ),
+                        ),
                         ...users
                             .where(
                                 (user) => selectedPayerIds.contains(user.id))
@@ -965,6 +991,7 @@ Future<void> _openExpenseForm(
                             ),
                           ),
                         ),
+                      ],
                       const SizedBox(height: AppSpacing.xs),
                       TextButton.icon(
                         onPressed: () =>
@@ -1202,6 +1229,8 @@ Future<void> _openExpenseForm(
                                   TextField(
                                     controller:
                                         shareDescriptionControllers[user.id],
+                                    textCapitalization:
+                                        TextCapitalization.sentences,
                                     decoration: const InputDecoration(
                                       labelText: 'Historico da cota extra',
                                       hintText: 'Ex.: Rafa e Gertrudes',
@@ -1493,6 +1522,7 @@ Future<String?> _showCreateCategoryDialog(
         title: const Text('Novo tipo de despesa'),
         content: TextField(
           controller: controller,
+          textCapitalization: TextCapitalization.words,
           decoration: const InputDecoration(labelText: 'Nome'),
           autofocus: true,
         ),
@@ -1638,6 +1668,25 @@ Map<String, double> _readPayerAmounts(
     }
   }
   return result;
+}
+
+/// Divide [total] em [count] partes iguais, em centavos, pro botão
+/// "Dividir igualmente" dos pagadores — os centavos que sobram da divisão
+/// (ex.: R\$ 100,00 ÷ 3 = R\$ 33,33 com 1 centavo sobrando) vão pros
+/// primeiros pagadores da lista, pra soma bater exatamente com o total
+/// (mesma regra de arredondamento que a validação de "soma dos pagadores"
+/// exige antes de salvar).
+List<String> _splitAmountEqually(double total, int count) {
+  if (count <= 0) {
+    return const [];
+  }
+  final totalCents = (total * 100).round();
+  final baseCents = totalCents ~/ count;
+  final remainder = totalCents % count;
+  return List.generate(count, (index) {
+    final cents = baseCents + (index < remainder ? 1 : 0);
+    return formatCurrencyBRL(cents / 100).replaceFirst('R\$ ', '');
+  });
 }
 
 int _shareCountFor(

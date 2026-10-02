@@ -19,6 +19,10 @@ final openEventsProvider = FutureProvider<List<EventModel>>((ref) async {
   return events.where((event) => event.status == 'OPEN').toList();
 });
 
+/// Filtro da tela de Eventos: quando true, esconde os eventos já
+/// fechados da lista (continuam existindo, só não aparecem ali).
+final hideClosedEventsProvider = StateProvider<bool>((ref) => false);
+
 final selectedEventIdProvider = StateProvider<String?>((ref) => null);
 
 final selectedEventProvider = FutureProvider<EventModel?>((ref) async {

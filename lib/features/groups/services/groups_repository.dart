@@ -150,4 +150,16 @@ class GroupsRepository {
     );
     return GroupModel.fromJson(response.data!);
   }
+
+  /// Dia do mês (1-31) em que o grupo abre automaticamente pra pagamento
+  /// o(s) evento(s) mensal(is) ainda abertos e já manda o alerta de
+  /// cobrança (null desativa). Meses mais curtos que o dia escolhido
+  /// disparam no último dia do mês.
+  Future<GroupModel> setAutoSettlementDay(String groupId, {int? day}) async {
+    final response = await dio.put<Map<String, dynamic>>(
+      '/groups/$groupId/auto-settlement-day',
+      data: {'day': day},
+    );
+    return GroupModel.fromJson(response.data!);
+  }
 }

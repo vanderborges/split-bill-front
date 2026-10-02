@@ -61,6 +61,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   TextFormField(
                     controller: fullNameController,
                     textInputAction: TextInputAction.next,
+                    textCapitalization: TextCapitalization.words,
                     decoration:
                         const InputDecoration(labelText: 'Nome completo'),
                     validator: _required,
@@ -69,6 +70,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   TextFormField(
                     controller: nicknameController,
                     textInputAction: TextInputAction.next,
+                    textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(labelText: 'Apelido'),
                     validator: _required,
                   ),

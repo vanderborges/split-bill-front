@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
@@ -26,6 +27,7 @@ class EventsPage extends ConsumerWidget {
     final eventsAsync = ref.watch(eventsProvider);
     final groupsAsync = ref.watch(groupsProvider);
     final selectedGroupId = ref.watch(selectedGroupIdProvider);
+    final hideClosed = ref.watch(hideClosedEventsProvider);
 
     if (ref.read(pendingAutoOpenEventProvider)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -42,9 +44,9 @@ class EventsPage extends ConsumerWidget {
 
     return AppScaffold(
       title: 'Eventos',
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: AutoCollapsingFab(
+        label: 'Novo evento',
         onPressed: () => _showCreateEventDialog(context, ref),
-        child: const Icon(Icons.add),
       ),
       child: Column(
         children: [
@@ -87,14 +89,31 @@ class EventsPage extends ConsumerWidget {
               ),
             ),
           ),
+          CheckboxListTile(
+            value: hideClosed,
+            onChanged: (value) =>
+                ref.read(hideClosedEventsProvider.notifier).state =
+                    value ?? false,
+            controlAffinity: ListTileControlAffinity.leading,
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            title: const Text('Ocultar fechados'),
+          ),
           Expanded(
             child: eventsAsync.when(
-              data: (events) {
+              data: (allEvents) {
+                final events = hideClosed
+                    ? allEvents.where((event) => !event.isClosed).toList()
+                    : allEvents;
                 if (events.isEmpty) {
-                  return const EmptyState(
+                  return EmptyState(
                     icon: Icons.event_outlined,
-                    title: 'Nenhum evento cadastrado.',
-                    message: 'Toque em "+" para criar um mês ou evento avulso.',
+                    title: allEvents.isEmpty
+                        ? 'Nenhum evento cadastrado.'
+                        : 'Nenhum evento aberto.',
+                    message: allEvents.isEmpty
+                        ? 'Toque em "+" para criar um mês ou evento avulso.'
+                        : 'Desmarque "Ocultar fechados" pra ver todos.',
                   );
                 }
                 final groupsById = {
@@ -305,6 +324,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                   const SizedBox(height: AppSpacing.md),
                   TextField(
                     controller: nameController,
+                    textCapitalization: TextCapitalization.sentences,
                     decoration: InputDecoration(
                       labelText: type == 'MONTHLY' ? 'Nome (opcional)' : 'Nome',
                       hintText: type == 'MONTHLY'
@@ -316,6 +336,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                   const SizedBox(height: AppSpacing.md),
                   TextField(
                     controller: descriptionController,
+                    textCapitalization: TextCapitalization.sentences,
                     decoration:
                         const InputDecoration(labelText: 'Descrição (opcional)'),
                   ),

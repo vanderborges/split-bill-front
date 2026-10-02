@@ -7,6 +7,7 @@ class GroupModel {
     required this.active,
     required this.receiverUserId,
     required this.receiverNickname,
+    required this.autoSettlementDay,
   });
 
   final String id;
@@ -16,6 +17,7 @@ class GroupModel {
   final bool active;
   final String? receiverUserId;
   final String? receiverNickname;
+  final int? autoSettlementDay;
 
   factory GroupModel.fromJson(Map<String, dynamic> json) {
     return GroupModel(
@@ -26,6 +28,7 @@ class GroupModel {
       active: json['active'] as bool,
       receiverUserId: json['receiverUserId'] as String?,
       receiverNickname: json['receiverNickname'] as String?,
+      autoSettlementDay: json['autoSettlementDay'] as int?,
     );
   }
 }
