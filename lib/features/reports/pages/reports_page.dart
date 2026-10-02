@@ -185,13 +185,6 @@ class ReportsPage extends ConsumerWidget {
                       MoneyText(report.totalExpenses),
                     ],
                   ),
-                  if (isGroupAdmin && report.eventId != null) ...[
-                    const SizedBox(height: 12),
-                    _PaymentSuggestions(
-                      key: ValueKey('suggestions-${report.eventId}'),
-                      eventId: report.eventId!,
-                    ),
-                  ],
                   const SizedBox(height: 16),
                   settlementsAsync.when(
                     data: (settlements) => _ReportTable(
@@ -199,6 +192,7 @@ class ReportsPage extends ConsumerWidget {
                       balances: report.balances,
                       settlements: settlements,
                       canUpdateSettlements: isGroupAdmin,
+                      eventId: report.eventId,
                     ),
                     loading: () => const Padding(
                       padding: EdgeInsets.all(AppSpacing.xl),
@@ -227,106 +221,19 @@ class ReportsPage extends ConsumerWidget {
   }
 }
 
-/// Sugestão de pagamentos sob demanda ("Fulano paga R\$X pra Beltrano"),
-/// admin-only — não muda nada no cálculo de saldo/acerto, é só uma
-/// orientação visual de como fechar as contas com o menor número de
-/// transferências (ou tudo direto pro recebedor eleito).
-class _PaymentSuggestions extends ConsumerStatefulWidget {
-  const _PaymentSuggestions({super.key, required this.eventId});
-
-  final String eventId;
-
-  @override
-  ConsumerState<_PaymentSuggestions> createState() =>
-      _PaymentSuggestionsState();
-}
-
-class _PaymentSuggestionsState extends ConsumerState<_PaymentSuggestions> {
-  bool _expanded = false;
-  Future<List<PaymentSuggestionModel>>? _future;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextButton.icon(
-          onPressed: () => setState(() {
-            _expanded = !_expanded;
-            if (_expanded) {
-              _future ??= ref
-                  .read(reportsRepositoryProvider)
-                  .getPaymentSuggestions(widget.eventId);
-            }
-          }),
-          icon: Icon(_expanded ? Icons.expand_less : Icons.lightbulb_outline),
-          label: Text(_expanded
-              ? 'Ocultar sugestão de pagamentos'
-              : 'Sugerir pagamentos'),
-        ),
-        if (_expanded)
-          FutureBuilder<List<PaymentSuggestionModel>>(
-            future: _future,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Padding(
-                  padding: EdgeInsets.all(AppSpacing.md),
-                  child: LinearProgressIndicator(),
-                );
-              }
-              if (snapshot.hasError) {
-                return Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: Text(friendlyApiError(snapshot.error!,
-                      fallback: 'Não foi possível calcular a sugestão.')),
-                );
-              }
-              final suggestions = snapshot.data ?? [];
-              if (suggestions.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.only(top: AppSpacing.sm),
-                  child: Text('Nada a sugerir — todo mundo já está quitado.'),
-                );
-              }
-              return Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.sm),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: suggestions
-                      .map((suggestion) => Padding(
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 4),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                      '${suggestion.fromNickname} paga ${suggestion.toNickname}'),
-                                ),
-                                MoneyText(suggestion.amount),
-                              ],
-                            ),
-                          ))
-                      .toList(),
-                ),
-              );
-            },
-          ),
-      ],
-    );
-  }
-}
-
 class _ReportTable extends ConsumerStatefulWidget {
   const _ReportTable({
     super.key,
     required this.balances,
     required this.settlements,
     required this.canUpdateSettlements,
+    required this.eventId,
   });
 
   final List<MonthlyBalanceModel> balances;
   final List<EventSettlementModel> settlements;
   final bool canUpdateSettlements;
+  final String? eventId;
 
   @override
   ConsumerState<_ReportTable> createState() => _ReportTableState();
@@ -335,6 +242,12 @@ class _ReportTable extends ConsumerStatefulWidget {
 class _ReportTableState extends ConsumerState<_ReportTable> {
   final Set<String> expandedUserIds = {};
   final Map<String, Future<List<BalanceExpenseDetailModel>>> detailsByUser = {};
+  Future<List<PaymentSuggestionModel>>? _suggestionsFuture;
+
+  Future<List<PaymentSuggestionModel>> _suggestions(String eventId) {
+    return _suggestionsFuture ??=
+        ref.read(reportsRepositoryProvider).getPaymentSuggestions(eventId);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -355,6 +268,31 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
         return first.nickname.compareTo(second.nickname);
       });
 
+    final eventId = widget.eventId;
+    // Sugestão de "quem paga quanto pra quem" (admin-only) — não muda nada
+    // no cálculo de saldo/acerto, é só uma orientação visual de como
+    // fechar as contas com o menor número de transferências (ou tudo
+    // direto pro recebedor eleito). Aparece por baixo de cada pessoa
+    // envolvida, em vez de uma lista separada.
+    if (!widget.canUpdateSettlements || eventId == null) {
+      return _buildRows(
+          context, sortedBalances, settlementsByUser, currentUserId, semantic, const []);
+    }
+    return FutureBuilder<List<PaymentSuggestionModel>>(
+      future: _suggestions(eventId),
+      builder: (context, snapshot) => _buildRows(context, sortedBalances,
+          settlementsByUser, currentUserId, semantic, snapshot.data ?? const []),
+    );
+  }
+
+  Widget _buildRows(
+    BuildContext context,
+    List<MonthlyBalanceModel> sortedBalances,
+    Map<String, EventSettlementModel> settlementsByUser,
+    String? currentUserId,
+    dynamic semantic,
+    List<PaymentSuggestionModel> suggestions,
+  ) {
     return Column(
       children: sortedBalances.map((balance) {
         final settlement = settlementsByUser[balance.userId];
@@ -424,6 +362,19 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                 onChanged: (value) =>
                     _updateSettlement(context, ref, settlement!, value),
               );
+              final mySuggestions = suggestions
+                  .where((suggestion) =>
+                      suggestion.fromUserId == balance.userId ||
+                      suggestion.toUserId == balance.userId)
+                  .toList();
+              final suggestionHint = mySuggestions.isEmpty
+                  ? null
+                  : _SuggestionHint(
+                      isCurrentUser: isCurrentUser,
+                      nickname: balance.nickname,
+                      userId: balance.userId,
+                      suggestions: mySuggestions,
+                    );
 
               if (compact) {
                 return Column(
@@ -443,6 +394,7 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                         status,
                       ],
                     ),
+                    if (suggestionHint != null) suggestionHint,
                     if (expanded) _BalanceDetails(details: _details(balance)),
                   ],
                 );
@@ -469,6 +421,11 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                       ),
                     ],
                   ),
+                  if (suggestionHint != null)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 48, top: 4),
+                      child: suggestionHint,
+                    ),
                   if (expanded)
                     Padding(
                       padding: const EdgeInsets.only(left: 48, top: 8),
@@ -503,6 +460,59 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
             eventId: eventId,
             userId: balance.userId,
           ),
+    );
+  }
+}
+
+/// Sugestão de pagamento ("você deve pagar/receber de Fulano") exibida
+/// logo abaixo da pessoa a que se refere, em vez de uma lista separada —
+/// cada pessoa pode ter mais de uma sugestão quando não há recebedor
+/// eleito pro grupo (o acerto minimiza transferências, mas pode envolver
+/// mais de uma contraparte).
+class _SuggestionHint extends StatelessWidget {
+  const _SuggestionHint({
+    required this.isCurrentUser,
+    required this.nickname,
+    required this.userId,
+    required this.suggestions,
+  });
+
+  final bool isCurrentUser;
+  final String nickname;
+  final String userId;
+  final List<PaymentSuggestionModel> suggestions;
+
+  @override
+  Widget build(BuildContext context) {
+    final subject = isCurrentUser ? 'Você' : nickname;
+    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
+          fontStyle: FontStyle.italic,
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: suggestions.map((suggestion) {
+        final isPaying = suggestion.fromUserId == userId;
+        final otherNickname =
+            isPaying ? suggestion.toNickname : suggestion.fromNickname;
+        final verb = isPaying ? 'deve pagar' : 'deve receber';
+        final preposition = isPaying ? 'para' : 'de';
+        return Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Row(
+            children: [
+              Icon(Icons.lightbulb_outline,
+                  size: 14, color: style?.color?.withValues(alpha: 0.7)),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  '$subject $verb ${formatCurrencyBRL(suggestion.amount)} $preposition $otherNickname',
+                  style: style,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }
@@ -581,7 +591,9 @@ class _BalanceDetails extends StatelessWidget {
             ),
           );
         }
-        final items = snapshot.data ?? [];
+        final items = [...snapshot.data ?? []]
+          ..sort((first, second) =>
+              second.expenseDate.compareTo(first.expenseDate));
         if (items.isEmpty) {
           return Padding(
             padding: const EdgeInsets.only(top: 8),

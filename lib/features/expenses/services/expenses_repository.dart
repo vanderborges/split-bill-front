@@ -71,41 +71,33 @@ class ExpensesRepository {
     required Map<String, String> participantShareDescriptions,
     required Map<String, double> payerAmounts,
   }) async {
-    try {
-      final response = await dio.post<Map<String, dynamic>>(
-        '/expenses',
-        data: _toRequestBody(
-          description: description,
-          amount: amount,
-          expenseDate: expenseDate,
-          category: category,
-          monthId: monthId,
-          eventId: eventId,
-          installments: installments,
-          subscription: subscription,
-          participantIds: participantIds,
-          participantShareCounts: participantShareCounts,
-          participantShareDescriptions: participantShareDescriptions,
-          payerAmounts: payerAmounts,
-        ),
-      );
-      return ExpenseModel.fromJson(response.data!);
-    } on DioException catch (error) {
-      throw Exception(_errorMessage(error));
-    }
+    final response = await dio.post<Map<String, dynamic>>(
+      '/expenses',
+      data: _toRequestBody(
+        description: description,
+        amount: amount,
+        expenseDate: expenseDate,
+        category: category,
+        monthId: monthId,
+        eventId: eventId,
+        installments: installments,
+        subscription: subscription,
+        participantIds: participantIds,
+        participantShareCounts: participantShareCounts,
+        participantShareDescriptions: participantShareDescriptions,
+        payerAmounts: payerAmounts,
+      ),
+    );
+    return ExpenseModel.fromJson(response.data!);
   }
 
   /// Finaliza uma assinatura a partir do mês corrente — admin ou quem
   /// cadastrou. A despesa deste mês continua existindo, só para de gerar
   /// a próxima no mês seguinte.
   Future<ExpenseModel> cancelSubscription(String id) async {
-    try {
-      final response =
-          await dio.put<Map<String, dynamic>>('/expenses/$id/cancel-subscription');
-      return ExpenseModel.fromJson(response.data!);
-    } on DioException catch (error) {
-      throw Exception(_errorMessage(error));
-    }
+    final response =
+        await dio.put<Map<String, dynamic>>('/expenses/$id/cancel-subscription');
+    return ExpenseModel.fromJson(response.data!);
   }
 
   Future<ExpenseModel> update({
@@ -121,34 +113,26 @@ class ExpensesRepository {
     required Map<String, String> participantShareDescriptions,
     required Map<String, double> payerAmounts,
   }) async {
-    try {
-      final response = await dio.put<Map<String, dynamic>>(
-        '/expenses/$id',
-        data: _toRequestBody(
-          description: description,
-          amount: amount,
-          expenseDate: expenseDate,
-          category: category,
-          monthId: monthId,
-          eventId: eventId,
-          participantIds: participantIds,
-          participantShareCounts: participantShareCounts,
-          participantShareDescriptions: participantShareDescriptions,
-          payerAmounts: payerAmounts,
-        ),
-      );
-      return ExpenseModel.fromJson(response.data!);
-    } on DioException catch (error) {
-      throw Exception(_errorMessage(error));
-    }
+    final response = await dio.put<Map<String, dynamic>>(
+      '/expenses/$id',
+      data: _toRequestBody(
+        description: description,
+        amount: amount,
+        expenseDate: expenseDate,
+        category: category,
+        monthId: monthId,
+        eventId: eventId,
+        participantIds: participantIds,
+        participantShareCounts: participantShareCounts,
+        participantShareDescriptions: participantShareDescriptions,
+        payerAmounts: payerAmounts,
+      ),
+    );
+    return ExpenseModel.fromJson(response.data!);
   }
 
   Future<void> delete(String id) async {
-    try {
-      await dio.delete<void>('/expenses/$id');
-    } on DioException catch (error) {
-      throw Exception(_errorMessage(error));
-    }
+    await dio.delete<void>('/expenses/$id');
   }
 
   Map<String, dynamic> _toRequestBody({
@@ -193,16 +177,5 @@ class ExpensesRepository {
       'installments': installments,
       'subscription': subscription,
     };
-  }
-
-  String _errorMessage(DioException error) {
-    final data = error.response?.data;
-    if (data is Map<String, dynamic>) {
-      final message = data['message'];
-      if (message is String && message.isNotEmpty) {
-        return message;
-      }
-    }
-    return error.message ?? 'Erro ao comunicar com a API';
   }
 }

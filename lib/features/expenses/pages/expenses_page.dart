@@ -195,7 +195,8 @@ class ExpensesPage extends ConsumerWidget {
                               );
                               return;
                             }
-                            final users = await _loadEventUsers(ref, event);
+                            final users =
+                                await _loadEventUsers(ref, event.groupId);
                             final categories =
                                 await _loadCategoryNames(ref);
                             if (context.mounted) {
@@ -376,27 +377,15 @@ Future<bool> _confirmCancelSubscription(
 /// formulário — usado pelo FAB desta tela, pelo botão de estado vazio e
 /// pelo CTA "Nova despesa" da Home (via [pendingAutoOpenExpenseProvider]).
 ///
+/// Usa o grupo/evento já selecionado (o mesmo que aparece na tela de
+/// Despesas) em vez de perguntar de novo em qual grupo lançar — perguntar
+/// de novo era redundante e confuso quando a pessoa já estava vendo o
+/// evento certo na tela e só queria tocar em "+".
+///
 /// Sem evento aberto no grupo, pergunta se quer criar um evento (em vez de
 /// criar um mês em silêncio) — "Sim" leva pra tela de criação de evento,
 /// "Não" só avisa que não dá pra lançar despesa sem evento aberto.
 Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
-  final groups = await ref.read(groupsProvider.future);
-  if (!context.mounted) {
-    return;
-  }
-  if (groups.length > 1) {
-    final pickedGroupId = await _pickGroup(context, groups);
-    if (pickedGroupId == null || !context.mounted) {
-      return;
-    }
-    if (pickedGroupId != ref.read(selectedGroupIdProvider)) {
-      ref.read(selectedGroupIdProvider.notifier).state = pickedGroupId;
-      ref.read(selectedEventIdProvider.notifier).state = null;
-      ref.invalidate(eventsProvider);
-      ref.invalidate(selectedEventProvider);
-    }
-  }
-
   final event = await ref.read(selectedEventProvider.future);
   if (!context.mounted) {
     return;
@@ -420,7 +409,7 @@ Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
     return;
   }
 
-  final users = await _loadEventUsers(ref, event);
+  final users = await _loadEventUsers(ref, event.groupId);
   final categories = await _loadCategoryNames(ref);
   if (context.mounted) {
     await _openExpenseForm(context, ref, event, users, categories);
@@ -443,24 +432,6 @@ Future<bool?> _confirmCreateEvent(BuildContext context) {
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Sim, criar evento')),
       ],
-    ),
-  );
-}
-
-/// Pergunta em qual grupo cadastrar a despesa quando o usuário está em
-/// mais de um — evita lançar no grupo errado por engano. Retorna null se
-/// cancelado (toque fora do popup).
-Future<String?> _pickGroup(BuildContext context, List<dynamic> groups) {
-  return showDialog<String>(
-    context: context,
-    builder: (context) => SimpleDialog(
-      title: const Text('Em qual grupo?'),
-      children: groups
-          .map((group) => SimpleDialogOption(
-                onPressed: () => Navigator.of(context).pop(group.id as String),
-                child: Text(group.name as String),
-              ))
-          .toList(),
     ),
   );
 }
@@ -498,49 +469,83 @@ Future<void> _openExpenseForm(
   var selectedCategory = categoryOptions.contains(expense?.category)
       ? expense!.category
       : categoryOptions.first;
-  final selectedParticipants = expense == null
-      ? users.map((user) => user.id).toSet()
-      : expense.participants.map((participant) => participant.userId).toSet();
-  final shareCountControllers = {
-    for (final user in users)
-      user.id: TextEditingController(
-        text: _initialShareCount(user.id, expense),
-      ),
-  };
-  final shareDescriptionControllers = {
-    for (final user in users)
-      user.id: TextEditingController(
-        text: _initialShareDescription(user.id, expense),
-      ),
-  };
+  // Grupo/evento de destino da despesa: pré-selecionados com o que já
+  // estava na tela (evento sendo navegado), mas só ficam editáveis ao
+  // criar uma despesa nova — dá pra confirmar ou corrigir antes de salvar,
+  // em vez de confiar só no contexto de navegação (que pode ser ambíguo
+  // vindo da Home, por exemplo). `groupsProvider` já costuma estar em
+  // cache (a própria tela de Despesas o observa), então ler de novo aqui
+  // não dispara outra chamada de rede na maioria das vezes.
+  final groups = await ref.read(groupsProvider.future);
+  var selectedGroupId = event.groupId;
+  EventModel? currentEvent = event;
+  var currentUsers = users;
+  var openEventsForGroup =
+      (await ref.read(eventsRepositoryProvider).list(groupId: event.groupId))
+          .where((item) => item.status == 'OPEN')
+          .toList();
+  if (openEventsForGroup.every((item) => item.id != event.id)) {
+    openEventsForGroup = [...openEventsForGroup, event];
+  }
+
+  late Set<String> selectedParticipants;
+  late Map<String, TextEditingController> shareCountControllers;
+  late Map<String, TextEditingController> shareDescriptionControllers;
+  late Set<String> selectedPayerIds;
+  late Map<String, TextEditingController> payerControllers;
+  late String singlePayerId;
+  final currentUserId = ref.read(currentUserProvider).valueOrNull?.id;
+
+  // (Re)monta todo o estado que depende de quem pode participar/pagar —
+  // chamado na montagem inicial e de novo sempre que o grupo muda, já que
+  // trocar de grupo troca o conjunto de integrantes disponíveis.
+  void initUserDependentState(List<UserOptionModel> usersForForm) {
+    selectedParticipants = expense == null
+        ? usersForForm.map((user) => user.id).toSet()
+        : expense.participants.map((participant) => participant.userId).toSet();
+    shareCountControllers = {
+      for (final user in usersForForm)
+        user.id: TextEditingController(
+          text: _initialShareCount(user.id, expense),
+        ),
+    };
+    shareDescriptionControllers = {
+      for (final user in usersForForm)
+        user.id: TextEditingController(
+          text: _initialShareDescription(user.id, expense),
+        ),
+    };
+    final defaultPayerId = usersForForm.any((user) => user.id == currentUserId)
+        ? currentUserId!
+        : usersForForm.first.id;
+    singlePayerId = expense == null || expense.payers.isEmpty
+        ? defaultPayerId
+        : expense.payers.first.userId;
+    payerControllers = {
+      for (final user in usersForForm)
+        user.id: TextEditingController(
+          text: _initialPayerAmount(user.id, expense),
+        ),
+    };
+    // Ao editar, só entra pré-selecionado quem de fato pagou algo (> 0) —
+    // não faz sentido mostrar um campo de valor para cada integrante do
+    // grupo só porque ele existe, como acontecia antes.
+    selectedPayerIds = <String>{
+      if (expense != null)
+        ...expense.payers
+            .where((payer) => payer.amount > 0)
+            .map((payer) => payer.userId),
+    };
+  }
+
+  initUserDependentState(currentUsers);
+
   var splitPaymentByUser = (expense?.payers.length ?? 0) > 1;
   final installmentsController = TextEditingController(text: '1');
   var installments = 1;
   var showInstallments = false;
   var isSubscription = false;
   var isSaving = false;
-  final currentUserId = ref.read(currentUserProvider).valueOrNull?.id;
-  final defaultPayerId = users.any((user) => user.id == currentUserId)
-      ? currentUserId!
-      : users.first.id;
-  var singlePayerId = expense == null || expense.payers.isEmpty
-      ? defaultPayerId
-      : expense.payers.first.userId;
-  final payerControllers = {
-    for (final user in users)
-      user.id: TextEditingController(
-        text: _initialPayerAmount(user.id, expense),
-      ),
-  };
-  // Ao editar, só entra pré-selecionado quem de fato pagou algo (> 0) — não
-  // faz sentido mostrar um campo de valor para cada integrante do grupo só
-  // porque ele existe, como acontecia antes.
-  final selectedPayerIds = <String>{
-    if (expense != null)
-      ...expense.payers
-          .where((payer) => payer.amount > 0)
-          .map((payer) => payer.userId),
-  };
 
   void disposeControllers() {
     descriptionController.dispose();
@@ -549,6 +554,11 @@ Future<void> _openExpenseForm(
     _disposeControllers(payerControllers.values);
     _disposeControllers(shareCountControllers.values);
     _disposeControllers(shareDescriptionControllers.values);
+  }
+
+  if (!context.mounted) {
+    disposeControllers();
+    return;
   }
 
   final saved = await Navigator.of(context).push<bool>(
@@ -562,10 +572,59 @@ Future<void> _openExpenseForm(
               ? null
               : dialogAmount / totalShares;
 
+          // Troca o grupo de destino (só no modo "nova despesa"): busca os
+          // eventos abertos e os integrantes do novo grupo, e reconstrói
+          // todo o estado de participantes/pagadores pro novo conjunto de
+          // pessoas — o que estava marcado pro grupo anterior não faz
+          // sentido mais.
+          Future<void> handleGroupChange(String newGroupId) async {
+            if (newGroupId == selectedGroupId) {
+              return;
+            }
+            final newEvents = await ref
+                .read(eventsRepositoryProvider)
+                .list(groupId: newGroupId);
+            final newOpenEvents =
+                newEvents.where((item) => item.status == 'OPEN').toList();
+            final newUsers = await _loadEventUsers(ref, newGroupId);
+            // Descarta os controllers do grupo anterior antes de criar os
+            // novos pro conjunto de pessoas do novo grupo — sem isso, cada
+            // troca de grupo deixava os TextEditingControllers antigos sem
+            // dispose, vazando recursos.
+            _disposeControllers(payerControllers.values);
+            _disposeControllers(shareCountControllers.values);
+            _disposeControllers(shareDescriptionControllers.values);
+            setState(() {
+              selectedGroupId = newGroupId;
+              openEventsForGroup = newOpenEvents;
+              currentEvent =
+                  newOpenEvents.isEmpty ? null : newOpenEvents.first;
+              currentUsers = newUsers;
+              initUserDependentState(currentUsers);
+            });
+          }
+
+          void handleEventChange(String newEventId) {
+            final found = openEventsForGroup
+                .where((item) => item.id == newEventId);
+            if (found.isEmpty) {
+              return;
+            }
+            setState(() => currentEvent = found.first);
+          }
+
           // Valida e salva sem fechar a tela: só sai (pop) em caso de
           // sucesso, pra não perder tudo que foi digitado quando algo dá
           // errado (validação local ou erro do backend).
           Future<void> handleSave() async {
+            final targetEvent = currentEvent;
+            if (targetEvent == null) {
+              ScaffoldMessenger.of(routeContext).showSnackBar(
+                const SnackBar(
+                    content: Text('Selecione um evento aberto para continuar.')),
+              );
+              return;
+            }
             final amount = parseAmountFieldText(amountController.text);
             if (amount == null) {
               ScaffoldMessenger.of(routeContext).showSnackBar(
@@ -663,8 +722,8 @@ Future<void> _openExpenseForm(
                       amount: amount,
                       expenseDate: selectedExpenseDate,
                       category: selectedCategory,
-                      monthId: event.monthId,
-                      eventId: event.id,
+                      monthId: targetEvent.monthId,
+                      eventId: targetEvent.id,
                       participantIds: selectedParticipants.toList(),
                       participantShareCounts: participantShareCounts,
                       participantShareDescriptions:
@@ -680,8 +739,8 @@ Future<void> _openExpenseForm(
                       amount: amount,
                       expenseDate: selectedExpenseDate,
                       category: selectedCategory,
-                      monthId: event.monthId,
-                      eventId: event.id,
+                      monthId: targetEvent.monthId,
+                      eventId: targetEvent.id,
                       participantIds: selectedParticipants.toList(),
                       participantShareCounts: participantShareCounts,
                       participantShareDescriptions:
@@ -715,20 +774,66 @@ Future<void> _openExpenseForm(
             ),
             body: SafeArea(
               child: SingleChildScrollView(
-                // Soma a altura do teclado ao padding inferior — sem isso,
-                // com o teclado numérico aberto, dava pra rolar só até onde
-                // o teclado cobria a tela, sem alcançar os campos de baixo
-                // (mesmo problema que o bottom sheet de "Novo evento" já
-                // resolve com esse mesmo padrão).
-                padding: EdgeInsets.fromLTRB(
+                // Sem soma manual do viewInsets.bottom aqui: ao contrário de
+                // um bottom sheet (que não redimensiona sozinho), este
+                // Scaffold já tem resizeToAvoidBottomInset ligado por
+                // padrão e encolhe o body quando o teclado abre. Somar de
+                // novo a altura do teclado contava ela duas vezes, inflando
+                // o conteúdo rolável bem além do necessário (scroll
+                // "infinito" até os botões fixos no bottomNavigationBar).
+                padding: const EdgeInsets.fromLTRB(
                   AppSpacing.lg,
                   AppSpacing.lg,
                   AppSpacing.lg,
-                  AppSpacing.xxl + MediaQuery.of(routeContext).viewInsets.bottom,
+                  AppSpacing.xxl,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (expense == null) ...[
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedGroupId,
+                        decoration: const InputDecoration(labelText: 'Grupo'),
+                        items: groups
+                            .map((group) => DropdownMenuItem(
+                                value: group.id, child: Text(group.name)))
+                            .toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            handleGroupChange(value);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      if (openEventsForGroup.isEmpty)
+                        Padding(
+                          padding:
+                              const EdgeInsets.only(bottom: AppSpacing.lg),
+                          child: Text(
+                            'Nenhum evento aberto neste grupo.',
+                            style: TextStyle(
+                                color:
+                                    Theme.of(routeContext).colorScheme.error),
+                          ),
+                        )
+                      else
+                        DropdownButtonFormField<String>(
+                          key: ValueKey('event-$selectedGroupId'),
+                          initialValue: currentEvent?.id,
+                          decoration:
+                              const InputDecoration(labelText: 'Evento'),
+                          items: openEventsForGroup
+                              .map((item) => DropdownMenuItem(
+                                  value: item.id, child: Text(item.name)))
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              handleEventChange(value);
+                            }
+                          },
+                        ),
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
                     AmountField(
                       controller: amountController,
                       autofocus: expense == null,
@@ -1110,7 +1215,7 @@ Future<void> _openExpenseForm(
                           );
                         },
                       ),
-                    if (expense == null && event.monthId != null) ...[
+                    if (expense == null && currentEvent?.monthId != null) ...[
                       const SizedBox(height: AppSpacing.sm),
                       const Divider(),
                       const SizedBox(height: AppSpacing.md),
@@ -1253,7 +1358,9 @@ Future<void> _openExpenseForm(
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: FilledButton(
-                        onPressed: isSaving ? null : () => handleSave(),
+                        onPressed: isSaving || currentEvent == null
+                            ? null
+                            : () => handleSave(),
                         child: isSaving
                             ? const SizedBox(
                                 width: 20,
@@ -1433,9 +1540,9 @@ Future<String?> _showCreateCategoryDialog(
 }
 
 Future<List<UserOptionModel>> _loadEventUsers(
-    WidgetRef ref, EventModel event) async {
+    WidgetRef ref, String groupId) async {
   final members =
-      await ref.read(groupsRepositoryProvider).listMembers(event.groupId);
+      await ref.read(groupsRepositoryProvider).listMembers(groupId);
   return members
       .where((member) => member.active)
       .map((member) => UserOptionModel(

@@ -63,14 +63,12 @@ Future<List<DashboardGroupBalanceModel>> _fallbackGroupBalances(
           final report = await reportsRepository.getEventReport(event.id);
           final userBalances =
               report.balances.where((item) => item.userId == user.id);
-          if (userBalances.isNotEmpty) {
-            eventBalances.add(DashboardEventBalanceModel(
-              eventId: event.id,
-              eventName: event.name,
-              eventStatus: event.status,
-              balance: userBalances.first.balance,
-            ));
-          }
+          eventBalances.add(DashboardEventBalanceModel(
+            eventId: event.id,
+            eventName: event.name,
+            eventStatus: event.status,
+            balance: userBalances.isEmpty ? 0 : userBalances.first.balance,
+          ));
         } catch (_) {
           // Sem relatório pra esse evento — não aparece no fallback.
         }
