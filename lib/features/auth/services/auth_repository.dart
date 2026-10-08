@@ -32,6 +32,7 @@ class AuthRepository {
   Future<AuthSession> login({
     required String email,
     required String password,
+    bool rememberMe = true,
   }) async {
     await storage.delete(key: authTokenKey);
     final response = await dio.post<Map<String, dynamic>>(
@@ -43,11 +44,17 @@ class AuthRepository {
     );
     final session = AuthSession.fromJson(response.data!);
     await storage.write(key: authTokenKey, value: session.token);
+    await storage.write(key: rememberMeKey, value: rememberMe.toString());
     return session;
   }
 
   Future<void> logout() async {
     await storage.delete(key: authTokenKey);
+  }
+
+  Future<bool> rememberMe() async {
+    final value = await storage.read(key: rememberMeKey);
+    return value == null || value == 'true';
   }
 
   Future<String?> token() {

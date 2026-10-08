@@ -328,147 +328,158 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
         final settlement = settlementsByUser[balance.userId];
         final expanded = expandedUserIds.contains(balance.userId);
         final isCurrentUser = balance.userId == currentUserId;
-        final color = balance.balance < 0
-            ? semantic.negative.withValues(alpha: 0.12)
-            : balance.balance > 0
-                ? semantic.positive.withValues(alpha: 0.12)
-                : Colors.transparent;
+        // Pago: fundo neutro + linha esmaecida, pra destacar visualmente
+        // quem ainda está pendente.
+        final isPaid = settlement != null &&
+            settlement.amount != 0 &&
+            settlement.normalizedStatus == 'PAID';
+        final color = isPaid
+            ? Theme.of(context).colorScheme.surfaceContainerHighest
+            : balance.balance < 0
+                ? semantic.negative.withValues(alpha: 0.12)
+                : balance.balance > 0
+                    ? semantic.positive.withValues(alpha: 0.12)
+                    : Colors.transparent;
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-          padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md, vertical: AppSpacing.sm + 2),
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(
-              color: isCurrentUser
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).dividerColor,
-              width: isCurrentUser ? 1.5 : 1,
+        return AnimatedOpacity(
+          duration: const Duration(milliseconds: 250),
+          opacity: isPaid ? 0.55 : 1,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md, vertical: AppSpacing.sm + 2),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              border: Border.all(
+                color: isCurrentUser
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).dividerColor,
+                width: isCurrentUser ? 1.5 : 1,
+              ),
             ),
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 430;
-              final toggle = IconButton(
-                tooltip: expanded ? 'Ocultar despesas' : 'Ver despesas',
-                onPressed: () => _toggle(balance.userId),
-                icon: Icon(expanded
-                    ? Icons.keyboard_arrow_up
-                    : Icons.keyboard_arrow_down),
-              );
-              final name = InkWell(
-                onTap: () => _toggle(balance.userId),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    PersonAvatar(
-                        name: balance.nickname,
-                        seed: balance.userId,
-                        radius: 14),
-                    const SizedBox(width: AppSpacing.sm),
-                    Flexible(
-                      child: Text(
-                        isCurrentUser ? 'Você' : balance.nickname,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-              final amount = MoneyText(
-                balance.balance,
-                colorBySign: true,
-                showSign: true,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Theme.of(context).textTheme.bodyLarge?.color,
-                ),
-              );
-              final status = _SettlementStatus(
-                settlement: settlement,
-                canUpdate: widget.canUpdateSettlements,
-                onChanged: (value) =>
-                    _updateSettlement(context, ref, settlement!, value),
-              );
-              final mySuggestions = suggestions
-                  .where((suggestion) =>
-                      suggestion.fromUserId == balance.userId ||
-                      suggestion.toUserId == balance.userId)
-                  .toList();
-              final suggestionHint = mySuggestions.isEmpty
-                  ? null
-                  : _SuggestionHint(
-                      isCurrentUser: isCurrentUser,
-                      nickname: balance.nickname,
-                      userId: balance.userId,
-                      suggestions: mySuggestions,
-                    );
-
-              if (compact) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(child: name),
-                        toggle,
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                            child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: amount)),
-                        const SizedBox(width: 12),
-                        status,
-                      ],
-                    ),
-                    if (suggestionHint != null) suggestionHint,
-                    if (expanded) _BalanceDetails(details: _details(balance)),
-                  ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 430;
+                final toggle = IconButton(
+                  tooltip: expanded ? 'Ocultar despesas' : 'Ver despesas',
+                  onPressed: () => _toggle(balance.userId),
+                  icon: Icon(expanded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down),
                 );
-              }
-
-              return Column(
-                children: [
-                  Row(
+                final name = InkWell(
+                  onTap: () => _toggle(balance.userId),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      toggle,
-                      Expanded(child: name),
-                      SizedBox(
-                        width: 110,
-                        child: Align(
-                            alignment: Alignment.centerRight, child: amount),
-                      ),
-                      const SizedBox(width: 16),
-                      SizedBox(
-                        width: 130,
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: status,
+                      PersonAvatar(
+                          name: balance.nickname,
+                          seed: balance.userId,
+                          radius: 14),
+                      const SizedBox(width: AppSpacing.sm),
+                      Flexible(
+                        child: Text(
+                          isCurrentUser ? 'Você' : balance.nickname,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
                   ),
-                  if (suggestionHint != null)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 48, top: 4),
-                      child: suggestionHint,
+                );
+                final amount = MoneyText(
+                  balance.balance,
+                  colorBySign: true,
+                  showSign: true,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                  ),
+                );
+                final status = _SettlementStatus(
+                  settlement: settlement,
+                  canUpdate: widget.canUpdateSettlements,
+                  onChanged: (value) =>
+                      _updateSettlement(context, ref, settlement!, value),
+                );
+                final mySuggestions = suggestions
+                    .where((suggestion) =>
+                        suggestion.fromUserId == balance.userId ||
+                        suggestion.toUserId == balance.userId)
+                    .toList();
+                final suggestionHint = mySuggestions.isEmpty
+                    ? null
+                    : _SuggestionHint(
+                        isCurrentUser: isCurrentUser,
+                        nickname: balance.nickname,
+                        userId: balance.userId,
+                        suggestions: mySuggestions,
+                      );
+
+                if (compact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: name),
+                          toggle,
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                              child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: amount)),
+                          const SizedBox(width: 12),
+                          status,
+                        ],
+                      ),
+                      if (suggestionHint != null) suggestionHint,
+                      if (expanded) _BalanceDetails(details: _details(balance)),
+                    ],
+                  );
+                }
+
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        toggle,
+                        Expanded(child: name),
+                        SizedBox(
+                          width: 110,
+                          child: Align(
+                              alignment: Alignment.centerRight, child: amount),
+                        ),
+                        const SizedBox(width: 16),
+                        SizedBox(
+                          width: 130,
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: status,
+                          ),
+                        ),
+                      ],
                     ),
-                  if (expanded)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 48, top: 8),
-                      child: _BalanceDetails(details: _details(balance)),
-                    ),
-                ],
-              );
-            },
+                    if (suggestionHint != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 48, top: 4),
+                        child: suggestionHint,
+                      ),
+                    if (expanded)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 48, top: 8),
+                        child: _BalanceDetails(details: _details(balance)),
+                      ),
+                  ],
+                );
+              },
+            ),
           ),
         );
       }).toList(),

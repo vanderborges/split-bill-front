@@ -928,7 +928,7 @@ Future<void> _openExpenseForm(
                       Wrap(
                         spacing: AppSpacing.sm,
                         runSpacing: AppSpacing.sm,
-                        children: users.map((user) {
+                        children: currentUsers.map((user) {
                           final selected = selectedPayerIds.contains(user.id);
                           return FilterChip(
                             selected: selected,
@@ -960,7 +960,7 @@ Future<void> _openExpenseForm(
                                           dialogAmount,
                                           selectedPayerIds.length);
                                       var shareIndex = 0;
-                                      for (final user in users) {
+                                      for (final user in currentUsers) {
                                         if (!selectedPayerIds
                                             .contains(user.id)) {
                                           continue;
@@ -1013,8 +1013,8 @@ Future<void> _openExpenseForm(
                             setState(() {
                               selectedParticipants
                                 ..clear()
-                                ..addAll(users.map((user) => user.id));
-                              for (final user in users) {
+                                ..addAll(currentUsers.map((user) => user.id));
+                              for (final user in currentUsers) {
                                 final current =
                                     shareCountControllers[user.id]!.text;
                                 if ((int.tryParse(current) ?? 0) <= 0) {
@@ -1037,7 +1037,7 @@ Future<void> _openExpenseForm(
                     Wrap(
                       spacing: AppSpacing.sm,
                       runSpacing: AppSpacing.sm,
-                      children: users.map((user) {
+                      children: currentUsers.map((user) {
                         final selected = selectedParticipants.contains(user.id);
                         return FilterChip(
                           selected: selected,

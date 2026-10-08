@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,12 +22,57 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool loading = false;
   bool biometricLoading = false;
   bool showPassword = false;
+  bool rememberMe = true;
+  bool autoLoggingIn = true;
   Future<bool>? biometricAvailable;
 
   @override
   void initState() {
     super.initState();
     biometricAvailable = _canSignInWithBiometrics();
+    _tryAutoLogin();
+  }
+
+  /// "Manter conectado": se a última sessão pediu pra lembrar e ainda há
+  /// token salvo, valida o token no backend e entra direto. Token
+  /// recusado pelo backend (expirado/inválido) é descartado; falha de rede
+  /// (ex.: Render acordando) só cai na tela de login, mantendo o token.
+  Future<void> _tryAutoLogin() async {
+    final auth = ref.read(authRepositoryProvider);
+    try {
+      final remember = await auth.rememberMe();
+      if (mounted) {
+        setState(() => rememberMe = remember);
+      }
+      final token = await auth.token();
+      if (!remember || token == null || token.isEmpty) {
+        return;
+      }
+      try {
+        await auth.me();
+      } on DioException catch (error) {
+        final status = error.response?.statusCode;
+        if (status != null && status < 500) {
+          await auth.logout();
+          if (mounted) {
+            setState(() => biometricAvailable = _canSignInWithBiometrics());
+          }
+        }
+        return;
+      }
+      final pendingInviteId = ref.read(pendingInviteIdProvider);
+      resetSessionScopedProviders(ref);
+      final joinedGroup = await _joinPendingInvite(pendingInviteId);
+      if (mounted) {
+        context.go(joinedGroup ? '/groups' : '/');
+      }
+    } catch (_) {
+      // Qualquer outra falha: segue pro login manual.
+    } finally {
+      if (mounted) {
+        setState(() => autoLoggingIn = false);
+      }
+    }
   }
 
   @override
@@ -38,6 +84,21 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (autoLoggingIn) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('DividiAi',
+                  style: Theme.of(context).textTheme.headlineMedium),
+              const SizedBox(height: 24),
+              const CircularProgressIndicator(),
+            ],
+          ),
+        ),
+      );
+    }
     return Scaffold(
       body: Center(
         child: ConstrainedBox(
@@ -74,7 +135,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                CheckboxListTile(
+                  value: rememberMe,
+                  onChanged: (value) =>
+                      setState(() => rememberMe = value ?? true),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: const Text('Manter conectado'),
+                ),
+                const SizedBox(height: 8),
                 FilledButton(
                   onPressed: loading ? null : _login,
                   child: loading
@@ -143,6 +213,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       await ref.read(authRepositoryProvider).login(
             email: email,
             password: password,
+            rememberMe: rememberMe,
           );
       resetSessionScopedProviders(ref);
       final joinedGroup = await _joinPendingInvite(pendingInviteId);
