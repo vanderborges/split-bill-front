@@ -5,6 +5,7 @@ class GroupInviteModel {
     required this.createdByUserId,
     required this.active,
     required this.createdAt,
+    this.eventId,
   });
 
   final String id;
@@ -13,6 +14,9 @@ class GroupInviteModel {
   final bool active;
   final DateTime createdAt;
 
+  /// Convite temporário: evento ao qual quem entrar fica amarrado.
+  final String? eventId;
+
   factory GroupInviteModel.fromJson(Map<String, dynamic> json) {
     return GroupInviteModel(
       id: json['id'] as String,
@@ -20,6 +24,7 @@ class GroupInviteModel {
       createdByUserId: json['createdByUserId'] as String,
       active: json['active'] as bool,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      eventId: json['eventId'] as String?,
     );
   }
 }

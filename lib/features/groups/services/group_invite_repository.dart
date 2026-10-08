@@ -26,6 +26,14 @@ class GroupInviteRepository {
     return GroupInviteModel.fromJson(response.data!);
   }
 
+  /// Convite temporário: quem entrar por ele só participa de [eventId].
+  Future<GroupInviteModel> getOrCreateTemporary(
+      String groupId, String eventId) async {
+    final response = await dio.post<Map<String, dynamic>>(
+        '/groups/$groupId/events/$eventId/temporary-invite');
+    return GroupInviteModel.fromJson(response.data!);
+  }
+
   Future<GroupInviteModel> regenerate(String groupId) async {
     final response = await dio
         .post<Map<String, dynamic>>('/groups/$groupId/invite/regenerate');

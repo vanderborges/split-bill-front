@@ -6,6 +6,10 @@ class GroupMemberModel {
     required this.nickname,
     required this.role,
     required this.active,
+    this.temporary = false,
+    this.temporaryEventId,
+    this.temporaryEventName,
+    this.temporaryEventStatus,
   });
 
   final String id;
@@ -15,7 +19,24 @@ class GroupMemberModel {
   final String role;
   final bool active;
 
-  String get roleLabel => role == 'ADMIN' ? 'Admin' : 'Integrante';
+  /// Pessoa temporária: só participa do evento [temporaryEventId]. Quando
+  /// esse evento fecha ela some das listas, mas continua no grupo e pode
+  /// ser reativada em outro evento.
+  final bool temporary;
+  final String? temporaryEventId;
+  final String? temporaryEventName;
+  final String? temporaryEventStatus;
+
+  String get roleLabel {
+    if (temporary) {
+      return temporaryEventName == null
+          ? 'Temporário'
+          : 'Temporário · $temporaryEventName';
+    }
+    return role == 'ADMIN' ? 'Admin' : 'Integrante';
+  }
+
+  bool get temporaryEventClosed => temporaryEventStatus == 'CLOSED';
 
   factory GroupMemberModel.fromJson(Map<String, dynamic> json) {
     return GroupMemberModel(
@@ -25,6 +46,10 @@ class GroupMemberModel {
       nickname: json['nickname'] as String,
       role: json['role'] as String,
       active: json['active'] as bool,
+      temporary: json['temporary'] as bool? ?? false,
+      temporaryEventId: json['temporaryEventId'] as String?,
+      temporaryEventName: json['temporaryEventName'] as String?,
+      temporaryEventStatus: json['temporaryEventStatus'] as String?,
     );
   }
 }

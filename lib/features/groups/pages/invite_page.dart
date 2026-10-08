@@ -129,6 +129,14 @@ class _JoinGroupState extends ConsumerState<_JoinGroup> {
             Text(invite.groupName,
                 style: Theme.of(context).textTheme.headlineSmall,
                 textAlign: TextAlign.center),
+            if (invite.eventName != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Participação temporária, só no evento "${invite.eventName}".',
+                style: Theme.of(context).textTheme.bodySmall,
+                textAlign: TextAlign.center,
+              ),
+            ],
             const SizedBox(height: 24),
             FilledButton(
               onPressed: joining ? null : _join,

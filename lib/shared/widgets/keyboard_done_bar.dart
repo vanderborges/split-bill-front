@@ -8,10 +8,24 @@ import 'package:flutter/material.dart';
 /// A barra só aparece quando há teclado virtual de fato
 /// (`viewInsets.bottom > 0`) — em desktop/web com teclado físico fica
 /// escondida.
+///
+/// [toolbarBuilder] permite colocar ações extras à esquerda do "OK" (ex.:
+/// os operadores da calculadora do `AmountField`); [refresh] reconstrói a
+/// barra quando o estado dessas ações muda. [onDone] roda antes de fechar o
+/// teclado.
 class KeyboardDoneBar extends StatefulWidget {
-  const KeyboardDoneBar({super.key, required this.child});
+  const KeyboardDoneBar({
+    super.key,
+    required this.child,
+    this.toolbarBuilder,
+    this.refresh,
+    this.onDone,
+  });
 
   final Widget child;
+  final WidgetBuilder? toolbarBuilder;
+  final Listenable? refresh;
+  final VoidCallback? onDone;
 
   @override
   State<KeyboardDoneBar> createState() => _KeyboardDoneBarState();
@@ -19,6 +33,23 @@ class KeyboardDoneBar extends StatefulWidget {
 
 class _KeyboardDoneBarState extends State<KeyboardDoneBar> {
   OverlayEntry? _entry;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.refresh?.addListener(_rebuildBar);
+  }
+
+  @override
+  void didUpdateWidget(KeyboardDoneBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refresh != widget.refresh) {
+      oldWidget.refresh?.removeListener(_rebuildBar);
+      widget.refresh?.addListener(_rebuildBar);
+    }
+  }
+
+  void _rebuildBar() => _entry?.markNeedsBuild();
 
   void _onFocusChange(bool hasFocus) {
     if (hasFocus) {
@@ -36,7 +67,12 @@ class _KeyboardDoneBarState extends State<KeyboardDoneBar> {
     if (overlay == null) {
       return;
     }
-    _entry = OverlayEntry(builder: (context) => const _DoneBar());
+    _entry = OverlayEntry(
+      builder: (context) => _DoneBar(
+        toolbarBuilder: widget.toolbarBuilder,
+        onDone: widget.onDone,
+      ),
+    );
     overlay.insert(_entry!);
   }
 
@@ -47,6 +83,7 @@ class _KeyboardDoneBarState extends State<KeyboardDoneBar> {
 
   @override
   void dispose() {
+    widget.refresh?.removeListener(_rebuildBar);
     _hide();
     super.dispose();
   }
@@ -63,7 +100,10 @@ class _KeyboardDoneBarState extends State<KeyboardDoneBar> {
 }
 
 class _DoneBar extends StatelessWidget {
-  const _DoneBar();
+  const _DoneBar({this.toolbarBuilder, this.onDone});
+
+  final WidgetBuilder? toolbarBuilder;
+  final VoidCallback? onDone;
 
   @override
   Widget build(BuildContext context) {
@@ -76,19 +116,32 @@ class _DoneBar extends StatelessWidget {
       left: 0,
       right: 0,
       bottom: keyboardHeight,
-      child: Material(
-        color: colorScheme.surfaceContainerHighest,
-        elevation: 2,
-        child: SizedBox(
-          height: 44,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () => FocusManager.instance.primaryFocus?.unfocus(),
-              child: const Text(
-                'OK',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
+      // Toques na barra contam como "dentro" do campo: sem isso, em
+      // plataformas que tiram o foco ao tocar fora, apertar um operador
+      // fecharia o teclado no meio da conta.
+      child: TextFieldTapRegion(
+        child: Material(
+          color: colorScheme.surfaceContainerHighest,
+          elevation: 2,
+          child: SizedBox(
+            height: 44,
+            child: Row(
+              children: [
+                if (toolbarBuilder != null)
+                  Expanded(child: toolbarBuilder!(context))
+                else
+                  const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    onDone?.call();
+                    FocusManager.instance.primaryFocus?.unfocus();
+                  },
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

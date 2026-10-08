@@ -39,11 +39,13 @@ final selectedEventProvider = FutureProvider<EventModel?>((ref) async {
   }
   // Prefere qualquer evento ainda não fechado (OPEN ou SETTLING) como
   // padrão de exibição, já que SETTLING ainda precisa de atenção (pagamento
-  // pendente) mesmo sem aceitar novas despesas.
+  // pendente) mesmo sem aceitar novas despesas. Entre eles abre o MAIS
+  // ANTIGO (a lista vem ordenada por criação) - é o que precisa ser
+  // acertado primeiro.
   final activeEvents =
       events.where((event) => event.status != 'CLOSED').toList();
-  final source = activeEvents.isNotEmpty ? activeEvents : events;
-  return source.last;
+  // Tudo fechado: mostra o mais recente.
+  return activeEvents.isNotEmpty ? activeEvents.first : events.last;
 });
 
 class EventsRepository {

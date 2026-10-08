@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -197,8 +198,9 @@ class ExpensesPage extends ConsumerWidget {
                               );
                               return;
                             }
-                            final users =
-                                await _loadEventUsers(ref, event.groupId);
+                            final users = await _loadEventUsers(
+                                ref, event.groupId,
+                                eventId: event.id);
                             final categories = await _loadCategoryNames(ref);
                             if (context.mounted) {
                               await _openExpenseForm(
@@ -410,7 +412,7 @@ Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
     return;
   }
 
-  final users = await _loadEventUsers(ref, event.groupId);
+  final users = await _loadEventUsers(ref, event.groupId, eventId: event.id);
   final categories = await _loadCategoryNames(ref);
   if (context.mounted) {
     await _openExpenseForm(context, ref, event, users, categories);
@@ -587,7 +589,8 @@ Future<void> _openExpenseForm(
                 .list(groupId: newGroupId);
             final newOpenEvents =
                 newEvents.where((item) => item.status == 'OPEN').toList();
-            final newUsers = await _loadEventUsers(ref, newGroupId);
+            final newUsers = await _loadEventUsers(ref, newGroupId,
+                eventId: newOpenEvents.isEmpty ? null : newOpenEvents.first.id);
             // Descarta os controllers do grupo anterior antes de criar os
             // novos pro conjunto de pessoas do novo grupo — sem isso, cada
             // troca de grupo deixava os TextEditingControllers antigos sem
@@ -604,13 +607,33 @@ Future<void> _openExpenseForm(
             });
           }
 
-          void handleEventChange(String newEventId) {
+          // Trocar de evento pode mudar quem participa (pessoas temporárias
+          // são por evento): recarrega a lista e só reconstrói o estado de
+          // participantes/pagadores se o conjunto de pessoas mudou.
+          Future<void> handleEventChange(String newEventId) async {
             final found =
                 openEventsForGroup.where((item) => item.id == newEventId);
             if (found.isEmpty) {
               return;
             }
-            setState(() => currentEvent = found.first);
+            final newEvent = found.first;
+            final newUsers = await _loadEventUsers(ref, newEvent.groupId,
+                eventId: newEvent.id);
+            final sameUsers = newUsers.length == currentUsers.length &&
+                newUsers.every((user) =>
+                    currentUsers.any((current) => current.id == user.id));
+            if (!sameUsers) {
+              _disposeControllers(payerControllers.values);
+              _disposeControllers(shareCountControllers.values);
+              _disposeControllers(shareDescriptionControllers.values);
+            }
+            setState(() {
+              currentEvent = newEvent;
+              if (!sameUsers) {
+                currentUsers = newUsers;
+                initUserDependentState(currentUsers);
+              }
+            });
           }
 
           // Valida e salva sem fechar a tela: só sai (pop) em caso de
@@ -1263,22 +1286,56 @@ Future<void> _openExpenseForm(
                           label: const Text('Assinatura (repete todo mês)'),
                         ),
                       ] else if (showInstallments) ...[
-                        KeyboardDoneBar(
-                            child: TextField(
-                          controller: installmentsController,
-                          keyboardType: TextInputType.number,
-                          decoration:
-                              const InputDecoration(labelText: 'Parcelas'),
-                          onChanged: (value) {
-                            final parsed = int.tryParse(value) ?? 1;
-                            setState(() {
-                              installments = parsed;
-                              if (installments > 1) {
+                        // Digitável e também com +/- pra ajustar sem
+                        // abrir o teclado.
+                        Row(
+                          children: [
+                            IconButton.outlined(
+                              tooltip: 'Diminuir parcelas',
+                              onPressed: installments <= 1
+                                  ? null
+                                  : () => setState(() {
+                                        installments -= 1;
+                                        installmentsController.text =
+                                            '$installments';
+                                      }),
+                              icon: const Icon(Icons.remove),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: KeyboardDoneBar(
+                                  child: TextField(
+                                controller: installmentsController,
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                decoration: const InputDecoration(
+                                    labelText: 'Parcelas'),
+                                onChanged: (value) {
+                                  final parsed = int.tryParse(value) ?? 1;
+                                  setState(() {
+                                    installments = parsed;
+                                    if (installments > 1) {
+                                      splitPaymentByUser = false;
+                                    }
+                                  });
+                                },
+                              )),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            IconButton.outlined(
+                              tooltip: 'Aumentar parcelas',
+                              onPressed: () => setState(() {
+                                installments += 1;
+                                installmentsController.text = '$installments';
                                 splitPaymentByUser = false;
-                              }
-                            });
-                          },
-                        )),
+                              }),
+                              icon: const Icon(Icons.add),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: AppSpacing.xs),
                         TextButton.icon(
                           onPressed: () => setState(() {
@@ -1571,9 +1628,13 @@ Future<String?> _showCreateCategoryDialog(
   }
 }
 
-Future<List<UserOptionModel>> _loadEventUsers(
-    WidgetRef ref, String groupId) async {
-  final members = await ref.read(groupsRepositoryProvider).listMembers(groupId);
+/// Quem pode participar/pagar: com [eventId], integrantes fixos + pessoas
+/// temporárias daquele evento.
+Future<List<UserOptionModel>> _loadEventUsers(WidgetRef ref, String groupId,
+    {String? eventId}) async {
+  final members = await ref
+      .read(groupsRepositoryProvider)
+      .listMembers(groupId, eventId: eventId);
   return members
       .where((member) => member.active)
       .map((member) => UserOptionModel(

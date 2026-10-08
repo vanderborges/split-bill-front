@@ -10,6 +10,7 @@ import '../../../shared/widgets/loading_state.dart';
 import '../../../shared/widgets/money_text.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../events/services/events_repository.dart';
+import '../../expenses/models/expense_model.dart';
 import '../../expenses/services/expense_categories_repository.dart';
 import '../../groups/services/groups_repository.dart';
 import '../models/user_expense_summary_model.dart';
@@ -276,9 +277,13 @@ class _SummaryContent extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               title: Text(expense.description),
               subtitle: Text([
-                '${_formatDate(expense.expenseDate)} | ${expense.category}',
-                if (expense.installmentLabel != null) expense.installmentLabel!,
-              ].join(' | ')),
+                [
+                  '${_formatDate(expense.expenseDate)} | ${expense.category}',
+                  if (expense.installmentLabel != null)
+                    expense.installmentLabel!,
+                ].join(' | '),
+                ..._shareLines(expense, summary.userId),
+              ].join('\n')),
               trailing: MoneyText(expense.amount),
             ),
           ),
@@ -325,4 +330,38 @@ class _Metric extends StatelessWidget {
 
 String _formatDate(DateTime value) {
   return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
+}
+
+/// Linhas de cota da despesa no Extrato, pra explicar por que alguém ficou
+/// com mais cotas: só a pessoa filtrada ("Suas cotas: 2 de 5 — motivo") ou,
+/// no consolidado do grupo, cada integrante com cota extra ou motivo.
+/// Cota única sem motivo é o caso comum e não gera linha.
+List<String> _shareLines(ExpenseModel expense, String? userId) {
+  final participants = expense.participants;
+  if (participants.isEmpty) {
+    return const [];
+  }
+  final totalShares =
+      participants.fold<int>(0, (sum, item) => sum + item.shareCount);
+  String? describe(ExpenseParticipantModel participant) {
+    final description = participant.shareDescription?.trim();
+    final hasDescription = description != null && description.isNotEmpty;
+    if (participant.shareCount <= 1 && !hasDescription) {
+      return null;
+    }
+    final unit = totalShares == 1 ? 'cota' : 'cotas';
+    final base = '${participant.shareCount} de $totalShares $unit';
+    return hasDescription ? '$base — $description' : base;
+  }
+
+  if (userId != null) {
+    final mine = participants.where((item) => item.userId == userId);
+    final label = mine.isEmpty ? null : describe(mine.first);
+    return label == null ? const [] : ['Cotas: $label'];
+  }
+  return [
+    for (final participant in participants)
+      if (describe(participant) case final label?)
+        '${participant.nickname}: $label',
+  ];
 }

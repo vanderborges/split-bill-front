@@ -98,18 +98,46 @@ class GroupsRepository {
     return GroupModel.fromJson(response.data!);
   }
 
+  /// Com [eventId], só quem participa desse evento (fixos + temporários
+  /// dele) — use no cadastro de despesa. Sem, fixos + temporários de
+  /// eventos ainda não fechados.
   Future<List<GroupMemberModel>> listMembers(String groupId,
-      {String? viewerUserId}) async {
+      {String? viewerUserId, String? eventId}) async {
     final response = await dio.get<List<dynamic>>(
       '/groups/$groupId/members',
       queryParameters: {
         if (viewerUserId != null) 'viewerUserId': viewerUserId,
+        if (eventId != null) 'eventId': eventId,
       },
     );
     final members = response.data!
         .map((item) => GroupMemberModel.fromJson(item as Map<String, dynamic>))
         .toList();
     return sortedByNamePtBr(members, (member) => member.nickname);
+  }
+
+  /// Admin: todos os temporários do grupo, inclusive os de eventos já
+  /// fechados (ocultos nas outras listas).
+  Future<List<GroupMemberModel>> listTemporaryMembers(String groupId) async {
+    final response =
+        await dio.get<List<dynamic>>('/groups/$groupId/members/temporary');
+    final members = response.data!
+        .map((item) => GroupMemberModel.fromJson(item as Map<String, dynamic>))
+        .toList();
+    return sortedByNamePtBr(members, (member) => member.nickname);
+  }
+
+  /// Admin: reativa a pessoa temporária em outro evento (aberto).
+  Future<GroupMemberModel> assignTemporaryEvent({
+    required String groupId,
+    required String userId,
+    required String eventId,
+  }) async {
+    final response = await dio.put<Map<String, dynamic>>(
+      '/groups/$groupId/members/$userId/temporary-event',
+      data: {'eventId': eventId},
+    );
+    return GroupMemberModel.fromJson(response.data!);
   }
 
   Future<GroupMemberModel> addMember({

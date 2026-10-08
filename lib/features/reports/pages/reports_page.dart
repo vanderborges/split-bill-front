@@ -672,6 +672,20 @@ class _BalanceDetails extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
+                          if (detail.installmentLabel != null ||
+                              detail.shareLabel != null)
+                            Text(
+                              [
+                                if (detail.installmentLabel != null)
+                                  detail.installmentLabel!,
+                                if (detail.shareLabel != null)
+                                  detail.shareLabel!,
+                              ].join(' | '),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(fontStyle: FontStyle.italic),
+                            ),
                           Row(
                             children: [
                               Text('Consumiu ',
