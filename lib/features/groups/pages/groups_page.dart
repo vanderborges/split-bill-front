@@ -128,6 +128,28 @@ class GroupsPage extends ConsumerWidget {
 
 Future<void> _deleteGroup(
     BuildContext context, WidgetRef ref, GroupModel group) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Excluir grupo'),
+      content: Text(
+          'Deseja realmente excluir o grupo "${group.name}"? Essa ação não pode ser desfeita.'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Theme.of(context).colorScheme.onError),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Excluir')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
   try {
     await ref.read(groupsRepositoryProvider).delete(group.id);
     ref.read(selectedGroupIdProvider.notifier).state = null;
@@ -138,8 +160,8 @@ Future<void> _deleteGroup(
     ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
               fallback: 'Não foi possível deletar o grupo.'))));
     }
   }
@@ -197,7 +219,9 @@ Future<void> _setGroupReceiver(
   String? userId,
 ) async {
   try {
-    await ref.read(groupsRepositoryProvider).setReceiver(groupId, userId: userId);
+    await ref
+        .read(groupsRepositoryProvider)
+        .setReceiver(groupId, userId: userId);
     ref.invalidate(groupsProvider);
     ref.invalidate(selectedGroupProvider);
   } catch (error) {
@@ -233,7 +257,8 @@ class _GroupAutoSettlementSelector extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           DropdownButtonFormField<int?>(
-            key: ValueKey('auto-settlement-${group.id}-${group.autoSettlementDay}'),
+            key: ValueKey(
+                'auto-settlement-${group.id}-${group.autoSettlementDay}'),
             initialValue: group.autoSettlementDay,
             decoration: const InputDecoration(
                 labelText: 'Fechamento automático (dia do mês)'),
@@ -267,7 +292,9 @@ Future<void> _setAutoSettlementDay(
   int? day,
 ) async {
   try {
-    await ref.read(groupsRepositoryProvider).setAutoSettlementDay(groupId, day: day);
+    await ref
+        .read(groupsRepositoryProvider)
+        .setAutoSettlementDay(groupId, day: day);
     ref.invalidate(groupsProvider);
     ref.invalidate(selectedGroupProvider);
   } catch (error) {
@@ -319,7 +346,8 @@ class _GroupMembers extends ConsumerWidget {
             ),
             if (snapshot.connectionState != ConnectionState.done)
               const LinearProgressIndicator(),
-            if (snapshot.hasError && snapshot.connectionState == ConnectionState.done)
+            if (snapshot.hasError &&
+                snapshot.connectionState == ConnectionState.done)
               ErrorState(
                 message: friendlyApiError(snapshot.error!,
                     fallback: 'Não foi possível carregar os integrantes.'),
@@ -334,7 +362,8 @@ class _GroupMembers extends ConsumerWidget {
               ...members.map(
                 (member) => ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: PersonAvatar(name: member.nickname, seed: member.userId),
+                  leading:
+                      PersonAvatar(name: member.nickname, seed: member.userId),
                   title: Text(member.nickname),
                   subtitle: Text(member.roleLabel),
                   trailing: isGroupAdmin && member.userId != currentUser?.id
@@ -433,8 +462,8 @@ Future<void> _confirmLeaveGroup(
     ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
               fallback: 'Não foi possível sair do grupo.'))));
     }
   }
@@ -483,8 +512,8 @@ Future<void> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
     ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
               fallback: 'Não foi possível alterar o perfil.'))));
     }
   }
@@ -548,8 +577,8 @@ Future<void> _showEditGroupDialog(
     ref.invalidate(selectedGroupProvider);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
               fallback: 'Não foi possível atualizar o grupo.'))));
     }
   } finally {
@@ -609,8 +638,8 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
     ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
               fallback: 'Não foi possível criar o grupo.'))));
     }
   } finally {

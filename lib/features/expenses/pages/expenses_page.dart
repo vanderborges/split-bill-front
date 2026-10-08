@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/widgets/amount_field.dart';
+import '../../../shared/widgets/keyboard_done_bar.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
@@ -198,8 +199,7 @@ class ExpensesPage extends ConsumerWidget {
                             }
                             final users =
                                 await _loadEventUsers(ref, event.groupId);
-                            final categories =
-                                await _loadCategoryNames(ref);
+                            final categories = await _loadCategoryNames(ref);
                             if (context.mounted) {
                               await _openExpenseForm(
                                   context, ref, event, users, categories,
@@ -598,16 +598,15 @@ Future<void> _openExpenseForm(
             setState(() {
               selectedGroupId = newGroupId;
               openEventsForGroup = newOpenEvents;
-              currentEvent =
-                  newOpenEvents.isEmpty ? null : newOpenEvents.first;
+              currentEvent = newOpenEvents.isEmpty ? null : newOpenEvents.first;
               currentUsers = newUsers;
               initUserDependentState(currentUsers);
             });
           }
 
           void handleEventChange(String newEventId) {
-            final found = openEventsForGroup
-                .where((item) => item.id == newEventId);
+            final found =
+                openEventsForGroup.where((item) => item.id == newEventId);
             if (found.isEmpty) {
               return;
             }
@@ -622,7 +621,8 @@ Future<void> _openExpenseForm(
             if (targetEvent == null) {
               ScaffoldMessenger.of(routeContext).showSnackBar(
                 const SnackBar(
-                    content: Text('Selecione um evento aberto para continuar.')),
+                    content:
+                        Text('Selecione um evento aberto para continuar.')),
               );
               return;
             }
@@ -660,8 +660,8 @@ Future<void> _openExpenseForm(
             if (participantShareCounts.length != selectedParticipants.length) {
               ScaffoldMessenger.of(routeContext).showSnackBar(
                 const SnackBar(
-                    content:
-                        Text('Defina as cotas dos participantes selecionados.')),
+                    content: Text(
+                        'Defina as cotas dos participantes selecionados.')),
               );
               return;
             }
@@ -808,8 +808,7 @@ Future<void> _openExpenseForm(
                       const SizedBox(height: AppSpacing.md),
                       if (openEventsForGroup.isEmpty)
                         Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: AppSpacing.lg),
+                          padding: const EdgeInsets.only(bottom: AppSpacing.lg),
                           child: Text(
                             'Nenhum evento aberto neste grupo.',
                             style: TextStyle(
@@ -904,8 +903,7 @@ Future<void> _openExpenseForm(
                     if (!splitPaymentByUser) ...[
                       DropdownButtonFormField<String>(
                         initialValue: singlePayerId,
-                        decoration:
-                            const InputDecoration(labelText: 'Pagador'),
+                        decoration: const InputDecoration(labelText: 'Pagador'),
                         items: users
                             .map((user) => DropdownMenuItem(
                                 value: user.id, child: Text(user.nickname)))
@@ -922,8 +920,8 @@ Future<void> _openExpenseForm(
                           onPressed: () =>
                               setState(() => splitPaymentByUser = true),
                           icon: const Icon(Icons.call_split),
-                          label:
-                              const Text('Dividir pagamento entre várias pessoas'),
+                          label: const Text(
+                              'Dividir pagamento entre várias pessoas'),
                         ),
                       ],
                     ] else ...[
@@ -931,8 +929,7 @@ Future<void> _openExpenseForm(
                         spacing: AppSpacing.sm,
                         runSpacing: AppSpacing.sm,
                         children: users.map((user) {
-                          final selected =
-                              selectedPayerIds.contains(user.id);
+                          final selected = selectedPayerIds.contains(user.id);
                           return FilterChip(
                             selected: selected,
                             label: Text(user.nickname),
@@ -978,19 +975,18 @@ Future<void> _openExpenseForm(
                           ),
                         ),
                         ...users
-                            .where(
-                                (user) => selectedPayerIds.contains(user.id))
+                            .where((user) => selectedPayerIds.contains(user.id))
                             .map(
-                          (user) => Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: AppSpacing.sm),
-                            child: AmountField(
-                              controller: payerControllers[user.id]!,
-                              label: 'Valor pago por ${user.nickname}',
-                              onChanged: (_) => setState(() {}),
+                              (user) => Padding(
+                                padding: const EdgeInsets.only(
+                                    bottom: AppSpacing.sm),
+                                child: AmountField(
+                                  controller: payerControllers[user.id]!,
+                                  label: 'Valor pago por ${user.nickname}',
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
                       ],
                       const SizedBox(height: AppSpacing.xs),
                       TextButton.icon(
@@ -1143,13 +1139,15 @@ Future<void> _openExpenseForm(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
                                                 Text('Participação: ',
-                                                    style: Theme.of(routeContext)
-                                                        .textTheme
-                                                        .bodySmall),
+                                                    style:
+                                                        Theme.of(routeContext)
+                                                            .textTheme
+                                                            .bodySmall),
                                                 MoneyText(userAmount,
-                                                    style: Theme.of(routeContext)
-                                                        .textTheme
-                                                        .bodySmall),
+                                                    style:
+                                                        Theme.of(routeContext)
+                                                            .textTheme
+                                                            .bodySmall),
                                               ],
                                             ),
                                         ],
@@ -1187,7 +1185,8 @@ Future<void> _openExpenseForm(
                                       ),
                                       SizedBox(
                                         width: 72,
-                                        child: TextField(
+                                        child: KeyboardDoneBar(
+                                            child: TextField(
                                           controller:
                                               shareCountControllers[user.id],
                                           textAlign: TextAlign.center,
@@ -1197,7 +1196,7 @@ Future<void> _openExpenseForm(
                                             labelText: 'Cotas',
                                           ),
                                           onChanged: (_) => setState(() {}),
-                                        ),
+                                        )),
                                       ),
                                       IconButton(
                                         tooltip: 'Aumentar cota',
@@ -1264,7 +1263,8 @@ Future<void> _openExpenseForm(
                           label: const Text('Assinatura (repete todo mês)'),
                         ),
                       ] else if (showInstallments) ...[
-                        TextField(
+                        KeyboardDoneBar(
+                            child: TextField(
                           controller: installmentsController,
                           keyboardType: TextInputType.number,
                           decoration:
@@ -1278,7 +1278,7 @@ Future<void> _openExpenseForm(
                               }
                             });
                           },
-                        ),
+                        )),
                         const SizedBox(height: AppSpacing.xs),
                         TextButton.icon(
                           onPressed: () => setState(() {
@@ -1303,7 +1303,8 @@ Future<void> _openExpenseForm(
                         ),
                       ],
                     ],
-                    if (expense != null && expense.installmentGroupId != null) ...[
+                    if (expense != null &&
+                        expense.installmentGroupId != null) ...[
                       const SizedBox(height: AppSpacing.sm),
                       const Divider(),
                       const SizedBox(height: AppSpacing.md),
@@ -1394,8 +1395,8 @@ Future<void> _openExpenseForm(
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Text('Salvar'),
                       ),
@@ -1453,7 +1454,8 @@ Future<void> _openExpenseDetails(
                 MoneyText(expense.amount,
                     style: Theme.of(routeContext).textTheme.headlineSmall),
                 const SizedBox(height: AppSpacing.md),
-                _detailRow(routeContext, 'Data', _formatDate(expense.expenseDate)),
+                _detailRow(
+                    routeContext, 'Data', _formatDate(expense.expenseDate)),
                 _detailRow(routeContext, 'Tipo de despesa', expense.category),
                 if (installmentLabel != null)
                   _detailRow(routeContext, 'Parcela', installmentLabel),
@@ -1463,8 +1465,8 @@ Future<void> _openExpenseDetails(
                 Text('Quem pagou',
                     style: Theme.of(routeContext).textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.sm),
-                ...expense.payers.map((payer) => _detailRow(
-                    routeContext, payer.nickname, formatCurrencyBRL(payer.amount))),
+                ...expense.payers.map((payer) => _detailRow(routeContext,
+                    payer.nickname, formatCurrencyBRL(payer.amount))),
                 const SizedBox(height: AppSpacing.md),
                 const Divider(),
                 const SizedBox(height: AppSpacing.md),
@@ -1571,8 +1573,7 @@ Future<String?> _showCreateCategoryDialog(
 
 Future<List<UserOptionModel>> _loadEventUsers(
     WidgetRef ref, String groupId) async {
-  final members =
-      await ref.read(groupsRepositoryProvider).listMembers(groupId);
+  final members = await ref.read(groupsRepositoryProvider).listMembers(groupId);
   return members
       .where((member) => member.active)
       .map((member) => UserOptionModel(
@@ -1621,7 +1622,6 @@ String? _expenseShareSummary(ExpenseModel expense) {
       .join(', ');
   return '$totalShares cotas | $users';
 }
-
 
 String _initialPayerAmount(String userId, ExpenseModel? expense) {
   if (expense == null) {

@@ -8,10 +8,12 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
+import '../../../shared/widgets/keyboard_done_bar.dart';
 import '../../../shared/widgets/loading_state.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../expenses/services/expenses_repository.dart';
+import '../../groups/models/group_model.dart';
 import '../../groups/services/groups_repository.dart';
 import '../../months/services/months_repository.dart';
 import '../../reports/services/reports_repository.dart';
@@ -91,9 +93,9 @@ class EventsPage extends ConsumerWidget {
           ),
           CheckboxListTile(
             value: hideClosed,
-            onChanged: (value) =>
-                ref.read(hideClosedEventsProvider.notifier).state =
-                    value ?? false,
+            onChanged: (value) => ref
+                .read(hideClosedEventsProvider.notifier)
+                .state = value ?? false,
             controlAffinity: ListTileControlAffinity.leading,
             dense: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -136,8 +138,7 @@ class EventsPage extends ConsumerWidget {
                       child: ListTile(
                         title: Text(event.name),
                         subtitle: Padding(
-                          padding:
-                              const EdgeInsets.only(top: AppSpacing.xs),
+                          padding: const EdgeInsets.only(top: AppSpacing.xs),
                           child: Wrap(
                             crossAxisAlignment: WrapCrossAlignment.center,
                             spacing: AppSpacing.xs,
@@ -172,7 +173,8 @@ class EventsPage extends ConsumerWidget {
                                   event.id;
                               context.go('/reports');
                             } else if (value == 'start-settlement') {
-                              await _startSettlement(context, ref, event, events);
+                              await _startSettlement(
+                                  context, ref, event, events);
                             } else if (value == 'close') {
                               await _closeEvent(context, ref, event);
                             } else if (value == 'reopen') {
@@ -220,6 +222,24 @@ class EventsPage extends ConsumerWidget {
   }
 }
 
+/// Mês/ano seguinte ao último evento mensal do grupo, ou o mês atual se o
+/// grupo ainda não tem nenhum evento mensal.
+Future<(int, int)> _nextMonthlyReference(WidgetRef ref, String groupId) async {
+  final events =
+      await ref.read(eventsRepositoryProvider).list(groupId: groupId);
+  final monthly = events
+      .where((event) =>
+          event.type == 'MONTHLY' && event.month != null && event.year != null)
+      .toList();
+  if (monthly.isEmpty) {
+    final now = DateTime.now();
+    return (now.month, now.year);
+  }
+  final last = monthly.reduce(
+      (a, b) => a.year! * 12 + a.month! >= b.year! * 12 + b.month! ? a : b);
+  return last.month == 12 ? (1, last.year! + 1) : (last.month! + 1, last.year!);
+}
+
 Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
   final nameController = TextEditingController();
   final descriptionController = TextEditingController();
@@ -228,6 +248,44 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
   final yearController = TextEditingController(text: now.year.toString());
   var type = 'SPORADIC';
   String? selectedGroupId = ref.read(selectedGroupIdProvider);
+
+  // Sugere no campo Mes/Ano o mes seguinte ao ultimo evento mensal ja
+  // cadastrado no grupo (cai no mes atual se o grupo ainda nao tem
+  // nenhum). So sobrescreve se o usuario ainda nao mexeu nos campos.
+  var suggestedMonth = monthController.text;
+  var suggestedYear = yearController.text;
+  Future<void> suggestNextMonth(String? groupId) async {
+    if (groupId == null) {
+      return;
+    }
+    try {
+      final (month, year) = await _nextMonthlyReference(ref, groupId);
+      if (monthController.text != suggestedMonth ||
+          yearController.text != suggestedYear) {
+        return;
+      }
+      suggestedMonth = month.toString();
+      suggestedYear = year.toString();
+      monthController.text = suggestedMonth;
+      yearController.text = suggestedYear;
+    } catch (_) {
+      // Sem sugestao: mantem o mes atual.
+    }
+  }
+
+  final initialGroups =
+      await ref.read(groupsProvider.future).catchError((_) => <GroupModel>[]);
+  if (selectedGroupId == null && initialGroups.isNotEmpty) {
+    selectedGroupId = initialGroups.first.id;
+  }
+  await suggestNextMonth(selectedGroupId);
+  if (!context.mounted) {
+    nameController.dispose();
+    descriptionController.dispose();
+    monthController.dispose();
+    yearController.dispose();
+    return;
+  }
 
   final saved = await showModalBottomSheet<bool>(
     context: context,
@@ -316,6 +374,9 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                         onChanged: (value) {
                           if (value != null) {
                             setState(() => selectedGroupId = value);
+                            suggestNextMonth(value).then((_) {
+                              if (context.mounted) setState(() {});
+                            });
                           }
                         },
                       );
@@ -328,7 +389,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                     decoration: InputDecoration(
                       labelText: type == 'MONTHLY' ? 'Nome (opcional)' : 'Nome',
                       hintText: type == 'MONTHLY'
-                          ? '${now.month.toString().padLeft(2, '0')}/${now.year}'
+                          ? '${monthController.text.padLeft(2, '0')}/${yearController.text}'
                           : 'Ex.: Viagem para a praia',
                     ),
                     autofocus: true,
@@ -337,27 +398,29 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                   TextField(
                     controller: descriptionController,
                     textCapitalization: TextCapitalization.sentences,
-                    decoration:
-                        const InputDecoration(labelText: 'Descrição (opcional)'),
+                    decoration: const InputDecoration(
+                        labelText: 'Descrição (opcional)'),
                   ),
                   if (type == 'MONTHLY') ...[
                     const SizedBox(height: AppSpacing.md),
                     Row(
                       children: [
                         Expanded(
-                          child: TextField(
+                          child: KeyboardDoneBar(
+                              child: TextField(
                             controller: monthController,
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(labelText: 'Mes'),
-                          ),
+                          )),
                         ),
                         const SizedBox(width: AppSpacing.md),
                         Expanded(
-                          child: TextField(
+                          child: KeyboardDoneBar(
+                              child: TextField(
                             controller: yearController,
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(labelText: 'Ano'),
-                          ),
+                          )),
                         ),
                       ],
                     ),
@@ -447,8 +510,8 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
     _invalidateEventState(ref);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
               fallback: 'Não foi possível criar o evento.'))));
     }
   } finally {
@@ -530,8 +593,8 @@ Future<void> _startSettlement(
     }
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
               fallback: 'Não foi possível abrir o evento para pagamento.'))));
     }
   }
@@ -574,8 +637,8 @@ Future<void> _closeEvent(
     }
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
               fallback: 'Não foi possível fechar o evento.'))));
     }
   }
@@ -588,8 +651,8 @@ Future<void> _reopenEvent(
     _invalidateEventState(ref);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
               fallback: 'Não foi possível reabrir o evento.'))));
     }
   }
@@ -622,8 +685,8 @@ Future<void> _deleteEvent(
     _invalidateEventState(ref);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
               fallback: 'Não foi possível deletar o evento.'))));
     }
   }

@@ -86,8 +86,8 @@ class ReportsPage extends ConsumerWidget {
                       items: events
                           .map((item) => DropdownMenuItem(
                               value: item.id,
-                              child: Text(_eventLabel(
-                                  item, groupsAsync.valueOrNull))))
+                              child: Text(
+                                  _eventLabel(item, groupsAsync.valueOrNull))))
                           .toList(),
                       onChanged: (value) {
                         ref.read(selectedEventIdProvider.notifier).state =
@@ -136,7 +136,12 @@ class ReportsPage extends ConsumerWidget {
                         onPressed: settlementsAsync.valueOrNull == null
                             ? null
                             : () => _shareReport(
-                                report, settlementsAsync.valueOrNull!),
+                                report,
+                                settlementsAsync.valueOrNull!,
+                                groupsAsync.valueOrNull
+                                    ?.where((g) => g.id == report.groupId)
+                                    .firstOrNull
+                                    ?.receiverNickname),
                         icon: const Icon(Icons.share_outlined),
                       ),
                       StatusBadge(switch (report.status) {
@@ -279,8 +284,8 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
     // envolvida só quando a opção é marcada — fica fora do caminho por
     // padrão, já que boa parte das vezes ninguém quer ver.
     final rows = !canShowSuggestions || !_showSuggestions
-        ? _buildRows(context, sortedBalances, settlementsByUser,
-            currentUserId, semantic, const [])
+        ? _buildRows(context, sortedBalances, settlementsByUser, currentUserId,
+            semantic, const [])
         : FutureBuilder<List<PaymentSuggestionModel>>(
             future: _suggestions(eventId),
             builder: (context, snapshot) => _buildRows(
@@ -359,7 +364,9 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     PersonAvatar(
-                        name: balance.nickname, seed: balance.userId, radius: 14),
+                        name: balance.nickname,
+                        seed: balance.userId,
+                        radius: 14),
                     const SizedBox(width: AppSpacing.sm),
                     Flexible(
                       child: Text(
@@ -414,7 +421,10 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Expanded(child: Align(alignment: Alignment.centerLeft, child: amount)),
+                        Expanded(
+                            child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: amount)),
                         const SizedBox(width: 12),
                         status,
                       ],
@@ -616,9 +626,8 @@ class _BalanceDetails extends StatelessWidget {
             ),
           );
         }
-        final items = [...snapshot.data ?? []]
-          ..sort((first, second) =>
-              second.expenseDate.compareTo(first.expenseDate));
+        final items = [...snapshot.data ?? []]..sort(
+            (first, second) => second.expenseDate.compareTo(first.expenseDate));
         if (items.isEmpty) {
           return Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -693,48 +702,70 @@ int _statusOrder(EventSettlementModel? settlement) {
 
 /// Compartilha um resumo em texto do relatório (Etapa 11 do roteiro de
 /// UX) pelo share sheet nativo — WhatsApp é uma das opções, não a única.
-/// Não menciona chave PIX: o backend hoje não expõe a chave do
-/// administrador para participantes comuns, então o texto orienta a
-/// falar com o administrador em vez de inventar um dado que pode faltar.
+/// Separa "A pagar" e "A receber", com os pendentes primeiro (mesma ordem
+/// da tela). Quando o grupo tem recebedor eleito, o texto diz pra quem
+/// pagar; sem recebedor, orienta a falar com o administrador. Não
+/// menciona chave PIX: o backend não expõe a chave para participantes
+/// comuns.
 void _shareReport(
   MonthlyReportModel report,
   List<EventSettlementModel> settlements,
+  String? receiverNickname,
 ) {
   final settlementsByUser = {
     for (final settlement in settlements) settlement.userId: settlement,
   };
-  final sortedBalances =
-      sortedByNamePtBr(report.balances, (balance) => balance.nickname);
+  int pendingFirst(MonthlyBalanceModel first, MonthlyBalanceModel second) {
+    final statusComparison = _statusOrder(settlementsByUser[first.userId])
+        .compareTo(_statusOrder(settlementsByUser[second.userId]));
+    if (statusComparison != 0) {
+      return statusComparison;
+    }
+    return compareNamesPtBr(first.nickname, second.nickname);
+  }
+
+  final debtors = report.balances.where((b) => b.balance < 0).toList()
+    ..sort(pendingFirst);
+  final creditors = report.balances.where((b) => b.balance > 0).toList()
+    ..sort(pendingFirst);
   final title = report.eventName ??
       '${report.month.toString().padLeft(2, '0')}/${report.year}';
 
   final buffer = StringBuffer()
     ..writeln('$title — ${report.groupName}')
     ..writeln()
-    ..writeln('Total de despesas: ${formatCurrencyBRL(report.totalExpenses)}')
-    ..writeln()
-    ..writeln('Saldos:');
+    ..writeln('Total de despesas: ${formatCurrencyBRL(report.totalExpenses)}');
 
-  for (final balance in sortedBalances) {
-    final settlement = settlementsByUser[balance.userId];
-    final statusLabel = settlement == null || settlement.amount == 0
-        ? 'quitado'
-        : settlement.normalizedStatus == 'PAID'
-            ? 'pago'
-            : 'pendente';
-    final verb = balance.balance > 0
-        ? 'recebe'
-        : balance.balance < 0
-            ? 'paga'
-            : 'sem saldo';
-    buffer.writeln(
-        '• ${balance.nickname}: $verb ${formatCurrencyBRL(balance.balance.abs())} ($statusLabel)');
+  void writeSection(String header, List<MonthlyBalanceModel> balances) {
+    if (balances.isEmpty) {
+      return;
+    }
+    buffer
+      ..writeln()
+      ..writeln(header);
+    for (final balance in balances) {
+      final settlement = settlementsByUser[balance.userId];
+      final statusLabel = settlement == null || settlement.amount == 0
+          ? 'quitado'
+          : settlement.normalizedStatus == 'PAID'
+              ? 'pago'
+              : 'pendente';
+      buffer.writeln(
+          '• ${balance.nickname}: ${formatCurrencyBRL(balance.balance.abs())} ($statusLabel)');
+    }
   }
 
-  buffer
-    ..writeln()
-    ..write(
+  writeSection('A pagar:', debtors);
+  writeSection('A receber:', creditors);
+
+  buffer.writeln();
+  if (receiverNickname != null && receiverNickname.isNotEmpty) {
+    buffer.write(
+        'Pagamentos devem ser feitos para $receiverNickname. Consulte o DividiAí para mais detalhes.');
+  } else {
+    buffer.write(
         'Pagamentos são combinados com o administrador do grupo. Consulte o DividiAí para mais detalhes.');
+  }
 
   SharePlus.instance.share(ShareParams(text: buffer.toString()));
 }

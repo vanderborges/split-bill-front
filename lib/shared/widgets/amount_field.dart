@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import 'keyboard_done_bar.dart';
+
 final NumberFormat _fieldFormat = NumberFormat.currency(
   locale: 'pt_BR',
   symbol: '',
@@ -33,8 +35,7 @@ class _CurrencyTextInputFormatter extends TextInputFormatter {
       return const TextEditingValue(text: '');
     }
     final value = int.parse(digitsOnly) / 100;
-    final formatted =
-        _fieldFormat.format(value).replaceAll(' ', ' ').trim();
+    final formatted = _fieldFormat.format(value).replaceAll(' ', ' ').trim();
     return TextEditingValue(
       text: formatted,
       selection: TextSelection.collapsed(offset: formatted.length),
@@ -66,20 +67,24 @@ class AmountField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      autofocus: autofocus,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [_CurrencyTextInputFormatter()],
-      onChanged: onChanged,
-      style: style ??
-          Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-      decoration: InputDecoration(
-        labelText: label,
-        prefixText: 'R\$ ',
+    return KeyboardDoneBar(
+      child: TextField(
+        controller: controller,
+        autofocus: autofocus,
+        // Folga extra embaixo pra barra do "OK" não cobrir o campo.
+        scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 72),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [_CurrencyTextInputFormatter()],
+        onChanged: onChanged,
+        style: style ??
+            Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+        decoration: InputDecoration(
+          labelText: label,
+          prefixText: 'R\$ ',
+        ),
       ),
     );
   }
