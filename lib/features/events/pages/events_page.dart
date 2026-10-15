@@ -224,8 +224,11 @@ class EventsPage extends ConsumerWidget {
 }
 
 /// Mês/ano seguinte ao último evento mensal do grupo, ou o mês atual se o
-/// grupo ainda não tem nenhum evento mensal.
-Future<(int, int)> _nextMonthlyReference(WidgetRef ref, String groupId) async {
+/// grupo ainda não tem nenhum evento mensal. `locked` = já existe um evento
+/// mensal aberto no grupo: aí o próximo tem que ser exatamente esse mês
+/// (o backend também exige) e o campo fica travado.
+Future<(int, int, bool)> _nextMonthlyReference(
+    WidgetRef ref, String groupId) async {
   final events =
       await ref.read(eventsRepositoryProvider).list(groupId: groupId);
   final monthly = events
@@ -234,11 +237,14 @@ Future<(int, int)> _nextMonthlyReference(WidgetRef ref, String groupId) async {
       .toList();
   if (monthly.isEmpty) {
     final now = DateTime.now();
-    return (now.month, now.year);
+    return (now.month, now.year, false);
   }
   final last = monthly.reduce(
       (a, b) => a.year! * 12 + a.month! >= b.year! * 12 + b.month! ? a : b);
-  return last.month == 12 ? (1, last.year! + 1) : (last.month! + 1, last.year!);
+  final locked = monthly.any((event) => event.isOpen);
+  return last.month == 12
+      ? (1, last.year! + 1, locked)
+      : (last.month! + 1, last.year!, locked);
 }
 
 Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
@@ -255,14 +261,17 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
   // nenhum). So sobrescreve se o usuario ainda nao mexeu nos campos.
   var suggestedMonth = monthController.text;
   var suggestedYear = yearController.text;
+  var monthLocked = false;
   Future<void> suggestNextMonth(String? groupId) async {
     if (groupId == null) {
       return;
     }
     try {
-      final (month, year) = await _nextMonthlyReference(ref, groupId);
-      if (monthController.text != suggestedMonth ||
-          yearController.text != suggestedYear) {
+      final (month, year, locked) = await _nextMonthlyReference(ref, groupId);
+      monthLocked = locked;
+      if (!locked &&
+          (monthController.text != suggestedMonth ||
+              yearController.text != suggestedYear)) {
         return;
       }
       suggestedMonth = month.toString();
@@ -271,6 +280,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
       yearController.text = suggestedYear;
     } catch (_) {
       // Sem sugestao: mantem o mes atual.
+      monthLocked = false;
     }
   }
 
@@ -410,6 +420,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                           child: KeyboardDoneBar(
                               child: TextField(
                             controller: monthController,
+                            readOnly: monthLocked,
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(labelText: 'Mes'),
                           )),
@@ -419,12 +430,20 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                           child: KeyboardDoneBar(
                               child: TextField(
                             controller: yearController,
+                            readOnly: monthLocked,
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(labelText: 'Ano'),
                           )),
                         ),
                       ],
                     ),
+                    if (monthLocked) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Já existe um mês aberto, então o próximo segue a ordem dos meses.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ],
                   const SizedBox(height: AppSpacing.xl),
                   Row(

@@ -92,6 +92,22 @@ class ProfilePage extends ConsumerWidget {
                 icon: const Icon(Icons.lock_reset_outlined),
                 label: const Text('Alterar senha'),
               ),
+              // No celular o menu "três pontos" da AppBar saiu: Usuários
+              // (só admin) e Sair ficam aqui no perfil.
+              if (user.admin && MediaQuery.sizeOf(context).width < 600) ...[
+                const SizedBox(height: AppSpacing.md),
+                OutlinedButton.icon(
+                  onPressed: () => context.go('/users'),
+                  icon: const Icon(Icons.group_outlined),
+                  label: const Text('Usuários'),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.md),
+              OutlinedButton.icon(
+                onPressed: () => _logout(context, ref),
+                icon: const Icon(Icons.logout),
+                label: const Text('Sair'),
+              ),
               const SizedBox(height: AppSpacing.xl),
               const Divider(),
               const SizedBox(height: AppSpacing.md),
@@ -114,6 +130,14 @@ class ProfilePage extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+Future<void> _logout(BuildContext context, WidgetRef ref) async {
+  await ref.read(authRepositoryProvider).logout();
+  resetSessionScopedProviders(ref);
+  if (context.mounted) {
+    context.go('/login');
   }
 }
 

@@ -177,9 +177,8 @@ class _WideScaffold extends ConsumerWidget {
 /// (Início, Eventos, Grupos, Extrato, Relatório). Nova despesa já tem seu
 /// próprio botão (+) nas telas de Eventos/Despesas, então não duplicamos
 /// aqui. O nome da pessoa logada aparece na AppBar e abre o Perfil ao
-/// tocar; Despesas e Usuários (admin) ficam a um toque de distância no
-/// menu "Mais" — nenhuma rota deixou de existir, só mudou de onde é
-/// alcançada.
+/// tocar; Sair e Usuários (admin) ficam no Perfil. Despesas abre tocando
+/// num evento (Início/Eventos).
 class _NarrowScaffold extends ConsumerWidget {
   const _NarrowScaffold({
     required this.title,
@@ -252,26 +251,6 @@ class _NarrowScaffold extends ConsumerWidget {
                 ),
               ),
             ),
-          PopupMenuButton<String>(
-            tooltip: 'Mais opções',
-            icon: const Icon(Icons.more_vert),
-            onSelected: (value) {
-              if (value == 'logout') {
-                _logout(context, ref);
-                return;
-              }
-              context.go(value);
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                  value: '/expenses', child: Text('Despesas')),
-              if (showUsers)
-                const PopupMenuItem(
-                    value: '/users', child: Text('Usuários')),
-              const PopupMenuDivider(),
-              const PopupMenuItem(value: 'logout', child: Text('Sair')),
-            ],
-          ),
           ...?actions,
         ],
       ),

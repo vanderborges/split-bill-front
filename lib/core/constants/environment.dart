@@ -8,6 +8,6 @@ class Environment {
 
   static const webBaseUrl = String.fromEnvironment(
     'WEB_BASE_URL',
-    defaultValue: 'https://split-bill-f135e.web.app',
+    defaultValue: 'https://dividiai.com',
   );
 }

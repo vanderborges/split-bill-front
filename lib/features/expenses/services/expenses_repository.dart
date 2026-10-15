@@ -12,7 +12,10 @@ final expensesRepositoryProvider = Provider<ExpensesRepository>((ref) {
 
 /// Filtro da tela de despesas: quando true, mostra só as despesas em que o
 /// usuário logado participa (pagou ou consumiu), em vez de todas do evento.
-final showOnlyMyExpensesProvider = StateProvider<bool>((ref) => false);
+/// Começa marcado e, por ser autoDispose, volta a marcado toda vez que a
+/// tela de Despesas é aberta de novo.
+final showOnlyMyExpensesProvider =
+    StateProvider.autoDispose<bool>((ref) => true);
 
 final currentMonthExpensesProvider =
     FutureProvider<List<ExpenseModel>>((ref) async {

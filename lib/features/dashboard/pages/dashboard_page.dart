@@ -126,11 +126,19 @@ class _GroupCard extends StatelessWidget {
     final events = groupBalance.events;
 
     if (events.isEmpty) {
+      // Grupo sem evento: tocar leva pra tela de Eventos já nesse grupo,
+      // onde dá pra cadastrar o primeiro.
       return Card(
-        child: ListTile(
-          leading: const Icon(Icons.groups_outlined),
-          title: Text(groupBalance.groupName),
-          subtitle: const Text('Sem despesas em eventos abertos.'),
+        child: Consumer(
+          builder: (context, ref, _) => ListTile(
+            leading: const Icon(Icons.groups_outlined),
+            title: Text(groupBalance.groupName),
+            subtitle: const Text('Sem despesas em eventos abertos.'),
+            onTap: () {
+              selectEvent(ref, groupId: groupBalance.groupId);
+              context.go('/events');
+            },
+          ),
         ),
       );
     }
