@@ -158,19 +158,19 @@ class EventsPage extends ConsumerWidget {
                                 ? Icons.hourglass_top_outlined
                                 : Icons.event_available),
                         onTap: () {
-                          ref.read(selectedEventIdProvider.notifier).state =
-                              event.id;
+                          selectEvent(ref,
+                              groupId: event.groupId, eventId: event.id);
                           context.go('/expenses');
                         },
                         trailing: PopupMenuButton<String>(
                           onSelected: (value) async {
                             if (value == 'expenses') {
-                              ref.read(selectedEventIdProvider.notifier).state =
-                                  event.id;
+                              selectEvent(ref,
+                                  groupId: event.groupId, eventId: event.id);
                               context.go('/expenses');
                             } else if (value == 'report') {
-                              ref.read(selectedEventIdProvider.notifier).state =
-                                  event.id;
+                              selectEvent(ref,
+                                  groupId: event.groupId, eventId: event.id);
                               context.go('/reports');
                             } else if (value == 'start-settlement') {
                               await _startSettlement(
@@ -489,7 +489,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
             year: year,
             groupId: groupId,
           );
-      ref.read(selectedEventIdProvider.notifier).state = event.id;
+      selectEvent(ref, groupId: event.groupId, eventId: event.id);
       ref.invalidate(monthsProvider);
     } else {
       final groups = await ref.read(groupsProvider.future);
@@ -505,9 +505,8 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
             type: type,
             groupId: groupId,
           );
-      ref.read(selectedEventIdProvider.notifier).state = event.id;
+      selectEvent(ref, groupId: event.groupId, eventId: event.id);
     }
-    ref.read(selectedGroupIdProvider.notifier).state = selectedGroupId;
     _invalidateEventState(ref);
   } catch (error) {
     if (context.mounted) {

@@ -192,7 +192,6 @@ class _AmountFieldState extends State<AmountField> {
   }
 
   Widget _buildToolbar(BuildContext context) {
-    final label = _pendingLabel;
     Widget key(String symbol, VoidCallback onPressed) => SizedBox(
           width: 44,
           child: TextButton(
@@ -203,22 +202,14 @@ class _AmountFieldState extends State<AmountField> {
                     const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
           ),
         );
+    // Só os botões, centralizados pela barra. A conta pendente já aparece
+    // no helperText do próprio campo.
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         for (final operator in const ['+', '−', '×', '÷'])
           key(operator, () => _onOperator(operator)),
         key('=', _resolve),
-        if (label != null)
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          ),
       ],
     );
   }

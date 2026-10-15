@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_semantic_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
+import '../../../shared/ptbr_sort.dart';
 import '../../../shared/widgets/amount_field.dart';
 import '../../../shared/widgets/keyboard_done_bar.dart';
 import '../../../shared/widgets/app_scaffold.dart';
@@ -26,7 +28,6 @@ import '../../users/models/user_option_model.dart';
 import '../models/expense_model.dart';
 import '../services/expense_categories_repository.dart';
 import '../services/expenses_repository.dart';
-import '../services/new_expense_intent.dart';
 
 class ExpensesPage extends ConsumerWidget {
   const ExpensesPage({super.key});
@@ -40,31 +41,26 @@ class ExpensesPage extends ConsumerWidget {
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final showOnlyMine = ref.watch(showOnlyMyExpensesProvider);
 
-    if (ref.read(pendingAutoOpenExpenseProvider)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!context.mounted) {
-          return;
-        }
-        if (!ref.read(pendingAutoOpenExpenseProvider)) {
-          return;
-        }
-        ref.read(pendingAutoOpenExpenseProvider.notifier).state = false;
-        _openNewExpenseFlow(context, ref);
-      });
-    }
+    // Evento selecionado que não está aberto (aguardando pagamento ou
+    // fechado) não aceita despesa — nem mostra o botão.
+    final selectedEventClosedForExpenses =
+        eventAsync.valueOrNull?.isOpen == false;
 
     return AppScaffold(
       title: 'Despesas',
-      floatingActionButton: AutoCollapsingFab(
-        label: 'Nova despesa',
-        onPressed: () => _openNewExpenseFlow(context, ref),
-      ),
+      floatingActionButton: selectedEventClosedForExpenses
+          ? null
+          : AutoCollapsingFab(
+              label: 'Nova despesa',
+              onPressed: () =>
+                  openNewExpenseFlow(context, ref, useSelectedEvent: true),
+            ),
       child: eventAsync.when(
         data: (event) {
           if (event == null) {
             return Center(
               child: FilledButton.icon(
-                onPressed: () => _openNewExpenseFlow(context, ref),
+                onPressed: () => openNewExpenseFlow(context, ref),
                 icon: const Icon(Icons.add),
                 label: const Text('Adicionar despesa'),
               ),
@@ -102,8 +98,11 @@ class ExpensesPage extends ConsumerWidget {
                                   _eventLabel(item, groupsAsync.valueOrNull))))
                           .toList(),
                       onChanged: (value) {
-                        ref.read(selectedEventIdProvider.notifier).state =
-                            value;
+                        final picked = items.where((item) => item.id == value);
+                        if (picked.isNotEmpty) {
+                          selectEvent(ref,
+                              groupId: picked.first.groupId, eventId: value);
+                        }
                         ref.invalidate(selectedEventProvider);
                         ref.invalidate(selectedEventExpensesProvider);
                       },
@@ -214,7 +213,10 @@ class ExpensesPage extends ConsumerWidget {
                               : Text([shareSummary, installmentLabel]
                                   .whereType<String>()
                                   .join(' | ')),
-                          trailing: MoneyText(expense.amount),
+                          trailing: showOnlyMine
+                              ? _UserBalanceText(
+                                  _userBalance(expense, currentUser?.id))
+                              : MoneyText(expense.amount),
                         );
                       },
                     );
@@ -276,6 +278,47 @@ bool _isUserInvolved(ExpenseModel expense, String? userId) {
   return expense.payerId == userId ||
       expense.payers.any((payer) => payer.userId == userId) ||
       expense.participants.any((participant) => participant.userId == userId);
+}
+
+/// Saldo do usuário numa despesa: quanto pagou menos a parte que consumiu.
+/// Positivo = tem a receber, negativo = deve.
+double _userBalance(ExpenseModel expense, String? userId) {
+  if (userId == null) {
+    return 0;
+  }
+  final paid = expense.payers.isEmpty
+      ? (expense.payerId == userId ? expense.amount : 0.0)
+      : expense.payers
+          .where((payer) => payer.userId == userId)
+          .fold<double>(0.0, (total, payer) => total + payer.amount);
+  final consumed = expense.participants
+      .where((participant) => participant.userId == userId)
+      .fold<double>(
+          0.0, (total, participant) => total + participant.shareAmount);
+  return paid - consumed;
+}
+
+/// Saldo com sinal: verde quando positivo ou zero, vermelho quando negativo.
+class _UserBalanceText extends StatelessWidget {
+  const _UserBalanceText(this.balance);
+
+  final double balance;
+
+  @override
+  Widget build(BuildContext context) {
+    // Arredonda em centavos pra "-0,00" de resto de divisão não virar
+    // vermelho.
+    final value = (balance * 100).round() / 100;
+    final semantic = context.semanticColors;
+    return MoneyText(
+      value,
+      showSign: true,
+      style: Theme.of(context)
+          .textTheme
+          .bodyLarge
+          ?.copyWith(color: value < 0 ? semantic.negative : semantic.positive),
+    );
+  }
 }
 
 Future<void> _deleteExpense(
@@ -374,24 +417,36 @@ Future<bool> _confirmCancelSubscription(
   }
 }
 
-/// Fluxo único de "adicionar despesa" — usado pelo FAB desta tela, pelo
-/// botão de estado vazio e pelo CTA "Nova despesa" da Home (via
-/// [pendingAutoOpenExpenseProvider]).
+/// Fluxo único de "adicionar despesa" — usado pelo FAB e pelo botão de
+/// estado vazio da tela de Despesas e pelo CTA "Nova despesa" da Home. O
+/// formulário abre por cima da tela de onde veio (da Home, volta pra Home).
 ///
-/// Antes do formulário abre um menu pra escolher grupo e evento (já
-/// pré-selecionados com o que está na tela). Com só 1 grupo e 1 evento
-/// aberto, pula o menu e abre o formulário direto.
+/// Com [useSelectedEvent] (FAB da tela de Despesas) e o evento da tela
+/// aberto, vai direto pro formulário nesse evento. Senão abre um menu pra
+/// escolher grupo e evento (pré-selecionados com o que está na tela); com
+/// só 1 grupo e 1 evento aberto, pula o menu.
 ///
 /// Sem nenhum evento aberto, pergunta se quer criar um evento (em vez de
 /// criar um mês em silêncio) — "Sim" leva pra tela de criação de evento,
 /// "Não" só avisa que não dá pra lançar despesa sem evento aberto.
-Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
+Future<void> openNewExpenseFlow(
+  BuildContext context,
+  WidgetRef ref, {
+  bool useSelectedEvent = false,
+}) async {
+  final current = await ref.read(selectedEventProvider.future);
+  if (!context.mounted) {
+    return;
+  }
+  if (useSelectedEvent && current != null && current.isOpen) {
+    await _openFormForEvent(context, ref, current);
+    return;
+  }
   final groups = await ref.read(groupsProvider.future);
   final groupIds = groups.map((group) => group.id).toSet();
   final openEvents = (await ref.read(eventsRepositoryProvider).list())
       .where((item) => item.isOpen && groupIds.contains(item.groupId))
       .toList();
-  final current = await ref.read(selectedEventProvider.future);
   if (!context.mounted) {
     return;
   }
@@ -414,6 +469,11 @@ Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
       event = choice.event;
     }
   }
+  // O evento escolhido vira a seleção das outras telas (Despesas,
+  // Relatório...), pra depois de salvar a pessoa achar a despesa nele.
+  if (event != null) {
+    selectEvent(ref, groupId: event.groupId, eventId: event.id);
+  }
 
   if (event == null) {
     final wantsToCreate = await _confirmCreateEvent(context);
@@ -433,6 +493,11 @@ Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
     return;
   }
 
+  await _openFormForEvent(context, ref, event);
+}
+
+Future<void> _openFormForEvent(
+    BuildContext context, WidgetRef ref, EventModel event) async {
   final users = await _loadEventUsers(ref, event.groupId, eventId: event.id);
   final categories = await _loadCategoryNames(ref);
   if (context.mounted) {
@@ -1674,19 +1739,22 @@ Future<bool> _openExpenseDetails(
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 _detailSectionTitle(routeContext, 'Quem pagou'),
-                ...expense.payers.map((payer) => _detailPersonRow(
-                    routeContext, payer.userId, payer.nickname, payer.amount)),
+                ...sortedByNamePtBr(expense.payers, (payer) => payer.nickname)
+                    .map((payer) => _detailPersonRow(routeContext, payer.userId,
+                        payer.nickname, payer.amount)),
                 const SizedBox(height: AppSpacing.lg),
                 _detailSectionTitle(routeContext, 'Quem vai dividir'),
-                ...expense.participants.map((participant) => _detailPersonRow(
-                      routeContext,
-                      participant.userId,
-                      participant.shareCount > 1
-                          ? '${participant.nickname} (x${participant.shareCount})'
-                          : participant.nickname,
-                      participant.shareAmount,
-                      note: participant.shareDescription,
-                    )),
+                ...sortedByNamePtBr(expense.participants,
+                        (participant) => participant.nickname)
+                    .map((participant) => _detailPersonRow(
+                          routeContext,
+                          participant.userId,
+                          participant.shareCount > 1
+                              ? '${participant.nickname} (x${participant.shareCount})'
+                              : participant.nickname,
+                          participant.shareAmount,
+                          note: participant.shareDescription,
+                        )),
               ],
             ),
           ),

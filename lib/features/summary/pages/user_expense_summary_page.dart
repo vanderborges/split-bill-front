@@ -35,6 +35,16 @@ class _UserExpenseSummaryPageState
   Future<UserExpenseSummaryModel>? summaryFuture;
 
   @override
+  void initState() {
+    super.initState();
+    // Começa no grupo/evento que a pessoa escolheu nas outras telas
+    // (Eventos, Despesas, Relatório), em vez de sempre no primeiro grupo e
+    // "Todos". Sem evento escolhido de fato, continua em "Todos".
+    groupId = ref.read(selectedGroupIdProvider);
+    eventId = ref.read(selectedEventIdProvider);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final currentUserAsync = ref.watch(currentUserProvider);
     final groupsAsync = ref.watch(groupsProvider);
@@ -72,6 +82,7 @@ class _UserExpenseSummaryPageState
                       summaryFuture = null;
                     });
                     ref.read(selectedGroupIdProvider.notifier).state = value;
+                    ref.read(selectedEventIdProvider.notifier).state = null;
                     ref.invalidate(eventsProvider);
                   }
                 },
@@ -120,20 +131,35 @@ class _UserExpenseSummaryPageState
             ),
           const SizedBox(height: 12),
           eventsAsync.when(
-            data: (events) => DropdownButtonFormField<String?>(
-              initialValue: eventId,
-              decoration: const InputDecoration(labelText: 'Evento'),
-              items: [
-                const DropdownMenuItem<String?>(
-                    value: null, child: Text('Todos')),
-                ...events.map((event) => DropdownMenuItem<String?>(
-                    value: event.id, child: Text(event.name))),
-              ],
-              onChanged: (value) => setState(() {
-                eventId = value;
-                summaryFuture = null;
-              }),
-            ),
+            data: (events) {
+              // Evento vindo de outra tela que não é deste grupo: volta
+              // pra "Todos" (senão o dropdown quebra com valor inexistente).
+              if (eventId != null &&
+                  events.every((event) => event.id != eventId)) {
+                eventId = null;
+              }
+              return DropdownButtonFormField<String?>(
+                key: ValueKey('summary-event-$groupId-$eventId'),
+                initialValue: eventId,
+                decoration: const InputDecoration(labelText: 'Evento'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                      value: null, child: Text('Todos')),
+                  ...events.map((event) => DropdownMenuItem<String?>(
+                      value: event.id, child: Text(event.name))),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    eventId = value;
+                    summaryFuture = null;
+                  });
+                  // Escolher um evento aqui também vale pras outras telas.
+                  if (value != null && groupId != null) {
+                    selectEvent(ref, groupId: groupId!, eventId: value);
+                  }
+                },
+              );
+            },
             loading: () => const LinearProgressIndicator(),
             error: (error, _) => Text('Erro ao carregar eventos: $error'),
           ),

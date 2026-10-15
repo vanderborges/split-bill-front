@@ -125,20 +125,23 @@ class _DoneBar extends StatelessWidget {
           elevation: 2,
           child: SizedBox(
             height: 44,
-            child: Row(
+            // Ações extras (ex.: calculadora) centralizadas na tela, com o
+            // "OK" fixo à direita por cima.
+            child: Stack(
               children: [
                 if (toolbarBuilder != null)
-                  Expanded(child: toolbarBuilder!(context))
-                else
-                  const Spacer(),
-                TextButton(
-                  onPressed: () {
-                    onDone?.call();
-                    FocusManager.instance.primaryFocus?.unfocus();
-                  },
-                  child: const Text(
-                    'OK',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  Center(child: toolbarBuilder!(context)),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      onDone?.call();
+                      FocusManager.instance.primaryFocus?.unfocus();
+                    },
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
               ],

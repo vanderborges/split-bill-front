@@ -32,12 +32,15 @@ class StatusBadge extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final (color, defaultLabel) = switch (status) {
       AppStatus.aberto => (scheme.primary, 'Aberto'),
-      AppStatus.aguardandoPagamento => (semantic.warning, 'Aguardando pagamento'),
+      AppStatus.aguardandoPagamento => (
+          semantic.warning,
+          'Aguardando pagamento'
+        ),
       AppStatus.fechado => (semantic.neutral, 'Fechado'),
       AppStatus.pendente => (semantic.warning, 'Pendente'),
       AppStatus.pagamentoInformado => (semantic.warning, 'Pagamento informado'),
       AppStatus.confirmado => (semantic.positive, 'Confirmado'),
-      AppStatus.quitado => (semantic.positive, 'Quitado'),
+      AppStatus.quitado => (semantic.positive, 'Pago'),
     };
 
     return Container(

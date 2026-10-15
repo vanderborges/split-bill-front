@@ -13,7 +13,7 @@ void main() {
   testWidgets('StatusBadge shows the default label per status',
       (tester) async {
     await tester.pumpWidget(_wrap(const StatusBadge(AppStatus.quitado)));
-    expect(find.text('Quitado'), findsOneWidget);
+    expect(find.text('Pago'), findsOneWidget);
   });
 
   testWidgets('StatusBadge accepts a custom label', (tester) async {

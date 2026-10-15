@@ -25,6 +25,14 @@ final hideClosedEventsProvider = StateProvider<bool>((ref) => false);
 
 final selectedEventIdProvider = StateProvider<String?>((ref) => null);
 
+/// Seleciona o evento pra todas as telas (Eventos, Despesas, Relatório,
+/// Extrato) — grava junto o grupo dele, senão a tela seguinte abria com
+/// "Todos os grupos" e perdia o contexto.
+void selectEvent(WidgetRef ref, {required String groupId, String? eventId}) {
+  ref.read(selectedGroupIdProvider.notifier).state = groupId;
+  ref.read(selectedEventIdProvider.notifier).state = eventId;
+}
+
 final selectedEventProvider = FutureProvider<EventModel?>((ref) async {
   final events = await ref.watch(eventsProvider.future);
   if (events.isEmpty) {

@@ -10,8 +10,7 @@ import '../../../shared/widgets/loading_state.dart';
 import '../../../shared/widgets/money_text.dart';
 import '../../events/services/events_repository.dart';
 import '../../expenses/services/expenses_repository.dart';
-import '../../expenses/services/new_expense_intent.dart';
-import '../../groups/services/groups_repository.dart';
+import '../../expenses/pages/expenses_page.dart';
 import '../models/dashboard_group_balance_model.dart';
 import '../services/dashboard_repository.dart';
 
@@ -36,8 +35,9 @@ class DashboardPage extends ConsumerWidget {
           const SizedBox(height: AppSpacing.md),
           FilledButton.icon(
             onPressed: () {
-              ref.read(pendingAutoOpenExpenseProvider.notifier).state = true;
-              context.go('/expenses');
+              // Abre o fluxo por cima da Home — ao salvar/cancelar a pessoa
+              // continua no Início.
+              openNewExpenseFlow(context, ref);
             },
             icon: const Icon(Icons.add),
             label: const Text('Nova despesa'),
@@ -106,8 +106,7 @@ void _openEventExpenses(
   String groupId,
   String eventId,
 ) {
-  ref.read(selectedGroupIdProvider.notifier).state = groupId;
-  ref.read(selectedEventIdProvider.notifier).state = eventId;
+  selectEvent(ref, groupId: groupId, eventId: eventId);
   ref.invalidate(selectedEventProvider);
   ref.invalidate(selectedEventExpensesProvider);
   context.go('/expenses');
@@ -155,8 +154,7 @@ class _GroupCard extends StatelessWidget {
       );
     }
 
-    final total =
-        events.fold<double>(0, (sum, event) => sum + event.balance);
+    final total = events.fold<double>(0, (sum, event) => sum + event.balance);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -181,8 +179,8 @@ class _GroupCard extends StatelessWidget {
                     title: Text(event.eventName),
                     subtitle: Text(_eventSubtitle(event)),
                     trailing: MoneyText(event.balance, colorBySign: true),
-                    onTap: () => _openEventExpenses(context, ref,
-                        groupBalance.groupId, event.eventId),
+                    onTap: () => _openEventExpenses(
+                        context, ref, groupBalance.groupId, event.eventId),
                   ),
                 ))
             .toList(),

@@ -90,8 +90,11 @@ class ReportsPage extends ConsumerWidget {
                                   _eventLabel(item, groupsAsync.valueOrNull))))
                           .toList(),
                       onChanged: (value) {
-                        ref.read(selectedEventIdProvider.notifier).state =
-                            value;
+                        final picked = events.where((item) => item.id == value);
+                        if (picked.isNotEmpty) {
+                          selectEvent(ref,
+                              groupId: picked.first.groupId, eventId: value);
+                        }
                         ref.invalidate(selectedEventProvider);
                         ref.invalidate(selectedEventReportProvider);
                         ref.invalidate(selectedEventSettlementsProvider);
@@ -198,6 +201,7 @@ class ReportsPage extends ConsumerWidget {
                       settlements: settlements,
                       canUpdateSettlements: isGroupAdmin,
                       isAwaitingPayment: report.status == 'SETTLING',
+                      isEventOpen: report.status == 'OPEN',
                       eventId: report.eventId,
                     ),
                     loading: () => const Padding(
@@ -234,6 +238,7 @@ class _ReportTable extends ConsumerStatefulWidget {
     required this.settlements,
     required this.canUpdateSettlements,
     required this.isAwaitingPayment,
+    required this.isEventOpen,
     required this.eventId,
   });
 
@@ -244,6 +249,10 @@ class _ReportTable extends ConsumerStatefulWidget {
   /// Pago/pendente só pode mudar com o evento aguardando pagamento — aberto
   /// ainda recebe despesa (o saldo muda) e fechado já foi acertado.
   final bool isAwaitingPayment;
+
+  /// Evento aberto ainda recebe despesa: status de pagamento não faz
+  /// sentido e fica escondido.
+  final bool isEventOpen;
   final String? eventId;
 
   @override
@@ -336,7 +345,8 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
         final isCurrentUser = balance.userId == currentUserId;
         // Pago: fundo neutro + linha esmaecida, pra destacar visualmente
         // quem ainda está pendente.
-        final isPaid = settlement != null &&
+        final isPaid = !widget.isEventOpen &&
+            settlement != null &&
             settlement.amount != 0 &&
             settlement.normalizedStatus == 'PAID';
         final color = isPaid
@@ -404,13 +414,15 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                     color: Theme.of(context).textTheme.bodyLarge?.color,
                   ),
                 );
-                final status = _SettlementStatus(
-                  settlement: settlement,
-                  canUpdate:
-                      widget.canUpdateSettlements && widget.isAwaitingPayment,
-                  onChanged: (value) =>
-                      _updateSettlement(context, ref, settlement!, value),
-                );
+                final Widget status = widget.isEventOpen
+                    ? const SizedBox.shrink()
+                    : _SettlementStatus(
+                        settlement: settlement,
+                        canUpdate: widget.canUpdateSettlements &&
+                            widget.isAwaitingPayment,
+                        onChanged: (value) =>
+                            _updateSettlement(context, ref, settlement!, value),
+                      );
                 final mySuggestions = suggestions
                     .where((suggestion) =>
                         suggestion.fromUserId == balance.userId ||
@@ -777,13 +789,17 @@ void _shareReport(
       ..writeln(header);
     for (final balance in balances) {
       final settlement = settlementsByUser[balance.userId];
-      final statusLabel = settlement == null || settlement.amount == 0
-          ? 'quitado'
-          : settlement.normalizedStatus == 'PAID'
-              ? 'pago'
-              : 'pendente';
+      final isPending = settlement != null &&
+          settlement.amount != 0 &&
+          settlement.normalizedStatus != 'PAID';
+      // Evento aberto ainda não tem pagamento: sai só o valor.
+      final statusSuffix = report.status == 'OPEN'
+          ? ''
+          : isPending
+              ? ' (pendente)'
+              : ' (pago)';
       buffer.writeln(
-          '• ${balance.nickname}: ${formatCurrencyBRL(balance.balance.abs())} ($statusLabel)');
+          '• ${balance.nickname}: ${formatCurrencyBRL(balance.balance.abs())}$statusSuffix');
     }
   }
 
