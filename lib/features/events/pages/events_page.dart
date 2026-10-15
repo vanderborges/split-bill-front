@@ -191,10 +191,11 @@ class EventsPage extends ConsumerWidget {
                             if (isEventAdmin && event.isOpen)
                               const PopupMenuItem(
                                   value: 'start-settlement',
-                                  child: Text('Abrir para pagamento')),
+                                  child: Text('Fechar evento')),
                             if (isEventAdmin && event.isSettling)
                               const PopupMenuItem(
-                                  value: 'close', child: Text('Fechar')),
+                                  value: 'close',
+                                  child: Text('Concluir evento')),
                             if (isEventAdmin && !event.isOpen)
                               const PopupMenuItem(
                                   value: 'reopen', child: Text('Reabrir')),
@@ -542,13 +543,13 @@ Future<void> _startSettlement(
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: Text('Abrir ${event.name} para pagamento'),
+            title: Text('Fechar ${event.name}'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
                     'Depois desta etapa nao e mais possivel adicionar ou editar despesas neste evento. '
-                    'Voce pode so abrir para pagamento ou consolidar o saldo como despesa em outro evento.'),
+                    'Voce pode so fechar o evento ou consolidar o saldo como despesa em outro evento.'),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String?>(
                   initialValue: targetId,
@@ -569,7 +570,7 @@ Future<void> _startSettlement(
                   child: const Text('Cancelar')),
               FilledButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Abrir para pagamento')),
+                  child: const Text('Fechar evento')),
             ],
           );
         },
@@ -587,7 +588,7 @@ Future<void> _startSettlement(
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Evento aberto para pagamento. '
+            content: Text('Evento fechado, aguardando pagamentos. '
                 'Despesas novas ficam bloqueadas a partir de agora.')),
       );
     }
@@ -595,7 +596,7 @@ Future<void> _startSettlement(
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(friendlyApiError(error,
-              fallback: 'Não foi possível abrir o evento para pagamento.'))));
+              fallback: 'Não foi possível fechar o evento.'))));
     }
   }
 }
@@ -611,16 +612,16 @@ Future<void> _closeEvent(
     barrierDismissible: false,
     context: context,
     builder: (context) => AlertDialog(
-      title: Text('Fechar ${event.name}'),
+      title: Text('Concluir ${event.name}'),
       content: const Text(
-          'Confirma que todos os pagamentos ja foram acertados? Depois de fechado, o evento nao pode mais ser alterado.'),
+          'Confirma que todos os pagamentos ja foram acertados? Depois de concluido, o evento nao pode mais ser alterado.'),
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancelar')),
         FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Fechar')),
+            child: const Text('Concluir')),
       ],
     ),
   );
@@ -632,14 +633,14 @@ Future<void> _closeEvent(
     _invalidateEventState(ref);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Evento fechado com sucesso.')),
+        const SnackBar(content: Text('Evento concluído com sucesso.')),
       );
     }
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(friendlyApiError(error,
-              fallback: 'Não foi possível fechar o evento.'))));
+              fallback: 'Não foi possível concluir o evento.'))));
     }
   }
 }

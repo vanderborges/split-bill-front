@@ -36,20 +36,25 @@ class BalanceExpenseDetailModel {
   final int totalShares;
   final String? shareDescription;
 
-  /// Mesmo formato de `ExpenseModel.installmentLabel`: "Parcela 2/10",
-  /// "Assinatura (mês 3)" ou null para despesa única.
-  String? get installmentLabel {
-    if (isSubscription) {
-      final number = installmentNumber;
-      final base = number == null ? 'Assinatura' : 'Assinatura (mês $number)';
-      return subscriptionCancelled ? '$base — cancelada' : base;
-    }
+  /// Título enxuto pro relatório: parcela vai junto da descrição
+  /// ("Capa Chuva 01/04") em vez de numa linha separada.
+  String get title {
     final total = totalInstallments;
     final number = installmentNumber;
-    if (total == null || total <= 1 || number == null) {
+    if (isSubscription || total == null || total <= 1 || number == null) {
+      return description;
+    }
+    String twoDigits(int value) => value.toString().padLeft(2, '0');
+    return '$description ${twoDigits(number)}/${twoDigits(total)}';
+  }
+
+  /// Só para assinatura, e sem o "mês N" — no relatório o número do mês
+  /// não ajuda e só polui. Parcela já aparece no [title].
+  String? get installmentLabel {
+    if (!isSubscription) {
       return null;
     }
-    return 'Parcela $number/$total';
+    return subscriptionCancelled ? 'Assinatura — cancelada' : 'Assinatura';
   }
 
   /// "2 de 5 cotas — levou acompanhante". Só aparece quando a pessoa tem

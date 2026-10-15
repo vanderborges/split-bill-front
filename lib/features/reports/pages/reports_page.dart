@@ -155,7 +155,7 @@ class ReportsPage extends ConsumerWidget {
                               ? null
                               : () => _confirmStartSettlement(
                                   context, ref, report.eventId!),
-                          child: const Text('Abrir para pagamento'),
+                          child: const Text('Fechar evento'),
                         ),
                       if (report.status == 'SETTLING' && isGroupAdmin)
                         OutlinedButton.icon(
@@ -169,7 +169,7 @@ class ReportsPage extends ConsumerWidget {
                       if (report.status == 'SETTLING' && isGroupAdmin)
                         Tooltip(
                           message: _hasPendingSettlement(settlementsAsync)
-                              ? 'Confirme todos os pagamentos antes de fechar o evento.'
+                              ? 'Confirme todos os pagamentos antes de concluir o evento.'
                               : '',
                           child: FilledButton(
                             onPressed: report.eventId == null ||
@@ -177,7 +177,7 @@ class ReportsPage extends ConsumerWidget {
                                 ? null
                                 : () => _confirmCloseEvent(
                                     context, ref, report.eventId!),
-                            child: const Text('Fechar evento'),
+                            child: const Text('Concluir evento'),
                           ),
                         ),
                     ],
@@ -197,6 +197,7 @@ class ReportsPage extends ConsumerWidget {
                       balances: report.balances,
                       settlements: settlements,
                       canUpdateSettlements: isGroupAdmin,
+                      isAwaitingPayment: report.status == 'SETTLING',
                       eventId: report.eventId,
                     ),
                     loading: () => const Padding(
@@ -232,12 +233,17 @@ class _ReportTable extends ConsumerStatefulWidget {
     required this.balances,
     required this.settlements,
     required this.canUpdateSettlements,
+    required this.isAwaitingPayment,
     required this.eventId,
   });
 
   final List<MonthlyBalanceModel> balances;
   final List<EventSettlementModel> settlements;
   final bool canUpdateSettlements;
+
+  /// Pago/pendente só pode mudar com o evento aguardando pagamento — aberto
+  /// ainda recebe despesa (o saldo muda) e fechado já foi acertado.
+  final bool isAwaitingPayment;
   final String? eventId;
 
   @override
@@ -400,7 +406,8 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                 );
                 final status = _SettlementStatus(
                   settlement: settlement,
-                  canUpdate: widget.canUpdateSettlements,
+                  canUpdate:
+                      widget.canUpdateSettlements && widget.isAwaitingPayment,
                   onChanged: (value) =>
                       _updateSettlement(context, ref, settlement!, value),
                 );
@@ -668,7 +675,7 @@ class _BalanceDetails extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            detail.description,
+                            detail.title,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -838,7 +845,7 @@ String _errorMessage(Object error) {
 }
 
 /// Enquanto não sabemos o status dos acertos (carregando/erro) trata como
-/// pendente — só libera o "Fechar evento" quando confirma que está tudo
+/// pendente — só libera o "Concluir evento" quando confirma que está tudo
 /// pago, em vez de deixar tentar e falhar depois.
 bool _hasPendingSettlement(
     AsyncValue<List<EventSettlementModel>> settlementsAsync) {
@@ -857,9 +864,10 @@ Future<void> _confirmStartSettlement(
     context: context,
     builder: (context) {
       return AlertDialog(
-        title: const Text('Abrir para pagamento'),
+        title: const Text('Fechar evento'),
         content: const Text(
             'A partir de agora nao e mais possivel adicionar ou editar despesas neste evento. '
+            'Ele fica aguardando pagamento e e concluido sozinho quando todos pagarem. '
             'Use a tela de Eventos se quiser consolidar o saldo em outro evento antes disso. Deseja continuar?'),
         actions: [
           TextButton(
@@ -867,7 +875,7 @@ Future<void> _confirmStartSettlement(
               child: const Text('Cancelar')),
           FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Abrir para pagamento')),
+              child: const Text('Fechar evento')),
         ],
       );
     },
@@ -891,8 +899,7 @@ Future<void> _confirmStartSettlement(
     ref.invalidate(dashboardGroupBalancesProvider);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Evento aberto para pagamento com sucesso.')),
+        const SnackBar(content: Text('Evento fechado, aguardando pagamentos.')),
       );
     }
   } catch (error) {
@@ -900,7 +907,7 @@ Future<void> _confirmStartSettlement(
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(friendlyApiError(error,
-                fallback: 'Não foi possível abrir o evento para pagamento.'))),
+                fallback: 'Não foi possível fechar o evento.'))),
       );
     }
   }
@@ -960,16 +967,16 @@ Future<void> _confirmCloseEvent(
     context: context,
     builder: (context) {
       return AlertDialog(
-        title: const Text('Fechar evento'),
+        title: const Text('Concluir evento'),
         content: const Text(
-            'Depois de fechado, o evento nao permite novas alteracoes. Deseja continuar?'),
+            'Depois de concluido, o evento nao permite novas alteracoes. Deseja continuar?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cancelar')),
           FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Fechar')),
+              child: const Text('Concluir')),
         ],
       );
     },
@@ -993,7 +1000,7 @@ Future<void> _confirmCloseEvent(
     ref.invalidate(dashboardGroupBalancesProvider);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Evento fechado com sucesso.')),
+        const SnackBar(content: Text('Evento concluído com sucesso.')),
       );
     }
   } catch (error) {
@@ -1001,7 +1008,7 @@ Future<void> _confirmCloseEvent(
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(friendlyApiError(error,
-                fallback: 'Não foi possível fechar o evento.'))),
+                fallback: 'Não foi possível concluir o evento.'))),
       );
     }
   }

@@ -18,6 +18,7 @@ class ExpenseModel {
     required this.participants,
     required this.isSubscription,
     required this.subscriptionCancelled,
+    this.customSplit = false,
     required this.createdAt,
   });
 
@@ -39,6 +40,10 @@ class ExpenseModel {
   final List<ExpenseParticipantModel> participants;
   final bool isSubscription;
   final bool subscriptionCancelled;
+
+  /// Divisão por valor (cada participante com valor digitado) em vez de
+  /// dividir igualmente por cotas.
+  final bool customSplit;
   final DateTime createdAt;
 
   /// Rótulo "1/3", "2/3"... para despesas de fato parceladas, ou
@@ -89,6 +94,7 @@ class ExpenseModel {
           .toList(),
       isSubscription: json['isSubscription'] as bool? ?? false,
       subscriptionCancelled: json['subscriptionCancelled'] as bool? ?? false,
+      customSplit: json['customSplit'] as bool? ?? false,
       createdAt: json['createdAt'] == null
           ? DateTime.parse(json['expenseDate'] as String)
           : DateTime.parse(json['createdAt'] as String),

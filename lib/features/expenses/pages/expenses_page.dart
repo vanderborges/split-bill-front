@@ -13,6 +13,7 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
 import '../../../shared/widgets/money_text.dart';
+import '../../../shared/widgets/person_avatar.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../events/models/event_model.dart';
@@ -186,16 +187,12 @@ class ExpensesPage extends ConsumerWidget {
                             ),
                           ),
                           onTap: () async {
-                            if (!canChange) {
-                              await _openExpenseDetails(context, expense);
-                              return;
-                            }
-                            if (!event.isOpen) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text(
-                                        'Este evento nao esta aberto para edicao de despesas.')),
-                              );
+                            // Sempre abre o detalhe enxuto primeiro; o
+                            // formulário completo só vem pelo "Editar".
+                            final wantsEdit = await _openExpenseDetails(
+                                context, expense,
+                                canEdit: canChange && event.isOpen);
+                            if (!wantsEdit || !context.mounted) {
                               return;
                             }
                             final users = await _loadEventUsers(
@@ -494,6 +491,7 @@ Future<void> _openExpenseForm(
   late Set<String> selectedParticipants;
   late Map<String, TextEditingController> shareCountControllers;
   late Map<String, TextEditingController> shareDescriptionControllers;
+  late Map<String, TextEditingController> shareAmountControllers;
   late Set<String> selectedPayerIds;
   late Map<String, TextEditingController> payerControllers;
   late String singlePayerId;
@@ -516,6 +514,12 @@ Future<void> _openExpenseForm(
       for (final user in usersForForm)
         user.id: TextEditingController(
           text: _initialShareDescription(user.id, expense),
+        ),
+    };
+    shareAmountControllers = {
+      for (final user in usersForForm)
+        user.id: TextEditingController(
+          text: _initialShareAmount(user.id, expense),
         ),
     };
     final defaultPayerId = usersForForm.any((user) => user.id == currentUserId)
@@ -544,6 +548,8 @@ Future<void> _openExpenseForm(
   initUserDependentState(currentUsers);
 
   var splitPaymentByUser = (expense?.payers.length ?? 0) > 1;
+  // "Quem vai dividir": igualmente (por cotas) ou por valor digitado.
+  var splitByValue = expense?.customSplit ?? false;
   final installmentsController = TextEditingController(text: '1');
   var installments = 1;
   var showInstallments = false;
@@ -557,6 +563,7 @@ Future<void> _openExpenseForm(
     _disposeControllers(payerControllers.values);
     _disposeControllers(shareCountControllers.values);
     _disposeControllers(shareDescriptionControllers.values);
+    _disposeControllers(shareAmountControllers.values);
   }
 
   if (!context.mounted) {
@@ -574,6 +581,25 @@ Future<void> _openExpenseForm(
           final shareValue = dialogAmount == null || totalShares == 0
               ? null
               : dialogAmount / totalShares;
+          final sharedByValue =
+              _sumShareAmounts(selectedParticipants, shareAmountControllers);
+
+          // Preenche o valor de cada um com a divisão igual (centavos que
+          // sobram vão pros primeiros), pra só ajustar quem paga diferente.
+          void fillShareAmountsEqually() {
+            final total = parseAmountFieldText(amountController.text);
+            if (total == null) {
+              return;
+            }
+            final ids = currentUsers
+                .where((user) => selectedParticipants.contains(user.id))
+                .map((user) => user.id)
+                .toList();
+            final parts = _splitAmountEqually(total, ids.length);
+            for (var index = 0; index < ids.length; index++) {
+              shareAmountControllers[ids[index]]!.text = parts[index];
+            }
+          }
 
           // Troca o grupo de destino (só no modo "nova despesa"): busca os
           // eventos abertos e os integrantes do novo grupo, e reconstrói
@@ -598,6 +624,7 @@ Future<void> _openExpenseForm(
             _disposeControllers(payerControllers.values);
             _disposeControllers(shareCountControllers.values);
             _disposeControllers(shareDescriptionControllers.values);
+            _disposeControllers(shareAmountControllers.values);
             setState(() {
               selectedGroupId = newGroupId;
               openEventsForGroup = newOpenEvents;
@@ -626,6 +653,7 @@ Future<void> _openExpenseForm(
               _disposeControllers(payerControllers.values);
               _disposeControllers(shareCountControllers.values);
               _disposeControllers(shareDescriptionControllers.values);
+              _disposeControllers(shareAmountControllers.values);
             }
             setState(() {
               currentEvent = newEvent;
@@ -673,13 +701,42 @@ Future<void> _openExpenseForm(
               return;
             }
 
-            final participantShareCounts = _readParticipantShareCounts(
-                selectedParticipants, shareCountControllers);
-            final participantShareDescriptions =
-                _readParticipantShareDescriptions(
-              selectedParticipants,
-              shareDescriptionControllers,
-            );
+            // Por valor não tem cota extra: cada um entra com 1 cota e o
+            // valor que foi digitado.
+            final participantShareCounts = splitByValue
+                ? {for (final id in selectedParticipants) id: 1}
+                : _readParticipantShareCounts(
+                    selectedParticipants, shareCountControllers);
+            final participantShareDescriptions = splitByValue
+                ? <String, String>{}
+                : _readParticipantShareDescriptions(
+                    selectedParticipants,
+                    shareDescriptionControllers,
+                  );
+            Map<String, double>? participantShareAmounts;
+            if (splitByValue) {
+              participantShareAmounts = _readParticipantShareAmounts(
+                  selectedParticipants, shareAmountControllers);
+              if (participantShareAmounts.values.any((value) => value <= 0)) {
+                ScaffoldMessenger.of(routeContext).showSnackBar(
+                  const SnackBar(
+                      content: Text(
+                          'Informe o valor de cada pessoa que vai dividir.')),
+                );
+                return;
+              }
+              final totalShared = participantShareAmounts.values
+                  .fold<double>(0.0, (total, value) => total + value);
+              if ((totalShared - amount).abs() > 0.009) {
+                ScaffoldMessenger.of(routeContext).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                        'A soma dos valores (${formatCurrencyBRL(totalShared)}) precisa bater com o valor total (${formatCurrencyBRL(amount)}).'),
+                  ),
+                );
+                return;
+              }
+            }
             if (participantShareCounts.length != selectedParticipants.length) {
               ScaffoldMessenger.of(routeContext).showSnackBar(
                 const SnackBar(
@@ -752,6 +809,7 @@ Future<void> _openExpenseForm(
                       participantShareCounts: participantShareCounts,
                       participantShareDescriptions:
                           participantShareDescriptions,
+                      participantShareAmounts: participantShareAmounts,
                       payerAmounts: payerAmounts,
                       installments: installmentsToSave,
                       subscription: isSubscription,
@@ -769,6 +827,7 @@ Future<void> _openExpenseForm(
                       participantShareCounts: participantShareCounts,
                       participantShareDescriptions:
                           participantShareDescriptions,
+                      participantShareAmounts: participantShareAmounts,
                       payerAmounts: payerAmounts,
                     );
               }
@@ -927,7 +986,7 @@ Future<void> _openExpenseForm(
                       DropdownButtonFormField<String>(
                         initialValue: singlePayerId,
                         decoration: const InputDecoration(labelText: 'Pagador'),
-                        items: users
+                        items: currentUsers
                             .map((user) => DropdownMenuItem(
                                 value: user.id, child: Text(user.nickname)))
                             .toList(),
@@ -997,7 +1056,7 @@ Future<void> _openExpenseForm(
                             label: const Text('Dividir igualmente'),
                           ),
                         ),
-                        ...users
+                        ...currentUsers
                             .where((user) => selectedPayerIds.contains(user.id))
                             .map(
                               (user) => Padding(
@@ -1022,8 +1081,35 @@ Future<void> _openExpenseForm(
                     const SizedBox(height: AppSpacing.md),
                     const Divider(),
                     const SizedBox(height: AppSpacing.md),
-                    Text('Participantes',
+                    Text('Quem vai dividir',
                         style: Theme.of(routeContext).textTheme.titleSmall),
+                    const SizedBox(height: AppSpacing.sm),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                          value: false,
+                          icon: Icon(Icons.balance),
+                          label: Text('Igualmente'),
+                        ),
+                        ButtonSegment(
+                          value: true,
+                          icon: Icon(Icons.edit_note),
+                          label: Text('Por valor'),
+                        ),
+                      ],
+                      selected: {splitByValue},
+                      onSelectionChanged: (selection) => setState(() {
+                        splitByValue = selection.first;
+                        // Ao entrar no modo "por valor" sem nada digitado,
+                        // já começa com a divisão igual pra só ajustar.
+                        if (splitByValue &&
+                            _sumShareAmounts(selectedParticipants,
+                                    shareAmountControllers) ==
+                                0) {
+                          fillShareAmountsEqually();
+                        }
+                      }),
+                    ),
                     const SizedBox(height: AppSpacing.sm),
                     Wrap(
                       spacing: AppSpacing.sm,
@@ -1096,37 +1182,95 @@ Future<void> _openExpenseForm(
                         spacing: AppSpacing.lg,
                         runSpacing: AppSpacing.xs,
                         crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text('${selectedParticipants.length} participantes'),
-                          if (totalShares > selectedParticipants.length)
-                            Text('$totalShares cotas'),
-                          if (shareValue == null)
-                            const Text('Divisao: -')
-                          else
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(totalShares > selectedParticipants.length
-                                    ? 'Valor por cota: '
-                                    : 'Cada participante: '),
-                                MoneyText(shareValue,
-                                    style: Theme.of(routeContext)
-                                        .textTheme
-                                        .bodyMedium),
+                        children: splitByValue
+                            ? [
+                                Text(
+                                    '${selectedParticipants.length} participantes'),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text('Soma: '),
+                                    MoneyText(sharedByValue,
+                                        style: Theme.of(routeContext)
+                                            .textTheme
+                                            .bodyMedium),
+                                    if (dialogAmount != null) ...[
+                                      const Text(' de '),
+                                      MoneyText(dialogAmount,
+                                          style: Theme.of(routeContext)
+                                              .textTheme
+                                              .bodyMedium),
+                                    ],
+                                  ],
+                                ),
+                                if (dialogAmount != null &&
+                                    (dialogAmount - sharedByValue).abs() >
+                                        0.009)
+                                  Text(
+                                    dialogAmount > sharedByValue
+                                        ? 'Faltam ${formatCurrencyBRL(dialogAmount - sharedByValue)}'
+                                        : 'Passou ${formatCurrencyBRL(sharedByValue - dialogAmount)}',
+                                    style: TextStyle(
+                                        color: Theme.of(routeContext)
+                                            .colorScheme
+                                            .error),
+                                  ),
+                              ]
+                            : [
+                                Text(
+                                    '${selectedParticipants.length} participantes'),
+                                if (totalShares > selectedParticipants.length)
+                                  Text('$totalShares cotas'),
+                                if (shareValue == null)
+                                  const Text('Divisao: -')
+                                else
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(totalShares >
+                                              selectedParticipants.length
+                                          ? 'Valor por cota: '
+                                          : 'Cada participante: '),
+                                      MoneyText(shareValue,
+                                          style: Theme.of(routeContext)
+                                              .textTheme
+                                              .bodyMedium),
+                                    ],
+                                  ),
                               ],
-                            ),
-                        ],
                       ),
                     ),
                     const SizedBox(height: AppSpacing.md),
+                    if (selectedParticipants.isNotEmpty && splitByValue)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: dialogAmount == null
+                              ? null
+                              : () => setState(fillShareAmountsEqually),
+                          icon: const Icon(Icons.balance),
+                          label: const Text('Dividir igualmente'),
+                        ),
+                      ),
                     if (selectedParticipants.isEmpty)
                       const Text('Selecione ao menos um participante.')
                     else
-                      ...users
+                      ...currentUsers
                           .where(
                               (user) => selectedParticipants.contains(user.id))
                           .map(
                         (user) {
+                          if (splitByValue) {
+                            return Padding(
+                              padding:
+                                  const EdgeInsets.only(bottom: AppSpacing.sm),
+                              child: AmountField(
+                                controller: shareAmountControllers[user.id]!,
+                                label: user.nickname,
+                                onChanged: (_) => setState(() {}),
+                              ),
+                            );
+                          }
                           final count = _shareCountFor(
                             user.id,
                             shareCountControllers,
@@ -1486,85 +1630,127 @@ Future<void> _openExpenseForm(
   disposeControllers();
 }
 
-/// Tela somente leitura para quem não é Adm nem cadastrou a despesa — pode
-/// ver os detalhes, mas não tem acesso a nenhum campo editável ou ação de
-/// excluir/salvar.
-Future<void> _openExpenseDetails(
+/// Detalhe enxuto de uma despesa já cadastrada — é o que abre ao tocar numa
+/// despesa da lista, pra todo mundo. Quem pode editar (Adm ou quem
+/// cadastrou, com o evento aberto) vê o botão "Editar", que abre o
+/// formulário completo. Retorna true quando a pessoa pediu pra editar.
+Future<bool> _openExpenseDetails(
   BuildContext context,
-  ExpenseModel expense,
-) async {
+  ExpenseModel expense, {
+  required bool canEdit,
+}) async {
   final installmentLabel = expense.installmentLabel;
-  await Navigator.of(context).push(
+  final wantsEdit = await Navigator.of(context).push<bool>(
     MaterialPageRoute(
-      builder: (routeContext) => Scaffold(
-        appBar: AppBar(title: const Text('Detalhes da despesa')),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (routeContext) {
+        final theme = Theme.of(routeContext);
+        final muted = theme.textTheme.bodyMedium
+            ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+        return Scaffold(
+          appBar: AppBar(title: const Text('Despesa')),
+          body: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
               children: [
-                Text(expense.description,
-                    style: Theme.of(routeContext).textTheme.titleLarge),
+                Text(expense.description, style: theme.textTheme.titleLarge),
                 const SizedBox(height: AppSpacing.xs),
                 MoneyText(expense.amount,
-                    style: Theme.of(routeContext).textTheme.headlineSmall),
-                const SizedBox(height: AppSpacing.md),
-                _detailRow(
-                    routeContext, 'Data', _formatDate(expense.expenseDate)),
-                _detailRow(routeContext, 'Tipo de despesa', expense.category),
-                if (installmentLabel != null)
-                  _detailRow(routeContext, 'Parcela', installmentLabel),
-                const SizedBox(height: AppSpacing.md),
-                const Divider(),
-                const SizedBox(height: AppSpacing.md),
-                Text('Quem pagou',
-                    style: Theme.of(routeContext).textTheme.titleSmall),
-                const SizedBox(height: AppSpacing.sm),
-                ...expense.payers.map((payer) => _detailRow(routeContext,
-                    payer.nickname, formatCurrencyBRL(payer.amount))),
-                const SizedBox(height: AppSpacing.md),
-                const Divider(),
-                const SizedBox(height: AppSpacing.md),
-                Text('Participantes',
-                    style: Theme.of(routeContext).textTheme.titleSmall),
-                const SizedBox(height: AppSpacing.sm),
-                ...expense.participants.map((participant) => _detailRow(
-                    routeContext,
-                    participant.shareCount > 1
-                        ? '${participant.nickname} (x${participant.shareCount})'
-                        : participant.nickname,
-                    formatCurrencyBRL(participant.shareAmount))),
+                    style: theme.textTheme.headlineMedium),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  [
+                    _formatDate(expense.expenseDate),
+                    expense.category,
+                    if (installmentLabel != null) installmentLabel,
+                  ].join('  ·  '),
+                  style: muted,
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                _detailSectionTitle(routeContext, 'Quem pagou'),
+                ...expense.payers.map((payer) => _detailPersonRow(
+                    routeContext, payer.userId, payer.nickname, payer.amount)),
+                const SizedBox(height: AppSpacing.lg),
+                _detailSectionTitle(routeContext, 'Quem vai dividir'),
+                ...expense.participants.map((participant) => _detailPersonRow(
+                      routeContext,
+                      participant.userId,
+                      participant.shareCount > 1
+                          ? '${participant.nickname} (x${participant.shareCount})'
+                          : participant.nickname,
+                      participant.shareAmount,
+                      note: participant.shareDescription,
+                    )),
               ],
             ),
           ),
-        ),
-        bottomNavigationBar: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () => Navigator.of(routeContext).pop(),
-                child: const Text('Fechar'),
+          bottomNavigationBar: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(routeContext).pop(false),
+                      child: const Text('Fechar'),
+                    ),
+                  ),
+                  if (canEdit) ...[
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => Navigator.of(routeContext).pop(true),
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Editar'),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     ),
+  );
+  return wantsEdit == true;
+}
+
+Widget _detailSectionTitle(BuildContext context, String title) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+    child: Text(title, style: Theme.of(context).textTheme.titleSmall),
   );
 }
 
-Widget _detailRow(BuildContext context, String label, String value) {
+Widget _detailPersonRow(
+  BuildContext context,
+  String userId,
+  String name,
+  double amount, {
+  String? note,
+}) {
+  final theme = Theme.of(context);
+  final trimmedNote = note?.trim();
   return Padding(
     padding: const EdgeInsets.only(bottom: AppSpacing.sm),
     child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: Theme.of(context).textTheme.bodyMedium),
-        Text(value, style: Theme.of(context).textTheme.bodyMedium),
+        PersonAvatar(name: name, seed: userId, radius: 14),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, style: theme.textTheme.bodyMedium),
+              if (trimmedNote != null && trimmedNote.isNotEmpty)
+                Text(trimmedNote,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+        MoneyText(amount, style: theme.textTheme.bodyMedium),
       ],
     ),
   );
@@ -1717,6 +1903,39 @@ String _initialShareDescription(String userId, ExpenseModel? expense) {
     return '';
   }
   return matching.first.shareDescription ?? '';
+}
+
+/// Valor de cada um na divisão por valor — só preenchido ao editar uma
+/// despesa que já foi dividida assim.
+String _initialShareAmount(String userId, ExpenseModel? expense) {
+  if (expense == null || !expense.customSplit) {
+    return '0,00';
+  }
+  final matching =
+      expense.participants.where((participant) => participant.userId == userId);
+  if (matching.isEmpty) {
+    return '0,00';
+  }
+  return formatCurrencyBRL(matching.first.shareAmount).replaceFirst('R\$ ', '');
+}
+
+Map<String, double> _readParticipantShareAmounts(
+  Set<String> selectedParticipants,
+  Map<String, TextEditingController> controllers,
+) {
+  return {
+    for (final userId in selectedParticipants)
+      userId: parseAmountFieldText(controllers[userId]?.text ?? '') ?? 0,
+  };
+}
+
+double _sumShareAmounts(
+  Set<String> selectedParticipants,
+  Map<String, TextEditingController> controllers,
+) {
+  return _readParticipantShareAmounts(selectedParticipants, controllers)
+      .values
+      .fold<double>(0.0, (total, value) => total + value);
 }
 
 Map<String, double> _readPayerAmounts(

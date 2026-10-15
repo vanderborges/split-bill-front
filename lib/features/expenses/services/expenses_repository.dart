@@ -69,6 +69,7 @@ class ExpensesRepository {
     required List<String> participantIds,
     required Map<String, int> participantShareCounts,
     required Map<String, String> participantShareDescriptions,
+    Map<String, double>? participantShareAmounts,
     required Map<String, double> payerAmounts,
   }) async {
     final response = await dio.post<Map<String, dynamic>>(
@@ -85,6 +86,7 @@ class ExpensesRepository {
         participantIds: participantIds,
         participantShareCounts: participantShareCounts,
         participantShareDescriptions: participantShareDescriptions,
+        participantShareAmounts: participantShareAmounts,
         payerAmounts: payerAmounts,
       ),
     );
@@ -95,8 +97,8 @@ class ExpensesRepository {
   /// cadastrou. A despesa deste mês continua existindo, só para de gerar
   /// a próxima no mês seguinte.
   Future<ExpenseModel> cancelSubscription(String id) async {
-    final response =
-        await dio.put<Map<String, dynamic>>('/expenses/$id/cancel-subscription');
+    final response = await dio
+        .put<Map<String, dynamic>>('/expenses/$id/cancel-subscription');
     return ExpenseModel.fromJson(response.data!);
   }
 
@@ -111,6 +113,7 @@ class ExpensesRepository {
     required List<String> participantIds,
     required Map<String, int> participantShareCounts,
     required Map<String, String> participantShareDescriptions,
+    Map<String, double>? participantShareAmounts,
     required Map<String, double> payerAmounts,
   }) async {
     final response = await dio.put<Map<String, dynamic>>(
@@ -125,6 +128,7 @@ class ExpensesRepository {
         participantIds: participantIds,
         participantShareCounts: participantShareCounts,
         participantShareDescriptions: participantShareDescriptions,
+        participantShareAmounts: participantShareAmounts,
         payerAmounts: payerAmounts,
       ),
     );
@@ -147,6 +151,7 @@ class ExpensesRepository {
     required List<String> participantIds,
     required Map<String, int> participantShareCounts,
     required Map<String, String> participantShareDescriptions,
+    Map<String, double>? participantShareAmounts,
     required Map<String, double> payerAmounts,
   }) {
     final payers = payerAmounts.entries
@@ -158,11 +163,16 @@ class ExpensesRepository {
               'userId': id,
               'shareCount': participantShareCounts[id] ?? 1,
               'shareDescription': participantShareDescriptions[id],
+              // Divisão por valor: cada um com o valor digitado (o backend
+              // exige valor de todos e soma batendo com o total).
+              if (participantShareAmounts != null)
+                'shareAmount': participantShareAmounts[id],
             })
         .toList();
-    final hasCustomShares = participants.any((participant) =>
-        participant['shareCount'] != 1 ||
-        participant['shareDescription'] != null);
+    final hasCustomShares = participantShareAmounts != null ||
+        participants.any((participant) =>
+            participant['shareCount'] != 1 ||
+            participant['shareDescription'] != null);
     return {
       'description': description,
       'amount': amount,
