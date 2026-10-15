@@ -46,18 +46,17 @@ class ExpenseModel {
   final bool customSplit;
   final DateTime createdAt;
 
-  /// Rótulo "1/3", "2/3"... para despesas de fato parceladas, ou
-  /// "Assinatura (mês N)" para assinaturas — despesas únicas (sem grupo,
-  /// ou parceladas em 1x) retornam null. Usa os campos vindos da API em
-  /// vez de recalcular, já que cada parcela/mês vive num evento diferente.
+  /// Rótulo "Parcela 1/3", "2/3"... para despesas de fato parceladas, ou só
+  /// "Assinatura" (sem contador de mês) para assinaturas — despesas únicas
+  /// (sem grupo, ou parceladas em 1x) retornam null. Usa os campos vindos
+  /// da API em vez de recalcular, já que cada parcela vive num evento
+  /// diferente.
   String? get installmentLabel {
     if (installmentGroupId == null) {
       return null;
     }
     if (isSubscription) {
-      final number = installmentNumber;
-      final base = number == null ? 'Assinatura' : 'Assinatura (mês $number)';
-      return subscriptionCancelled ? '$base — cancelada' : base;
+      return subscriptionCancelled ? 'Assinatura — cancelada' : 'Assinatura';
     }
     final total = totalInstallments;
     final number = installmentNumber;

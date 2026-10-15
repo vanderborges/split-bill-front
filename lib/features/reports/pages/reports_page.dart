@@ -663,7 +663,7 @@ class _BalanceDetails extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(
-                      width: 72,
+                      width: 40,
                       child: Text(
                         _formatDate(detail.expenseDate),
                         style: Theme.of(context).textTheme.bodySmall,

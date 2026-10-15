@@ -19,6 +19,7 @@ import '../../dashboard/services/dashboard_repository.dart';
 import '../../events/models/event_model.dart';
 import '../../events/services/events_repository.dart';
 import '../../events/services/new_event_intent.dart';
+import '../../groups/models/group_model.dart';
 import '../../groups/services/groups_repository.dart';
 import '../../reports/services/reports_repository.dart';
 import '../../users/models/user_option_model.dart';
@@ -373,25 +374,48 @@ Future<bool> _confirmCancelSubscription(
   }
 }
 
-/// Fluxo único de "adicionar despesa": resolve o evento atual e abre o
-/// formulário — usado pelo FAB desta tela, pelo botão de estado vazio e
-/// pelo CTA "Nova despesa" da Home (via [pendingAutoOpenExpenseProvider]).
+/// Fluxo único de "adicionar despesa" — usado pelo FAB desta tela, pelo
+/// botão de estado vazio e pelo CTA "Nova despesa" da Home (via
+/// [pendingAutoOpenExpenseProvider]).
 ///
-/// Usa o grupo/evento já selecionado (o mesmo que aparece na tela de
-/// Despesas) em vez de perguntar de novo em qual grupo lançar — perguntar
-/// de novo era redundante e confuso quando a pessoa já estava vendo o
-/// evento certo na tela e só queria tocar em "+".
+/// Antes do formulário abre um menu pra escolher grupo e evento (já
+/// pré-selecionados com o que está na tela). Com só 1 grupo e 1 evento
+/// aberto, pula o menu e abre o formulário direto.
 ///
-/// Sem evento aberto no grupo, pergunta se quer criar um evento (em vez de
+/// Sem nenhum evento aberto, pergunta se quer criar um evento (em vez de
 /// criar um mês em silêncio) — "Sim" leva pra tela de criação de evento,
 /// "Não" só avisa que não dá pra lançar despesa sem evento aberto.
 Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
-  final event = await ref.read(selectedEventProvider.future);
+  final groups = await ref.read(groupsProvider.future);
+  final groupIds = groups.map((group) => group.id).toSet();
+  final openEvents = (await ref.read(eventsRepositoryProvider).list())
+      .where((item) => item.isOpen && groupIds.contains(item.groupId))
+      .toList();
+  final current = await ref.read(selectedEventProvider.future);
   if (!context.mounted) {
     return;
   }
 
-  if (event == null || !event.isOpen) {
+  EventModel? event;
+  if (openEvents.isNotEmpty) {
+    if (groups.length == 1 && openEvents.length == 1) {
+      event = openEvents.first;
+    } else {
+      final choice =
+          await _pickExpenseDestination(context, groups, openEvents, current);
+      if (!context.mounted || choice == null) {
+        return;
+      }
+      if (choice.createEvent) {
+        ref.read(pendingAutoOpenEventProvider.notifier).state = true;
+        context.go('/events');
+        return;
+      }
+      event = choice.event;
+    }
+  }
+
+  if (event == null) {
     final wantsToCreate = await _confirmCreateEvent(context);
     if (!context.mounted || wantsToCreate == null) {
       return;
@@ -403,7 +427,7 @@ Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text(
-                'Não é possível adicionar despesa: não há evento aberto neste grupo.')),
+                'Não é possível adicionar despesa: não há evento aberto.')),
       );
     }
     return;
@@ -416,6 +440,111 @@ Future<void> _openNewExpenseFlow(BuildContext context, WidgetRef ref) async {
   }
 }
 
+/// Menu "onde lançar": grupo + evento aberto daquele grupo. null = fechou
+/// sem escolher; `createEvent` = o grupo escolhido não tem evento aberto e
+/// a pessoa pediu pra criar um.
+Future<({EventModel? event, bool createEvent})?> _pickExpenseDestination(
+  BuildContext context,
+  List<GroupModel> groups,
+  List<EventModel> openEvents,
+  EventModel? current,
+) {
+  var groupId = groups.any((group) => group.id == current?.groupId)
+      ? current!.groupId
+      : groups.first.id;
+  List<EventModel> eventsOf(String id) =>
+      openEvents.where((item) => item.groupId == id).toList();
+  String? defaultEventFor(String id) {
+    final events = eventsOf(id);
+    if (events.isEmpty) {
+      return null;
+    }
+    return events.any((item) => item.id == current?.id)
+        ? current!.id
+        : events.first.id;
+  }
+
+  var eventId = defaultEventFor(groupId);
+
+  return showModalBottomSheet<({EventModel? event, bool createEvent})>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (sheetContext, setState) {
+        final groupEvents = eventsOf(groupId);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Nova despesa',
+                    style: Theme.of(sheetContext).textTheme.titleLarge),
+                const SizedBox(height: AppSpacing.lg),
+                DropdownButtonFormField<String>(
+                  initialValue: groupId,
+                  decoration: const InputDecoration(labelText: 'Grupo'),
+                  items: groups
+                      .map((group) => DropdownMenuItem(
+                          value: group.id, child: Text(group.name)))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        groupId = value;
+                        eventId = defaultEventFor(value);
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: AppSpacing.md),
+                if (groupEvents.isEmpty) ...[
+                  Text(
+                    'Nenhum evento aberto neste grupo.',
+                    style: TextStyle(
+                        color: Theme.of(sheetContext).colorScheme.error),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(sheetContext)
+                        .pop((event: null, createEvent: true)),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Criar evento'),
+                  ),
+                ] else
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('picker-event-$groupId'),
+                    initialValue: eventId,
+                    decoration: const InputDecoration(labelText: 'Evento'),
+                    items: groupEvents
+                        .map((item) => DropdownMenuItem(
+                            value: item.id, child: Text(item.name)))
+                        .toList(),
+                    onChanged: (value) => setState(() => eventId = value),
+                  ),
+                const SizedBox(height: AppSpacing.lg),
+                FilledButton(
+                  onPressed: eventId == null
+                      ? null
+                      : () => Navigator.of(sheetContext).pop((
+                            event: groupEvents
+                                .firstWhere((item) => item.id == eventId),
+                            createEvent: false,
+                          )),
+                  child: const Text('Continuar'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
 /// null = popup fechado sem escolher (toque fora); true/false = resposta.
 Future<bool?> _confirmCreateEvent(BuildContext context) {
   return showDialog<bool>(
@@ -423,7 +552,7 @@ Future<bool?> _confirmCreateEvent(BuildContext context) {
     builder: (context) => AlertDialog(
       title: const Text('Nenhum evento aberto'),
       content: const Text(
-          'Este grupo não tem nenhum evento aberto no momento. Deseja criar um evento agora?'),
+          'Você não tem nenhum evento aberto no momento. Deseja criar um evento agora?'),
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -469,24 +598,11 @@ Future<void> _openExpenseForm(
   var selectedCategory = categoryOptions.contains(expense?.category)
       ? expense!.category
       : categoryOptions.first;
-  // Grupo/evento de destino da despesa: pré-selecionados com o que já
-  // estava na tela (evento sendo navegado), mas só ficam editáveis ao
-  // criar uma despesa nova — dá pra confirmar ou corrigir antes de salvar,
-  // em vez de confiar só no contexto de navegação (que pode ser ambíguo
-  // vindo da Home, por exemplo). `groupsProvider` já costuma estar em
-  // cache (a própria tela de Despesas o observa), então ler de novo aqui
-  // não dispara outra chamada de rede na maioria das vezes.
+  // Grupo/evento já chegam escolhidos (menu de "Nova despesa", ou o evento
+  // da despesa sendo editada) — o form só mostra onde vai lançar.
   final groups = await ref.read(groupsProvider.future);
-  var selectedGroupId = event.groupId;
-  EventModel? currentEvent = event;
+  final groupName = _groupName(groups, event.groupId);
   var currentUsers = users;
-  var openEventsForGroup =
-      (await ref.read(eventsRepositoryProvider).list(groupId: event.groupId))
-          .where((item) => item.status == 'OPEN')
-          .toList();
-  if (openEventsForGroup.every((item) => item.id != event.id)) {
-    openEventsForGroup = [...openEventsForGroup, event];
-  }
 
   late Set<String> selectedParticipants;
   late Map<String, TextEditingController> shareCountControllers;
@@ -601,82 +717,11 @@ Future<void> _openExpenseForm(
             }
           }
 
-          // Troca o grupo de destino (só no modo "nova despesa"): busca os
-          // eventos abertos e os integrantes do novo grupo, e reconstrói
-          // todo o estado de participantes/pagadores pro novo conjunto de
-          // pessoas — o que estava marcado pro grupo anterior não faz
-          // sentido mais.
-          Future<void> handleGroupChange(String newGroupId) async {
-            if (newGroupId == selectedGroupId) {
-              return;
-            }
-            final newEvents = await ref
-                .read(eventsRepositoryProvider)
-                .list(groupId: newGroupId);
-            final newOpenEvents =
-                newEvents.where((item) => item.status == 'OPEN').toList();
-            final newUsers = await _loadEventUsers(ref, newGroupId,
-                eventId: newOpenEvents.isEmpty ? null : newOpenEvents.first.id);
-            // Descarta os controllers do grupo anterior antes de criar os
-            // novos pro conjunto de pessoas do novo grupo — sem isso, cada
-            // troca de grupo deixava os TextEditingControllers antigos sem
-            // dispose, vazando recursos.
-            _disposeControllers(payerControllers.values);
-            _disposeControllers(shareCountControllers.values);
-            _disposeControllers(shareDescriptionControllers.values);
-            _disposeControllers(shareAmountControllers.values);
-            setState(() {
-              selectedGroupId = newGroupId;
-              openEventsForGroup = newOpenEvents;
-              currentEvent = newOpenEvents.isEmpty ? null : newOpenEvents.first;
-              currentUsers = newUsers;
-              initUserDependentState(currentUsers);
-            });
-          }
-
-          // Trocar de evento pode mudar quem participa (pessoas temporárias
-          // são por evento): recarrega a lista e só reconstrói o estado de
-          // participantes/pagadores se o conjunto de pessoas mudou.
-          Future<void> handleEventChange(String newEventId) async {
-            final found =
-                openEventsForGroup.where((item) => item.id == newEventId);
-            if (found.isEmpty) {
-              return;
-            }
-            final newEvent = found.first;
-            final newUsers = await _loadEventUsers(ref, newEvent.groupId,
-                eventId: newEvent.id);
-            final sameUsers = newUsers.length == currentUsers.length &&
-                newUsers.every((user) =>
-                    currentUsers.any((current) => current.id == user.id));
-            if (!sameUsers) {
-              _disposeControllers(payerControllers.values);
-              _disposeControllers(shareCountControllers.values);
-              _disposeControllers(shareDescriptionControllers.values);
-              _disposeControllers(shareAmountControllers.values);
-            }
-            setState(() {
-              currentEvent = newEvent;
-              if (!sameUsers) {
-                currentUsers = newUsers;
-                initUserDependentState(currentUsers);
-              }
-            });
-          }
-
           // Valida e salva sem fechar a tela: só sai (pop) em caso de
           // sucesso, pra não perder tudo que foi digitado quando algo dá
           // errado (validação local ou erro do backend).
           Future<void> handleSave() async {
-            final targetEvent = currentEvent;
-            if (targetEvent == null) {
-              ScaffoldMessenger.of(routeContext).showSnackBar(
-                const SnackBar(
-                    content:
-                        Text('Selecione um evento aberto para continuar.')),
-              );
-              return;
-            }
+            final targetEvent = event;
             final amount = parseAmountFieldText(amountController.text);
             if (amount == null) {
               ScaffoldMessenger.of(routeContext).showSnackBar(
@@ -873,49 +918,11 @@ Future<void> _openExpenseForm(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (expense == null) ...[
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedGroupId,
-                        decoration: const InputDecoration(labelText: 'Grupo'),
-                        items: groups
-                            .map((group) => DropdownMenuItem(
-                                value: group.id, child: Text(group.name)))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            handleGroupChange(value);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      if (openEventsForGroup.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-                          child: Text(
-                            'Nenhum evento aberto neste grupo.',
-                            style: TextStyle(
-                                color:
-                                    Theme.of(routeContext).colorScheme.error),
-                          ),
-                        )
-                      else
-                        DropdownButtonFormField<String>(
-                          key: ValueKey('event-$selectedGroupId'),
-                          initialValue: currentEvent?.id,
-                          decoration:
-                              const InputDecoration(labelText: 'Evento'),
-                          items: openEventsForGroup
-                              .map((item) => DropdownMenuItem(
-                                  value: item.id, child: Text(item.name)))
-                              .toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              handleEventChange(value);
-                            }
-                          },
-                        ),
-                      const SizedBox(height: AppSpacing.lg),
-                    ],
+                    Text(
+                      '$groupName | ${event.name}',
+                      style: Theme.of(routeContext).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
                     AmountField(
                       controller: amountController,
                       autofocus: expense == null,
@@ -985,7 +992,8 @@ Future<void> _openExpenseForm(
                     if (!splitPaymentByUser) ...[
                       DropdownButtonFormField<String>(
                         initialValue: singlePayerId,
-                        decoration: const InputDecoration(labelText: 'Pagador'),
+                        // Sem label: o título "Quem pagou" logo acima já diz o que é.
+                        decoration: const InputDecoration(),
                         items: currentUsers
                             .map((user) => DropdownMenuItem(
                                 value: user.id, child: Text(user.nickname)))
@@ -1410,7 +1418,7 @@ Future<void> _openExpenseForm(
                           );
                         },
                       ),
-                    if (expense == null && currentEvent?.monthId != null) ...[
+                    if (expense == null && event.monthId != null) ...[
                       const SizedBox(height: AppSpacing.sm),
                       const Divider(),
                       const SizedBox(height: AppSpacing.md),
@@ -1589,9 +1597,7 @@ Future<void> _openExpenseForm(
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: FilledButton(
-                        onPressed: isSaving || currentEvent == null
-                            ? null
-                            : () => handleSave(),
+                        onPressed: isSaving ? null : () => handleSave(),
                         child: isSaving
                             ? const SizedBox(
                                 width: 20,
