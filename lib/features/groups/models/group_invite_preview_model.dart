@@ -6,6 +6,7 @@ class GroupInvitePreviewModel {
     required this.active,
     this.eventId,
     this.eventName,
+    this.placeholders = const [],
   });
 
   final String id;
@@ -17,6 +18,10 @@ class GroupInvitePreviewModel {
   final String? eventId;
   final String? eventName;
 
+  /// Nomes pré-cadastrados pelo admin (pessoas sem cadastro) que quem
+  /// entra por este convite pode assumir — "Quem é você?".
+  final List<InvitePlaceholderOption> placeholders;
+
   factory GroupInvitePreviewModel.fromJson(Map<String, dynamic> json) {
     return GroupInvitePreviewModel(
       id: json['id'] as String,
@@ -25,6 +30,24 @@ class GroupInvitePreviewModel {
       active: json['active'] as bool,
       eventId: json['eventId'] as String?,
       eventName: json['eventName'] as String?,
+      placeholders: (json['placeholders'] as List<dynamic>? ?? [])
+          .map((item) =>
+              InvitePlaceholderOption.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+class InvitePlaceholderOption {
+  const InvitePlaceholderOption({required this.userId, required this.nickname});
+
+  final String userId;
+  final String nickname;
+
+  factory InvitePlaceholderOption.fromJson(Map<String, dynamic> json) {
+    return InvitePlaceholderOption(
+      userId: json['userId'] as String,
+      nickname: json['nickname'] as String,
     );
   }
 }

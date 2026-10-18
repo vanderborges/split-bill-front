@@ -14,6 +14,7 @@ import '../../../shared/widgets/status_badge.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../expenses/services/expenses_repository.dart';
 import '../../groups/models/group_model.dart';
+import '../../groups/pages/groups_page.dart' show showAddPlaceholderDialog;
 import '../../groups/services/groups_repository.dart';
 import '../../months/services/months_repository.dart';
 import '../../reports/services/reports_repository.dart';
@@ -179,6 +180,10 @@ class EventsPage extends ConsumerWidget {
                               await _closeEvent(context, ref, event);
                             } else if (value == 'reopen') {
                               await _reopenEvent(context, ref, event);
+                            } else if (value == 'add-placeholder') {
+                              await showAddPlaceholderDialog(
+                                  context, ref, event.groupId,
+                                  event: event);
                             } else if (value == 'delete') {
                               await _deleteEvent(context, ref, event);
                             }
@@ -199,6 +204,10 @@ class EventsPage extends ConsumerWidget {
                             if (isEventAdmin && !event.isOpen)
                               const PopupMenuItem(
                                   value: 'reopen', child: Text('Reabrir')),
+                            if (isEventAdmin && !event.isClosed)
+                              const PopupMenuItem(
+                                  value: 'add-placeholder',
+                                  child: Text('Adicionar pessoa sem cadastro')),
                             if (isEventAdmin)
                               const PopupMenuItem(
                                   value: 'delete', child: Text('Deletar')),

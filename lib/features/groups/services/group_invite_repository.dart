@@ -41,14 +41,18 @@ class GroupInviteRepository {
   }
 
   Future<GroupInvitePreviewModel> preview(String inviteId) async {
-    final response =
-        await dio.get<Map<String, dynamic>>('/invites/$inviteId');
+    final response = await dio.get<Map<String, dynamic>>('/invites/$inviteId');
     return GroupInvitePreviewModel.fromJson(response.data!);
   }
 
-  Future<GroupMemberModel> join(String inviteId) async {
-    final response =
-        await dio.post<Map<String, dynamic>>('/invites/$inviteId/join');
+  /// Entra pelo convite. [placeholderUserId]: o nome pré-cadastrado que a
+  /// pessoa confirmou ser ela (herda as despesas dele); null = pessoa nova.
+  Future<GroupMemberModel> join(String inviteId,
+      {String? placeholderUserId}) async {
+    final response = await dio.post<Map<String, dynamic>>(
+      '/invites/$inviteId/join',
+      data: {'placeholderUserId': placeholderUserId},
+    );
     return GroupMemberModel.fromJson(response.data!);
   }
 }

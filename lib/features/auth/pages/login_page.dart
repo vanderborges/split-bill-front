@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/session_reset.dart';
 import '../../groups/services/group_invite_repository.dart';
-import '../../groups/services/groups_repository.dart';
 import '../services/auth_repository.dart';
 import '../services/biometric_auth_service.dart';
 
@@ -62,9 +61,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       }
       final pendingInviteId = ref.read(pendingInviteIdProvider);
       resetSessionScopedProviders(ref);
-      final joinedGroup = await _joinPendingInvite(pendingInviteId);
       if (mounted) {
-        context.go(joinedGroup ? '/groups' : '/');
+        context.go(_afterLoginRoute(pendingInviteId));
       }
     } catch (_) {
       // Qualquer outra falha: segue pro login manual.
@@ -216,12 +214,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             rememberMe: rememberMe,
           );
       resetSessionScopedProviders(ref);
-      final joinedGroup = await _joinPendingInvite(pendingInviteId);
       if (mounted) {
         setState(() {
           biometricAvailable = _canSignInWithBiometrics();
         });
-        context.go(joinedGroup ? '/groups' : '/');
+        context.go(_afterLoginRoute(pendingInviteId));
       }
     } catch (_) {
       if (mounted) {
@@ -263,9 +260,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         return;
       }
       resetSessionScopedProviders(ref);
-      final joinedGroup = await _joinPendingInvite(pendingInviteId);
       if (mounted) {
-        context.go(joinedGroup ? '/groups' : '/');
+        context.go(_afterLoginRoute(pendingInviteId));
       }
     } catch (_) {
       if (mounted) {
@@ -282,25 +278,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
   }
 
-  /// Returns true when a pending invite was joined successfully, so the
-  /// caller can open the group screen already pointed at that group instead
-  /// of the dashboard. [pendingInviteId] must be captured before calling
+  /// Pra onde ir depois do login. Com convite pendente, volta pra tela do
+  /// convite (agora logado) em vez de entrar no grupo direto: lá a pessoa
+  /// escolhe "Quem é você?" entre os nomes pré-cadastrados pelo admin, ou
+  /// entra como pessoa nova — e convite expirado mostra o aviso lá mesmo.
+  /// [pendingInviteId] must be captured before calling
   /// [resetSessionScopedProviders], which clears it.
-  Future<bool> _joinPendingInvite(String? pendingInviteId) async {
-    if (pendingInviteId == null) {
-      return false;
-    }
-    try {
-      final member =
-          await ref.read(groupInviteRepositoryProvider).join(pendingInviteId);
-      ref.read(selectedGroupIdProvider.notifier).state = member.groupId;
-      ref.invalidate(groupsProvider);
-      ref.invalidate(selectedGroupProvider);
-      return true;
-    } catch (_) {
-      // O usuario ja esta logado; se o convite expirou ele so nao entra
-      // automaticamente no grupo, sem bloquear o login.
-      return false;
-    }
+  String _afterLoginRoute(String? pendingInviteId) {
+    return pendingInviteId == null ? '/' : '/invite/$pendingInviteId';
   }
 }

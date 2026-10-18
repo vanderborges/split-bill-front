@@ -10,6 +10,7 @@ class GroupMemberModel {
     this.temporaryEventId,
     this.temporaryEventName,
     this.temporaryEventStatus,
+    this.placeholder = false,
   });
 
   final String id;
@@ -26,6 +27,14 @@ class GroupMemberModel {
   final String? temporaryEventId;
   final String? temporaryEventName;
   final String? temporaryEventStatus;
+
+  /// Pessoa sem cadastro: nome criado pelo admin, ainda sem conta. Entra
+  /// nas despesas normalmente; quem entrar pelo convite e disser ser ela
+  /// herda tudo.
+  final bool placeholder;
+
+  /// Nome com a marca "(sem cadastro)" — usado nas listas de pessoas.
+  String get displayName => placeholder ? '$nickname (sem cadastro)' : nickname;
 
   String get roleLabel {
     if (temporary) {
@@ -50,6 +59,7 @@ class GroupMemberModel {
       temporaryEventId: json['temporaryEventId'] as String?,
       temporaryEventName: json['temporaryEventName'] as String?,
       temporaryEventStatus: json['temporaryEventStatus'] as String?,
+      placeholder: json['placeholder'] as bool? ?? false,
     );
   }
 }

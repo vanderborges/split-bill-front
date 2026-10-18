@@ -1899,7 +1899,8 @@ Future<List<UserOptionModel>> _loadEventUsers(WidgetRef ref, String groupId,
       .where((member) => member.active)
       .map((member) => UserOptionModel(
             id: member.userId,
-            nickname: member.nickname,
+            // "Carla (sem cadastro)" pra pessoa criada só com o nome.
+            nickname: member.displayName,
             active: member.active,
           ))
       .toList();

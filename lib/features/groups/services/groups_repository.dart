@@ -127,6 +127,42 @@ class GroupsRepository {
     return sortedByNamePtBr(members, (member) => member.nickname);
   }
 
+  /// Admin: pessoas sem cadastro do grupo (fixas e temporárias), ainda sem
+  /// dono.
+  Future<List<GroupMemberModel>> listPlaceholders(String groupId) async {
+    final response =
+        await dio.get<List<dynamic>>('/groups/$groupId/placeholders');
+    final members = response.data!
+        .map((item) => GroupMemberModel.fromJson(item as Map<String, dynamic>))
+        .toList();
+    return sortedByNamePtBr(members, (member) => member.nickname);
+  }
+
+  /// Admin: cadastra só o nome. Com [eventId] a pessoa fica temporária
+  /// daquele evento; sem, integrante fixa do grupo.
+  Future<GroupMemberModel> createPlaceholder(String groupId,
+      {required String nickname, String? eventId}) async {
+    final response = await dio.post<Map<String, dynamic>>(
+      '/groups/$groupId/placeholders',
+      data: {'nickname': nickname, if (eventId != null) 'eventId': eventId},
+    );
+    return GroupMemberModel.fromJson(response.data!);
+  }
+
+  Future<GroupMemberModel> renamePlaceholder(String groupId,
+      {required String userId, required String nickname}) async {
+    final response = await dio.put<Map<String, dynamic>>(
+      '/groups/$groupId/placeholders/$userId',
+      data: {'nickname': nickname},
+    );
+    return GroupMemberModel.fromJson(response.data!);
+  }
+
+  /// Só funciona enquanto a pessoa não tem nenhuma despesa.
+  Future<void> deletePlaceholder(String groupId, String userId) async {
+    await dio.delete<void>('/groups/$groupId/placeholders/$userId');
+  }
+
   /// Admin: reativa a pessoa temporária em outro evento (aberto).
   Future<GroupMemberModel> assignTemporaryEvent({
     required String groupId,
