@@ -1471,7 +1471,7 @@ Future<void> _openExpenseForm(
                                     textCapitalization:
                                         TextCapitalization.sentences,
                                     decoration: const InputDecoration(
-                                      labelText: 'Historico da cota extra',
+                                      labelText: 'Descrição',
                                       hintText: 'Ex.: Rafa e Gertrudes',
                                       isDense: true,
                                     ),

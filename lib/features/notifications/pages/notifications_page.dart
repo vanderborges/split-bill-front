@@ -53,38 +53,38 @@ class NotificationsPage extends ConsumerWidget {
                 background: Container(
                   alignment: Alignment.centerRight,
                   color: Theme.of(context).colorScheme.errorContainer,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.lg),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                   child: Icon(Icons.delete_outline,
                       color: Theme.of(context).colorScheme.onErrorContainer),
                 ),
-                child: ListTile(
-                  leading: Icon(
-                    notification.isRead
-                        ? Icons.notifications_none
-                        : Icons.notifications_active,
-                    color: notification.isRead
-                        ? null
-                        : Theme.of(context).colorScheme.primary,
-                  ),
-                  title: Text(
-                    notification.message,
-                    style: notification.isRead
-                        ? null
-                        : const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Text(_formatDateTime(notification.createdAt)),
-                  trailing: notification.pixKey == null
-                      ? null
-                      : IconButton(
-                          tooltip:
-                              'Copiar PIX de ${notification.receiverName}',
-                          icon: const Icon(Icons.copy_outlined),
-                          onPressed: () => _copyPixKey(context, notification),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Toda notificação é cobrança: vai com o "Bom dia" do
+                    // grupo do WhatsApp (figurinha animada, WebP).
+                    GestureDetector(
+                      onTap: notification.isRead
+                          ? null
+                          : () => _markAsRead(ref, notification),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
+                        child: Center(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.asset(
+                              'assets/images/bom_dia.webp',
+                              height: 180,
+                              fit: BoxFit.contain,
+                              semanticLabel: 'Bom dia',
+                            ),
+                          ),
                         ),
-                  onTap: notification.isRead
-                      ? null
-                      : () => _markAsRead(ref, notification),
+                      ),
+                    ),
+                    _notificationTile(context, ref, notification),
+                  ],
                 ),
               );
             },
@@ -97,6 +97,34 @@ class NotificationsPage extends ConsumerWidget {
           onRetry: () => ref.invalidate(notificationsProvider),
         ),
       ),
+    );
+  }
+
+  Widget _notificationTile(
+      BuildContext context, WidgetRef ref, NotificationModel notification) {
+    return ListTile(
+      leading: Icon(
+        notification.isRead
+            ? Icons.notifications_none
+            : Icons.notifications_active,
+        color:
+            notification.isRead ? null : Theme.of(context).colorScheme.primary,
+      ),
+      title: Text(
+        notification.message,
+        style: notification.isRead
+            ? null
+            : const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(_formatDateTime(notification.createdAt)),
+      trailing: notification.pixKey == null
+          ? null
+          : IconButton(
+              tooltip: 'Copiar PIX de ${notification.receiverName}',
+              icon: const Icon(Icons.copy_outlined),
+              onPressed: () => _copyPixKey(context, notification),
+            ),
+      onTap: notification.isRead ? null : () => _markAsRead(ref, notification),
     );
   }
 }
