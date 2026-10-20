@@ -49,8 +49,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               _noTransitionPage(const GroupsPage())),
       GoRoute(
           path: '/invite/:inviteId',
-          builder: (context, state) => InvitePage(
-              inviteId: state.pathParameters['inviteId']!)),
+          builder: (context, state) =>
+              InvitePage(inviteId: state.pathParameters['inviteId']!)),
       GoRoute(
           path: '/events',
           pageBuilder: (context, state) =>
@@ -68,9 +68,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           pageBuilder: (context, state) =>
               _noTransitionPage(const UserExpenseSummaryPage())),
       GoRoute(path: '/users', builder: (context, state) => const UsersPage()),
+      // Notificações abre pelo sino da AppBar e também monta a barra
+      // inferior: sem transição, a barra não "anda" junto com a tela.
       GoRoute(
           path: '/notifications',
-          builder: (context, state) => const NotificationsPage()),
+          pageBuilder: (context, state) =>
+              _noTransitionPage(const NotificationsPage())),
       GoRoute(
           path: '/profile', builder: (context, state) => const ProfilePage()),
     ],

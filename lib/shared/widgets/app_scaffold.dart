@@ -196,22 +196,26 @@ class _NarrowScaffold extends ConsumerWidget {
   final List<Widget>? actions;
   final Widget child;
 
+  // Última aba da barra inferior que estava selecionada. Telas fora da
+  // barra (Notificações, Perfil...) mantêm essa aba marcada em vez de
+  // pular pra "Início" — senão o indicador da barra se mexia ao abrir o
+  // sino.
+  static int _lastIndex = 0;
+
   int _selectedIndex(String path) {
-    switch (path) {
-      case '/':
-        return 0;
-      case '/events':
-      case '/expenses':
-        return 1;
-      case '/groups':
-        return 2;
-      case '/summary':
-        return 3;
-      case '/reports':
-        return 4;
-      default:
-        return 0;
+    final index = switch (path) {
+      '/' => 0,
+      '/events' || '/expenses' => 1,
+      '/groups' => 2,
+      '/summary' => 3,
+      '/reports' => 4,
+      _ => null,
+    };
+    if (index == null) {
+      return _lastIndex;
     }
+    _lastIndex = index;
+    return index;
   }
 
   @override

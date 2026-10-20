@@ -8,6 +8,7 @@ class NotificationModel {
     required this.readAt,
     required this.pixKey,
     required this.receiverName,
+    this.type = 'BILLING',
   });
 
   final String id;
@@ -19,7 +20,13 @@ class NotificationModel {
   final String? pixKey;
   final String? receiverName;
 
+  /// BILLING (cobrança) ou MEMBER_JOINED (aviso pro admin de que alguém
+  /// entrou no grupo). Backend antigo não manda: trata como cobrança.
+  final String type;
+
   bool get isRead => readAt != null;
+
+  bool get isBilling => type == 'BILLING';
 
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
     return NotificationModel(
@@ -36,6 +43,7 @@ class NotificationModel {
           : DateTime.parse(json['readAt'] as String).toLocal(),
       pixKey: json['pixKey'] as String?,
       receiverName: json['receiverName'] as String?,
+      type: json['type'] as String? ?? 'BILLING',
     );
   }
 }

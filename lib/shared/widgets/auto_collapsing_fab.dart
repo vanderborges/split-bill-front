@@ -7,6 +7,10 @@ import 'package:flutter/material.dart';
 /// ícone "+" — um aceno rápido do que o botão faz ao entrar na tela, sem
 /// ficar ocupando espaço depois. Clicável em ambos os estados, e tocar
 /// nele a qualquer momento cancela o timer e já colapsa na hora.
+///
+/// É sempre o MESMO botão encolhendo (o rótulo vai sumindo enquanto a
+/// largura diminui até virar o quadrado do "+"), em vez de trocar um botão
+/// pelo outro com escala/fade — a troca dava um "pulo" no meio.
 class AutoCollapsingFab extends StatefulWidget {
   const AutoCollapsingFab({
     super.key,
@@ -25,8 +29,18 @@ class AutoCollapsingFab extends StatefulWidget {
   State<AutoCollapsingFab> createState() => _AutoCollapsingFabState();
 }
 
-class _AutoCollapsingFabState extends State<AutoCollapsingFab> {
-  var _expanded = true;
+class _AutoCollapsingFabState extends State<AutoCollapsingFab>
+    with SingleTickerProviderStateMixin {
+  // 1 = expandido (com rótulo), 0 = só o "+".
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 450),
+    value: 1,
+  );
+  late final Animation<double> _extent = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeInOutCubic,
+  );
   Timer? _timer;
 
   @override
@@ -38,13 +52,14 @@ class _AutoCollapsingFabState extends State<AutoCollapsingFab> {
   @override
   void dispose() {
     _timer?.cancel();
+    _controller.dispose();
     super.dispose();
   }
 
   void _collapse() {
     _timer?.cancel();
-    if (mounted && _expanded) {
-      setState(() => _expanded = false);
+    if (mounted && _controller.value > 0 && !_controller.isAnimating) {
+      _controller.reverse();
     }
   }
 
@@ -55,24 +70,35 @@ class _AutoCollapsingFabState extends State<AutoCollapsingFab> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 250),
-      transitionBuilder: (child, animation) => ScaleTransition(
-        scale: animation,
-        child: FadeTransition(opacity: animation, child: child),
-      ),
-      child: _expanded
-          ? FloatingActionButton.extended(
-              key: const ValueKey('expanded'),
-              onPressed: _handlePressed,
-              icon: Icon(widget.icon),
-              label: Text(widget.label),
-            )
-          : FloatingActionButton(
-              key: const ValueKey('collapsed'),
-              onPressed: _handlePressed,
-              child: Icon(widget.icon),
-            ),
+    return AnimatedBuilder(
+      animation: _extent,
+      builder: (context, _) {
+        final t = _extent.value;
+        // Com t = 0: 16 + ícone 24 + 16 = 56, o mesmo tamanho do FAB
+        // normal — o fim da animação coincide com o botão "+".
+        return FloatingActionButton.extended(
+          onPressed: _handlePressed,
+          tooltip: t < 1 ? widget.label : null,
+          extendedPadding: EdgeInsetsDirectional.only(
+            start: 16,
+            end: 16 + 4 * t,
+          ),
+          extendedIconLabelSpacing: 8 * t,
+          icon: Icon(widget.icon),
+          label: t == 0
+              ? const SizedBox.shrink()
+              : ClipRect(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    widthFactor: t,
+                    child: Opacity(
+                      opacity: Curves.easeIn.transform(t),
+                      child: Text(widget.label, maxLines: 1, softWrap: false),
+                    ),
+                  ),
+                ),
+        );
+      },
     );
   }
 }

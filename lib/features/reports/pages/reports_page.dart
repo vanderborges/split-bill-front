@@ -120,20 +120,69 @@ class ReportsPage extends ConsumerWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${report.groupName} | ${report.eventName ?? ''}',
-                      style: Theme.of(context).textTheme.bodySmall),
-                  const SizedBox(height: 8),
-                  // Sem o título "Relatório <nome>" aqui — é redundante com
-                  // a linha acima (grupo | evento) e, junto com o ícone de
-                  // compartilhar, o badge de status e o botão de
-                  // abrir/fechar, quebrava a linha e ficava apertado. Wrap
-                  // no lugar de Row pra esses itens nunca ficarem espremidos
-                  // ou cortados em telas estreitas.
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: AppSpacing.sm,
-                    runSpacing: AppSpacing.xs,
+                  // Status do evento ao lado do nome; abaixo, as ações do
+                  // evento (Fechar/cobrança/Concluir) à esquerda e o
+                  // compartilhar fixo à direita — com o evento fechado sobra
+                  // só o compartilhar, no mesmo lugar.
+                  Row(
                     children: [
+                      Flexible(
+                        child: Text(
+                            '${report.groupName} | ${report.eventName ?? ''}',
+                            style: Theme.of(context).textTheme.bodySmall),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      StatusBadge(switch (report.status) {
+                        'CLOSED' => AppStatus.fechado,
+                        'SETTLING' => AppStatus.aguardandoPagamento,
+                        _ => AppStatus.aberto,
+                      }),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: AppSpacing.sm,
+                          runSpacing: AppSpacing.xs,
+                          children: [
+                            if (report.status == 'OPEN' && isGroupAdmin)
+                              FilledButton(
+                                onPressed: report.eventId == null
+                                    ? null
+                                    : () => _confirmStartSettlement(
+                                        context, ref, report.eventId!),
+                                child: const Text('Fechar evento'),
+                              ),
+                            if (report.status == 'SETTLING' && isGroupAdmin)
+                              OutlinedButton.icon(
+                                onPressed: report.eventId == null
+                                    ? null
+                                    : () => _sendBillingAlert(
+                                        context, ref, report.eventId!),
+                                icon: const Icon(Icons.campaign_outlined),
+                                label: const Text('Enviar alerta de cobrança'),
+                              ),
+                            if (report.status == 'SETTLING' && isGroupAdmin)
+                              Tooltip(
+                                message: _hasPendingSettlement(settlementsAsync)
+                                    ? 'Confirme todos os pagamentos antes de concluir o evento.'
+                                    : '',
+                                child: FilledButton(
+                                  onPressed: report.eventId == null ||
+                                          _hasPendingSettlement(
+                                              settlementsAsync)
+                                      ? null
+                                      : () => _confirmCloseEvent(
+                                          context, ref, report.eventId!),
+                                  child: const Text('Concluir evento'),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                       IconButton(
                         tooltip: 'Compartilhar resumo',
                         onPressed: settlementsAsync.valueOrNull == null
@@ -147,42 +196,6 @@ class ReportsPage extends ConsumerWidget {
                                     ?.receiverNickname),
                         icon: const Icon(Icons.share_outlined),
                       ),
-                      StatusBadge(switch (report.status) {
-                        'CLOSED' => AppStatus.fechado,
-                        'SETTLING' => AppStatus.aguardandoPagamento,
-                        _ => AppStatus.aberto,
-                      }),
-                      if (report.status == 'OPEN' && isGroupAdmin)
-                        FilledButton(
-                          onPressed: report.eventId == null
-                              ? null
-                              : () => _confirmStartSettlement(
-                                  context, ref, report.eventId!),
-                          child: const Text('Fechar evento'),
-                        ),
-                      if (report.status == 'SETTLING' && isGroupAdmin)
-                        OutlinedButton.icon(
-                          onPressed: report.eventId == null
-                              ? null
-                              : () => _sendBillingAlert(
-                                  context, ref, report.eventId!),
-                          icon: const Icon(Icons.campaign_outlined),
-                          label: const Text('Enviar alerta de cobrança'),
-                        ),
-                      if (report.status == 'SETTLING' && isGroupAdmin)
-                        Tooltip(
-                          message: _hasPendingSettlement(settlementsAsync)
-                              ? 'Confirme todos os pagamentos antes de concluir o evento.'
-                              : '',
-                          child: FilledButton(
-                            onPressed: report.eventId == null ||
-                                    _hasPendingSettlement(settlementsAsync)
-                                ? null
-                                : () => _confirmCloseEvent(
-                                    context, ref, report.eventId!),
-                            child: const Text('Concluir evento'),
-                          ),
-                        ),
                     ],
                   ),
                   const SizedBox(height: 12),

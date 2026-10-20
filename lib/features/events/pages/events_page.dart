@@ -263,6 +263,9 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
   final monthController = TextEditingController(text: now.month.toString());
   final yearController = TextEditingController(text: now.year.toString());
   var type = 'SPORADIC';
+  // Com um mês do grupo já aberto, o tipo padrão vira "Mês do grupo" —
+  // até a pessoa escolher o tipo à mão.
+  var typeTouched = false;
   String? selectedGroupId = ref.read(selectedGroupIdProvider);
 
   // Sugere no campo Mes/Ano o mes seguinte ao ultimo evento mensal ja
@@ -278,6 +281,9 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
     try {
       final (month, year, locked) = await _nextMonthlyReference(ref, groupId);
       monthLocked = locked;
+      if (!typeTouched) {
+        type = locked ? 'MONTHLY' : 'SPORADIC';
+      }
       if (!locked &&
           (monthController.text != suggestedMonth ||
               yearController.text != suggestedYear)) {
@@ -360,8 +366,10 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                       ),
                     ],
                     selected: {type},
-                    onSelectionChanged: (selection) =>
-                        setState(() => type = selection.first),
+                    onSelectionChanged: (selection) => setState(() {
+                      type = selection.first;
+                      typeTouched = true;
+                    }),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
@@ -412,7 +420,8 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                           ? '${monthController.text.padLeft(2, '0')}/${yearController.text}'
                           : 'Ex.: Viagem para a praia',
                     ),
-                    autofocus: true,
+                    // No "Criar mês" direto não abre o teclado por cima do botão.
+                    autofocus: !(type == 'MONTHLY' && monthLocked),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   TextField(
@@ -421,7 +430,14 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                     decoration: const InputDecoration(
                         labelText: 'Descrição (opcional)'),
                   ),
-                  if (type == 'MONTHLY') ...[
+                  if (type == 'MONTHLY' && monthLocked) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'Já existe um mês aberto, então o próximo segue a ordem dos meses e já nasce com as parcelas e assinaturas do mês anterior.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                  if (type == 'MONTHLY' && !monthLocked) ...[
                     const SizedBox(height: AppSpacing.md),
                     Row(
                       children: [
@@ -429,7 +445,6 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                           child: KeyboardDoneBar(
                               child: TextField(
                             controller: monthController,
-                            readOnly: monthLocked,
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(labelText: 'Mes'),
                           )),
@@ -439,20 +454,12 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                           child: KeyboardDoneBar(
                               child: TextField(
                             controller: yearController,
-                            readOnly: monthLocked,
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(labelText: 'Ano'),
                           )),
                         ),
                       ],
                     ),
-                    if (monthLocked) ...[
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'Já existe um mês aberto, então o próximo segue a ordem dos meses.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
                   ],
                   const SizedBox(height: AppSpacing.xl),
                   Row(
@@ -467,7 +474,9 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                       Expanded(
                         child: FilledButton(
                           onPressed: () => Navigator.of(context).pop(true),
-                          child: const Text('Salvar'),
+                          child: Text(type == 'MONTHLY' && monthLocked
+                              ? 'Criar mês ${monthController.text.padLeft(2, '0')}/${yearController.text}'
+                              : 'Salvar'),
                         ),
                       ),
                     ],

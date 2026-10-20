@@ -61,28 +61,30 @@ class NotificationsPage extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Toda notificação é cobrança: vai com o "Bom dia" do
-                    // grupo do WhatsApp (figurinha animada, WebP).
-                    GestureDetector(
-                      onTap: notification.isRead
-                          ? null
-                          : () => _markAsRead(ref, notification),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
-                        child: Center(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.asset(
-                              'assets/images/bom_dia.webp',
-                              height: 180,
-                              fit: BoxFit.contain,
-                              semanticLabel: 'Bom dia',
+                    // Cobrança vai com o "Bom dia" do grupo do WhatsApp
+                    // (figurinha animada, WebP); aviso de gente nova no
+                    // grupo não.
+                    if (notification.isBilling)
+                      GestureDetector(
+                        onTap: notification.isRead
+                            ? null
+                            : () => _markAsRead(ref, notification),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
+                          child: Center(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.asset(
+                                'assets/images/bom_dia.webp',
+                                height: 180,
+                                fit: BoxFit.contain,
+                                semanticLabel: 'Bom dia',
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
                     _notificationTile(context, ref, notification),
                   ],
                 ),
@@ -119,10 +121,24 @@ class NotificationsPage extends ConsumerWidget {
       subtitle: Text(_formatDateTime(notification.createdAt)),
       trailing: notification.pixKey == null
           ? null
-          : IconButton(
-              tooltip: 'Copiar PIX de ${notification.receiverName}',
-              icon: const Icon(Icons.copy_outlined),
-              onPressed: () => _copyPixKey(context, notification),
+          : Tooltip(
+              message: 'Copiar PIX de ${notification.receiverName}',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => _copyPixKey(context, notification),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xs),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.copy_outlined, size: 20),
+                      const SizedBox(height: 2),
+                      Text('Copiar PIX',
+                          style: Theme.of(context).textTheme.labelSmall),
+                    ],
+                  ),
+                ),
+              ),
             ),
       onTap: notification.isRead ? null : () => _markAsRead(ref, notification),
     );
