@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.dividiai.app",
+      "sha256_cert_fingerprints": [
+        "EE:9F:C9:A5:36:F4:43:4D:69:BC:B0:08:DF:24:0A:33:39:05:6E:AD:01:2B:B9:9A:E0:C4:8F:A5:39:BB:AB:A0"
+      ]
+    }
+  }
+]

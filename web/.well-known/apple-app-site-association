@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["QNX36T5J6T.com.dividiai.app"],
+        "components": [
+          { "/": "/invite/*" }
+        ]
+      }
+    ]
+  }
+}
