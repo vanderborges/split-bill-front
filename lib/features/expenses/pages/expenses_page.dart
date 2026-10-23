@@ -883,7 +883,7 @@ Future<void> _openExpenseForm(
             if (installmentsToSave == null || installmentsToSave < 1) {
               ScaffoldMessenger.of(routeContext).showSnackBar(
                 const SnackBar(
-                    content: Text('Informe um número de parcelas válido.')),
+                    content: Text('Informe um número de meses válido.')),
               );
               return;
             }
@@ -892,7 +892,7 @@ Future<void> _openExpenseForm(
               ScaffoldMessenger.of(routeContext).showSnackBar(
                 const SnackBar(
                     content:
-                        Text('Despesa parcelada permite apenas um pagador.')),
+                        Text('Despesa repetida permite apenas um pagador.')),
               );
               return;
             }
@@ -1492,7 +1492,7 @@ Future<void> _openExpenseForm(
                           onPressed: () =>
                               setState(() => showInstallments = true),
                           icon: const Icon(Icons.event_repeat),
-                          label: const Text('Parcelar essa despesa'),
+                          label: const Text('Repetir despesa'),
                         ),
                         TextButton.icon(
                           onPressed: () => setState(() {
@@ -1508,7 +1508,7 @@ Future<void> _openExpenseForm(
                         Row(
                           children: [
                             IconButton.outlined(
-                              tooltip: 'Diminuir parcelas',
+                              tooltip: 'Diminuir meses',
                               onPressed: installments <= 1
                                   ? null
                                   : () => setState(() {
@@ -1529,7 +1529,7 @@ Future<void> _openExpenseForm(
                                   FilteringTextInputFormatter.digitsOnly,
                                 ],
                                 decoration: const InputDecoration(
-                                    labelText: 'Parcelas'),
+                                    labelText: 'Quantos meses'),
                                 onChanged: (value) {
                                   final parsed = int.tryParse(value) ?? 1;
                                   setState(() {
@@ -1543,7 +1543,7 @@ Future<void> _openExpenseForm(
                             ),
                             const SizedBox(width: AppSpacing.sm),
                             IconButton.outlined(
-                              tooltip: 'Aumentar parcelas',
+                              tooltip: 'Aumentar meses',
                               onPressed: () => setState(() {
                                 installments += 1;
                                 installmentsController.text = '$installments';
@@ -1554,6 +1554,11 @@ Future<void> _openExpenseForm(
                           ],
                         ),
                         const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          'O valor inteiro entra de novo em cada mês seguinte, com a mesma divisão (não é dividido entre os meses).',
+                          style: Theme.of(routeContext).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
                         TextButton.icon(
                           onPressed: () => setState(() {
                             showInstallments = false;
@@ -1561,7 +1566,7 @@ Future<void> _openExpenseForm(
                             installmentsController.text = '1';
                           }),
                           icon: const Icon(Icons.close),
-                          label: const Text('Não parcelar'),
+                          label: const Text('Não repetir'),
                         ),
                       ] else if (isSubscription) ...[
                         Text(
@@ -1594,7 +1599,7 @@ Future<void> _openExpenseForm(
                             expense.installmentLabel ??
                                 (expense.isSubscription
                                     ? 'Assinatura'
-                                    : 'Despesa parcelada'),
+                                    : 'Despesa repetida'),
                             style: Theme.of(routeContext).textTheme.bodyMedium,
                           ),
                         ],
@@ -1603,7 +1608,7 @@ Future<void> _openExpenseForm(
                       Text(
                         expense.isSubscription
                             ? 'Essa despesa repete todo mês automaticamente até ser finalizada.'
-                            : 'O número de parcelas não pode ser alterado depois de criada.',
+                            : 'O número de meses não pode ser alterado depois de criada.',
                         style: Theme.of(routeContext).textTheme.bodySmall,
                       ),
                       if (expense.isSubscription &&

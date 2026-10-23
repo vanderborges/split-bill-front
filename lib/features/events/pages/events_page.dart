@@ -14,7 +14,7 @@ import '../../../shared/widgets/status_badge.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../expenses/services/expenses_repository.dart';
 import '../../groups/models/group_model.dart';
-import '../../groups/pages/groups_page.dart' show showAddPlaceholderDialog;
+import '../../groups/pages/groups_page.dart' show showTemporaryGuestDialog;
 import '../../groups/services/groups_repository.dart';
 import '../../months/services/months_repository.dart';
 import '../../reports/services/reports_repository.dart';
@@ -105,9 +105,26 @@ class EventsPage extends ConsumerWidget {
           Expanded(
             child: eventsAsync.when(
               data: (allEvents) {
-                final events = hideClosed
+                // Abertos primeiro, depois aguardando pagamento, depois
+                // fechados; dentro de cada um, do mais recente pro mais
+                // antigo.
+                int statusRank(EventModel event) =>
+                    event.isOpen ? 0 : (event.isSettling ? 1 : 2);
+                final events = (hideClosed
                     ? allEvents.where((event) => !event.isClosed).toList()
-                    : allEvents;
+                    : [...allEvents])
+                  ..sort((a, b) {
+                    final byStatus = statusRank(a).compareTo(statusRank(b));
+                    if (byStatus != 0) {
+                      return byStatus;
+                    }
+                    final byDate = b.sortDate.compareTo(a.sortDate);
+                    if (byDate != 0) {
+                      return byDate;
+                    }
+                    return (b.createdAt ?? DateTime(0))
+                        .compareTo(a.createdAt ?? DateTime(0));
+                  });
                 if (events.isEmpty) {
                   return EmptyState(
                     icon: Icons.event_outlined,
@@ -180,8 +197,8 @@ class EventsPage extends ConsumerWidget {
                               await _closeEvent(context, ref, event);
                             } else if (value == 'reopen') {
                               await _reopenEvent(context, ref, event);
-                            } else if (value == 'add-placeholder') {
-                              await showAddPlaceholderDialog(
+                            } else if (value == 'add-temporary') {
+                              await showTemporaryGuestDialog(
                                   context, ref, event.groupId,
                                   event: event);
                             } else if (value == 'delete') {
@@ -206,8 +223,8 @@ class EventsPage extends ConsumerWidget {
                                   value: 'reopen', child: Text('Reabrir')),
                             if (isEventAdmin && !event.isClosed)
                               const PopupMenuItem(
-                                  value: 'add-placeholder',
-                                  child: Text('Adicionar pessoa sem cadastro')),
+                                  value: 'add-temporary',
+                                  child: Text('Convidado temporário')),
                             if (isEventAdmin)
                               const PopupMenuItem(
                                   value: 'delete', child: Text('Deletar')),

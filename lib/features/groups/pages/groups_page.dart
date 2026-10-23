@@ -207,8 +207,7 @@ class _GroupReceiverSelector extends ConsumerWidget {
               // recebedora do grupo.
               ...members
                   .where((member) => !member.temporary && !member.placeholder)
-                  .map((member) =>
-                  DropdownMenuItem<String?>(
+                  .map((member) => DropdownMenuItem<String?>(
                       value: member.userId, child: Text(member.nickname))),
             ],
             onChanged: (value) =>
@@ -783,15 +782,20 @@ class _GroupTemporaryMembersState
                       child: Text('Pessoas temporárias',
                           style: Theme.of(context).textTheme.titleMedium)),
                   TextButton.icon(
-                    onPressed: () =>
-                        _showTemporaryInviteDialog(context, ref, widget.group),
+                    onPressed: () async {
+                      if (await showTemporaryGuestDialog(
+                          context, ref, widget.group.id)) {
+                        _reload();
+                      }
+                    },
                     icon: const Icon(Icons.person_add_alt),
-                    label: const Text('Convidar temporário'),
+                    label: const Text('Convidado temporário'),
                   ),
                 ],
               ),
               Text(
-                'Entram só para um evento e somem das listas quando ele fecha.',
+                'Entram só para um evento, com ou sem conta no app, e somem '
+                'das listas quando ele fecha.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               if (snapshot.connectionState != ConnectionState.done)
@@ -898,40 +902,148 @@ Future<EventModel?> _pickOpenEvent(
   );
 }
 
-Future<void> _showTemporaryInviteDialog(
-    BuildContext context, WidgetRef ref, GroupModel group) async {
-  final event = await _pickOpenEvent(context, ref, group.id,
-      title: 'Convite temporário para qual evento?');
-  if (event == null || !context.mounted) {
-    return;
+/// Convidado temporário: o admin escolhe o evento (já vem preenchido com
+/// [event]) e digita o nome. A pessoa entra na hora como "sem cadastro"
+/// só daquele evento — já dá pra lançar despesas — e o admin recebe o link
+/// do convite temporário. Se ela criar conta pelo link e escolher o nome
+/// em "Quem é você?", fica com as despesas, continuando só naquele evento;
+/// se não entrar, segue só como nome e some das listas quando o evento
+/// fecha. Retorna true se cadastrou.
+Future<bool> showTemporaryGuestDialog(
+    BuildContext context, WidgetRef ref, String groupId,
+    {EventModel? event}) async {
+  List<EventModel> openEvents;
+  if (event != null) {
+    openEvents = [event];
+  } else {
+    try {
+      openEvents =
+          (await ref.read(eventsRepositoryProvider).list(groupId: groupId))
+              .where((item) => item.status != 'CLOSED')
+              .toList();
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível carregar os eventos.'))));
+      }
+      return false;
+    }
+    if (!context.mounted) {
+      return false;
+    }
+    if (openEvents.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Nenhum evento aberto disponível neste grupo.')));
+      return false;
+    }
+  }
+  final nameController = TextEditingController();
+  var selected = openEvents.first;
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('Convidado temporário'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Nome'),
+            ),
+            const SizedBox(height: 16),
+            if (event != null)
+              Text('Participa só do evento "${event.name}".',
+                  style: Theme.of(context).textTheme.bodySmall)
+            else
+              DropdownButtonFormField<String>(
+                initialValue: selected.id,
+                decoration: const InputDecoration(labelText: 'Evento'),
+                items: openEvents
+                    .map((item) => DropdownMenuItem(
+                        value: item.id, child: Text(item.name)))
+                    .toList(),
+                onChanged: (value) => setState(() => selected =
+                    openEvents.firstWhere((item) => item.id == value)),
+              ),
+            const SizedBox(height: 12),
+            Text(
+              'Já entra no evento com o nome, sem precisar de conta. Se '
+              'criar conta pelo link do convite, fica com as despesas dele.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Adicionar')),
+        ],
+      ),
+    ),
+  );
+  final nickname = nameController.text.trim();
+  nameController.dispose();
+  if (result != true || !context.mounted) {
+    return false;
+  }
+  if (nickname.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Informe o nome da pessoa.')));
+    return false;
+  }
+  try {
+    await ref
+        .read(groupsRepositoryProvider)
+        .createPlaceholder(groupId, nickname: nickname, eventId: selected.id);
+    ref.invalidate(dashboardGroupBalancesProvider);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível adicionar a pessoa.'))));
+    }
+    return false;
+  }
+  if (!context.mounted) {
+    return true;
   }
   final GroupInviteModel invite;
   try {
     invite = await ref
         .read(groupInviteRepositoryProvider)
-        .getOrCreateTemporary(group.id, event.id);
+        .getOrCreateTemporary(groupId, selected.id);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(friendlyApiError(error,
-              fallback: 'Não foi possível gerar o convite.'))));
+              fallback:
+                  '$nickname foi adicionado(a), mas não foi possível gerar o convite.'))));
     }
-    return;
+    return true;
   }
   if (!context.mounted) {
-    return;
+    return true;
   }
   final url = '${Environment.webBaseUrl}/invite/${invite.id}';
   await showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Convite temporário'),
+      title: Text('$nickname adicionado(a)'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Quem entrar por este link participa só do evento '
-              '"${event.name}" (precisa ter ou criar uma conta):'),
+          Text('$nickname já participa do evento "${selected.name}". '
+              'Mande este link se quiser que crie conta e acompanhe '
+              'pelo app (opcional):'),
           const SizedBox(height: 12),
           SelectableText(url),
         ],
@@ -954,6 +1066,7 @@ Future<void> _showTemporaryInviteDialog(
       ],
     ),
   );
+  return true;
 }
 
 /// Reativa a pessoa temporária em outro evento. Retorna true se mudou.
@@ -1076,8 +1189,8 @@ class _GroupPlaceholdersState extends ConsumerState<_GroupPlaceholders> {
                 ...placeholders.map(
                   (member) => ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading:
-                        PersonAvatar(name: member.nickname, seed: member.userId),
+                    leading: PersonAvatar(
+                        name: member.nickname, seed: member.userId),
                     title: Text(member.nickname),
                     subtitle: Text(member.temporary
                         ? 'Temporária · ${member.temporaryEventName ?? 'sem evento'}'
@@ -1116,90 +1229,40 @@ class _GroupPlaceholdersState extends ConsumerState<_GroupPlaceholders> {
   }
 }
 
-/// Cadastra uma pessoa sem cadastro. Com [event], ela já entra temporária
-/// daquele evento (sem perguntar); sem, o admin escolhe entre fixa no grupo
-/// ou só um evento aberto. Retorna true se criou.
+/// Cadastra uma pessoa sem cadastro fixa no grupo (quem é só de um evento
+/// entra por "Convidado temporário"). Retorna true se criou.
 Future<bool> showAddPlaceholderDialog(
-    BuildContext context, WidgetRef ref, String groupId,
-    {EventModel? event}) async {
-  List<EventModel> openEvents = const [];
-  if (event == null) {
-    try {
-      openEvents =
-          (await ref.read(eventsRepositoryProvider).list(groupId: groupId))
-              .where((item) => item.status != 'CLOSED')
-              .toList();
-    } catch (_) {
-      // Sem a lista de eventos, ainda dá pra cadastrar fixa no grupo.
-    }
-    if (!context.mounted) {
-      return false;
-    }
-  }
+    BuildContext context, WidgetRef ref, String groupId) async {
   final nameController = TextEditingController();
-  var onlyEvent = event != null;
-  String? eventId = event?.id ?? openEvents.firstOrNull?.id;
   final result = await showDialog<bool>(
     context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const Text('Pessoa sem cadastro'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: nameController,
-              autofocus: true,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Nome'),
-            ),
-            const SizedBox(height: 16),
-            if (event != null)
-              Text('Participa só do evento "${event.name}".',
-                  style: Theme.of(context).textTheme.bodySmall)
-            else ...[
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('Grupo todo')),
-                  ButtonSegment(value: true, label: Text('Só um evento')),
-                ],
-                selected: {onlyEvent},
-                onSelectionChanged: openEvents.isEmpty
-                    ? null
-                    : (selection) =>
-                        setState(() => onlyEvent = selection.first),
-              ),
-              if (openEvents.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text('Nenhum evento aberto: entra fixa no grupo.',
-                      style: Theme.of(context).textTheme.bodySmall),
-                ),
-              if (onlyEvent && openEvents.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: eventId,
-                  decoration: const InputDecoration(labelText: 'Evento'),
-                  items: openEvents
-                      .map((item) => DropdownMenuItem(
-                          value: item.id, child: Text(item.name)))
-                      .toList(),
-                  onChanged: (value) => setState(() => eventId = value),
-                ),
-              ],
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Salvar')),
+    builder: (context) => AlertDialog(
+      title: const Text('Pessoa sem cadastro'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: nameController,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(labelText: 'Nome'),
+          ),
+          const SizedBox(height: 12),
+          Text(
+              'Entra fixa no grupo todo. Pra alguém de um evento só, use '
+              '"Convidado temporário".',
+              style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Salvar')),
+      ],
     ),
   );
   final nickname = nameController.text.trim();
@@ -1213,8 +1276,9 @@ Future<bool> showAddPlaceholderDialog(
     return false;
   }
   try {
-    await ref.read(groupsRepositoryProvider).createPlaceholder(groupId,
-        nickname: nickname, eventId: onlyEvent ? eventId : null);
+    await ref
+        .read(groupsRepositoryProvider)
+        .createPlaceholder(groupId, nickname: nickname);
     ref.invalidate(dashboardGroupBalancesProvider);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1303,8 +1367,8 @@ Future<bool> _removePlaceholder(BuildContext context, WidgetRef ref,
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(friendlyApiError(error,
-              fallback: 'Não foi possível remover.'))));
+          content: Text(
+              friendlyApiError(error, fallback: 'Não foi possível remover.'))));
     }
     return false;
   }

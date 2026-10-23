@@ -9,6 +9,7 @@ class EventModel {
     required this.monthId,
     required this.month,
     required this.year,
+    this.createdAt,
   });
 
   final String id;
@@ -20,6 +21,7 @@ class EventModel {
   final String? monthId;
   final int? month;
   final int? year;
+  final DateTime? createdAt;
 
   bool get isClosed => status == 'CLOSED';
 
@@ -28,6 +30,15 @@ class EventModel {
   /// Aberto para pagamento: despesas congeladas, aguardando confirmação de
   /// todo mundo antes do fechamento definitivo.
   bool get isSettling => status == 'SETTLING';
+
+  /// Referência pra ordenar do mais recente pro mais antigo: mês/ano do
+  /// evento mensal; data de criação do avulso.
+  DateTime get sortDate {
+    if (month != null && year != null) {
+      return DateTime(year!, month!);
+    }
+    return createdAt ?? DateTime(0);
+  }
 
   String get typeLabel {
     return switch (type) {
@@ -48,6 +59,9 @@ class EventModel {
       monthId: json['monthId'] as String?,
       month: json['month'] as int?,
       year: json['year'] as int?,
+      createdAt: json['createdAt'] == null
+          ? null
+          : DateTime.tryParse(json['createdAt'] as String),
     );
   }
 }

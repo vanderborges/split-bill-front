@@ -114,11 +114,11 @@ class NotificationsPage extends ConsumerWidget {
       ),
       title: Text(
         notification.message,
-        style: notification.isRead
-            ? null
-            : const TextStyle(fontWeight: FontWeight.w600),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontWeight: notification.isRead ? null : FontWeight.w600),
       ),
-      subtitle: Text(_formatDateTime(notification.createdAt)),
+      subtitle: Text(_formatDateTime(notification.createdAt),
+          style: Theme.of(context).textTheme.bodySmall),
       trailing: notification.pixKey == null
           ? null
           : Tooltip(
