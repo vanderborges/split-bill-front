@@ -77,7 +77,7 @@ class NotificationsPage extends ConsumerWidget {
                               borderRadius: BorderRadius.circular(12),
                               child: Image.asset(
                                 'assets/images/bom_dia.webp',
-                                height: 180,
+                                height: 120,
                                 fit: BoxFit.contain,
                                 semanticLabel: 'Bom dia',
                               ),
@@ -115,6 +115,7 @@ class NotificationsPage extends ConsumerWidget {
       title: Text(
         notification.message,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontSize: 13,
             fontWeight: notification.isRead ? null : FontWeight.w600),
       ),
       subtitle: Text(_formatDateTime(notification.createdAt),

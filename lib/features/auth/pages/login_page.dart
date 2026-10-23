@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/session_reset.dart';
 import '../../groups/services/group_invite_repository.dart';
+import '../../notifications/services/push_service.dart';
 import '../services/auth_repository.dart';
 import '../services/biometric_auth_service.dart';
 
@@ -285,6 +286,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   /// [pendingInviteId] must be captured before calling
   /// [resetSessionScopedProviders], which clears it.
   String _afterLoginRoute(String? pendingInviteId) {
-    return pendingInviteId == null ? '/' : '/invite/$pendingInviteId';
+    if (pendingInviteId != null) {
+      return '/invite/$pendingInviteId';
+    }
+    // App aberto tocando numa notificação de push.
+    final pushRoute = ref.read(pendingPushRouteProvider);
+    if (pushRoute != null) {
+      ref.read(pendingPushRouteProvider.notifier).state = null;
+      return pushRoute;
+    }
+    return '/';
   }
 }

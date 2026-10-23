@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/network/dio_provider.dart';
+import '../../notifications/services/push_service.dart';
 import '../models/auth_session.dart';
 import 'auth_storage.dart';
 import '../../users/models/user_model.dart';
@@ -11,6 +12,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(
     ref.watch(dioProvider),
     ref.watch(secureStorageProvider),
+    beforeLogout: () => ref.read(pushServiceProvider).unregisterDevice(),
   );
 });
 
@@ -24,10 +26,14 @@ final currentUserProvider = FutureProvider<UserModel?>((ref) async {
 });
 
 class AuthRepository {
-  const AuthRepository(this.dio, this.storage);
+  const AuthRepository(this.dio, this.storage, {this.beforeLogout});
 
   final Dio dio;
   final FlutterSecureStorage storage;
+
+  /// Roda antes de apagar o token de login (remove o aparelho do push,
+  /// chamada que precisa ir autenticada).
+  final Future<void> Function()? beforeLogout;
 
   Future<AuthSession> login({
     required String email,
@@ -49,6 +55,7 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
+    await beforeLogout?.call();
     await storage.delete(key: authTokenKey);
   }
 
