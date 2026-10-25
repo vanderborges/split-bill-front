@@ -12,6 +12,7 @@ import '../../../shared/widgets/loading_state.dart';
 import '../../../shared/widgets/person_avatar.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../auth/services/auth_repository.dart';
+import '../../notifications/services/push_service.dart';
 import '../../users/models/user_model.dart';
 import '../../users/services/users_repository.dart';
 
@@ -102,6 +103,10 @@ class ProfilePage extends ConsumerWidget {
                   label: const Text('Usuários'),
                 ),
               ],
+              if (pushSupported) ...[
+                const SizedBox(height: AppSpacing.md),
+                const _PushStatusTile(),
+              ],
               const SizedBox(height: AppSpacing.md),
               OutlinedButton.icon(
                 onPressed: () => _logout(context, ref),
@@ -128,6 +133,49 @@ class ProfilePage extends ConsumerWidget {
           message: 'Não foi possível carregar seu perfil.',
           onRetry: () => ref.invalidate(currentUserProvider),
         ),
+      ),
+    );
+  }
+}
+
+/// Situação do push neste aparelho + botão pra registrar de novo. Mostra
+/// o erro real quando o registro falha (antes era silencioso).
+class _PushStatusTile extends ConsumerStatefulWidget {
+  const _PushStatusTile();
+
+  @override
+  ConsumerState<_PushStatusTile> createState() => _PushStatusTileState();
+}
+
+class _PushStatusTileState extends ConsumerState<_PushStatusTile> {
+  bool _busy = false;
+
+  Future<void> _register() async {
+    setState(() => _busy = true);
+    await ref.read(pushServiceProvider).registerDevice();
+    if (mounted) {
+      setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = ref.watch(pushStatusProvider);
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.notifications_active_outlined),
+        title: const Text('Notificações no celular'),
+        subtitle: Text(status ?? 'Ainda não verificado.'),
+        trailing: _busy
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : TextButton(
+                onPressed: _register,
+                child: const Text('Ativar'),
+              ),
       ),
     );
   }
@@ -212,8 +260,8 @@ Future<void> _showChangePasswordDialog(
     }
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
               fallback: 'Não foi possível alterar a senha.'))));
     }
   } finally {
@@ -345,8 +393,8 @@ Future<void> _showEditProfileDialog(
     ref.invalidate(usersProvider);
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyApiError(error,
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
               fallback: 'Não foi possível atualizar o perfil.'))));
     }
   } finally {
@@ -419,8 +467,7 @@ Future<void> _showDeleteAccountDialog(
     confirmationController.dispose();
     if (confirmed == true && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content:
-              Text('Digite EXCLUIR para confirmar a exclusão da conta.')));
+          content: Text('Digite EXCLUIR para confirmar a exclusão da conta.')));
     }
     return;
   }
@@ -432,8 +479,8 @@ Future<void> _showDeleteAccountDialog(
     resetSessionScopedProviders(ref);
     if (context.mounted) {
       context.go('/login');
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Sua conta foi excluída.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sua conta foi excluída.')));
     }
   } catch (error) {
     if (context.mounted) {

@@ -21,6 +21,10 @@ final pendingPushRouteProvider = StateProvider<String?>((ref) => null);
 
 final pushServiceProvider = Provider<PushService>((ref) => PushService(ref));
 
+/// Resultado da última tentativa de registrar este aparelho, mostrado no
+/// Perfil: sem isso, uma falha no registro ficava invisível.
+final pushStatusProvider = StateProvider<String?>((ref) => null);
+
 /// Liga o Firebase antes do runApp. Falha aqui nunca impede o app de abrir.
 Future<void> initializePush() async {
   final options = DefaultFirebaseOptions.currentPlatform;
@@ -54,27 +58,45 @@ class PushService {
       defaultTargetPlatform == TargetPlatform.iOS ? 'IOS' : 'ANDROID';
 
   /// Chamado com o usuário logado: pede permissão (só pergunta na 1ª vez)
-  /// e manda o token deste aparelho pro backend.
-  Future<void> registerDevice() async {
-    if (!_ready) {
-      return;
+  /// e manda o token deste aparelho pro backend. Devolve (e guarda em
+  /// [pushStatusProvider]) o que aconteceu, pro Perfil mostrar.
+  Future<String> registerDevice() async {
+    final status = await _register();
+    ref.read(pushStatusProvider.notifier).state = status;
+    return status;
+  }
+
+  Future<String> _register() async {
+    if (!pushSupported) {
+      return 'Só funciona no app do celular.';
+    }
+    if (Firebase.apps.isEmpty) {
+      return 'Erro: o Firebase não iniciou neste aparelho.';
     }
     try {
       final messaging = FirebaseMessaging.instance;
       final settings = await messaging.requestPermission();
       if (settings.authorizationStatus == AuthorizationStatus.denied) {
-        return;
+        return 'Bloqueadas: permita as notificações do DividiAí nas '
+            'configurações do celular.';
       }
       // iOS: mostra o banner mesmo com o app aberto.
       await messaging.setForegroundNotificationPresentationOptions(
           alert: true, badge: true, sound: true);
       final token = await messaging.getToken();
-      if (token != null) {
-        await _sendToken(token);
+      if (token == null) {
+        return 'Erro: o Firebase não devolveu o token do aparelho.';
       }
+      await _sendToken(token);
       _listenOnce();
+      return 'Ativas neste aparelho.';
+    } on DioException catch (error) {
+      debugPrint('Push: não registrou o aparelho ($error)');
+      return 'Erro ao avisar o servidor '
+          '(${error.response?.statusCode ?? error.type.name}).';
     } catch (error) {
       debugPrint('Push: não registrou o aparelho ($error)');
+      return 'Erro: $error';
     }
   }
 
