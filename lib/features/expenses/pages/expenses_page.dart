@@ -677,6 +677,9 @@ Future<void> _openExpenseForm(
   late Map<String, TextEditingController> payerControllers;
   late String singlePayerId;
   final currentUserId = ref.read(currentUserProvider).valueOrNull?.id;
+  // Divisão por valor: quem teve o valor digitado pelo usuário. Os demais
+  // são recalculados com o que falta do total, dividido igualmente.
+  final editedShareAmountIds = <String>{};
 
   // (Re)monta todo o estado que depende de quem pode participar/pagar —
   // chamado na montagem inicial e de novo sempre que o grupo muda, já que
@@ -703,6 +706,14 @@ Future<void> _openExpenseForm(
           text: _initialShareAmount(user.id, expense),
         ),
     };
+    // Ao editar uma despesa já dividida por valor, os valores salvos contam
+    // como digitados: mexer num não reescreve os outros ("Dividir
+    // igualmente" volta pro automático).
+    editedShareAmountIds
+      ..clear()
+      ..addAll(expense != null && expense.customSplit
+          ? expense.participants.map((participant) => participant.userId)
+          : const <String>[]);
     final defaultPayerId = usersForForm.any((user) => user.id == currentUserId)
         ? currentUserId!
         : usersForForm.first.id;
@@ -765,9 +776,10 @@ Future<void> _openExpenseForm(
           final sharedByValue =
               _sumShareAmounts(selectedParticipants, shareAmountControllers);
 
-          // Preenche o valor de cada um com a divisão igual (centavos que
-          // sobram vão pros primeiros), pra só ajustar quem paga diferente.
-          void fillShareAmountsEqually() {
+          // Recalcula só quem ainda não teve o valor digitado: o que falta
+          // do total (descontado o que já foi digitado) é dividido igual
+          // entre eles (centavos que sobram vão pros primeiros).
+          void redistributeShareAmounts() {
             final total = parseAmountFieldText(amountController.text);
             if (total == null) {
               return;
@@ -776,10 +788,29 @@ Future<void> _openExpenseForm(
                 .where((user) => selectedParticipants.contains(user.id))
                 .map((user) => user.id)
                 .toList();
-            final parts = _splitAmountEqually(total, ids.length);
-            for (var index = 0; index < ids.length; index++) {
-              shareAmountControllers[ids[index]]!.text = parts[index];
+            final free =
+                ids.where((id) => !editedShareAmountIds.contains(id)).toList();
+            if (free.isEmpty) {
+              return;
             }
+            final typed = ids
+                .where(editedShareAmountIds.contains)
+                .map((id) =>
+                    parseAmountFieldText(shareAmountControllers[id]!.text) ?? 0)
+                .fold<double>(0.0, (sum, value) => sum + value);
+            final remaining = total - typed;
+            final parts =
+                _splitAmountEqually(remaining > 0 ? remaining : 0, free.length);
+            for (var index = 0; index < free.length; index++) {
+              shareAmountControllers[free[index]]!.text = parts[index];
+            }
+          }
+
+          // Volta todo mundo pra divisão igual, pra só ajustar quem paga
+          // diferente.
+          void fillShareAmountsEqually() {
+            editedShareAmountIds.clear();
+            redistributeShareAmounts();
           }
 
           // Valida e salva sem fechar a tela: só sai (pop) em caso de
@@ -991,7 +1022,11 @@ Future<void> _openExpenseForm(
                     AmountField(
                       controller: amountController,
                       autofocus: expense == null,
-                      onChanged: (_) => setState(() {}),
+                      onChanged: (_) => setState(() {
+                        if (splitByValue) {
+                          redistributeShareAmounts();
+                        }
+                      }),
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     TextField(
@@ -1203,6 +1238,9 @@ Future<void> _openExpenseForm(
                                   shareCountControllers[user.id]!.text = '1';
                                 }
                               }
+                              if (splitByValue) {
+                                redistributeShareAmounts();
+                              }
                             });
                           },
                         ),
@@ -1210,7 +1248,10 @@ Future<void> _openExpenseForm(
                           avatar: const Icon(Icons.clear, size: 18),
                           label: const Text('Limpar'),
                           onPressed: () {
-                            setState(() => selectedParticipants.clear());
+                            setState(() {
+                              selectedParticipants.clear();
+                              editedShareAmountIds.clear();
+                            });
                           },
                         ),
                       ],
@@ -1235,6 +1276,10 @@ Future<void> _openExpenseForm(
                                 }
                               } else {
                                 selectedParticipants.remove(user.id);
+                                editedShareAmountIds.remove(user.id);
+                              }
+                              if (splitByValue) {
+                                redistributeShareAmounts();
                               }
                             });
                           },
@@ -1340,7 +1385,10 @@ Future<void> _openExpenseForm(
                               child: AmountField(
                                 controller: shareAmountControllers[user.id]!,
                                 label: user.nickname,
-                                onChanged: (_) => setState(() {}),
+                                onChanged: (_) => setState(() {
+                                  editedShareAmountIds.add(user.id);
+                                  redistributeShareAmounts();
+                                }),
                               ),
                             );
                           }

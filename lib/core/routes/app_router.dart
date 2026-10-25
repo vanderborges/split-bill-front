@@ -67,7 +67,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path: '/summary',
           pageBuilder: (context, state) =>
               _noTransitionPage(const UserExpenseSummaryPage())),
-      GoRoute(path: '/users', builder: (context, state) => const UsersPage()),
+      GoRoute(
+          path: '/users',
+          pageBuilder: (context, state) =>
+              _noTransitionPage(const UsersPage())),
       // Notificações abre pelo sino da AppBar e também monta a barra
       // inferior: sem transição, a barra não "anda" junto com a tela.
       GoRoute(
@@ -75,7 +78,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           pageBuilder: (context, state) =>
               _noTransitionPage(const NotificationsPage())),
       GoRoute(
-          path: '/profile', builder: (context, state) => const ProfilePage()),
+          path: '/profile',
+          pageBuilder: (context, state) =>
+              _noTransitionPage(const ProfilePage())),
     ],
   );
 });
