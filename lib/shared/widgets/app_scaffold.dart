@@ -8,6 +8,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../features/auth/services/auth_repository.dart';
 import '../../features/notifications/services/notifications_repository.dart';
 import '../session_reset.dart';
+import 'hide_fab_on_scroll.dart';
 import 'person_avatar.dart';
 
 /// Abaixo desta largura a navegação principal vira uma barra inferior
@@ -39,24 +40,26 @@ class AppScaffold extends ConsumerWidget {
     final isWide = MediaQuery.sizeOf(context).width >= _wideLayoutBreakpoint;
     final currentPath = GoRouterState.of(context).uri.path;
 
-    if (isWide) {
-      return _WideScaffold(
-        title: title,
-        showUsers: showUsers,
-        currentPath: currentPath,
-        floatingActionButton: floatingActionButton,
-        actions: actions,
-        child: child,
-      );
-    }
-
-    return _NarrowScaffold(
-      title: title,
-      showUsers: showUsers,
-      currentPath: currentPath,
-      floatingActionButton: floatingActionButton,
-      actions: actions,
-      child: child,
+    return HideFabOnScroll(
+      fab: floatingActionButton,
+      body: child,
+      builder: (fab, body) => isWide
+          ? _WideScaffold(
+              title: title,
+              showUsers: showUsers,
+              currentPath: currentPath,
+              floatingActionButton: fab,
+              actions: actions,
+              child: body,
+            )
+          : _NarrowScaffold(
+              title: title,
+              showUsers: showUsers,
+              currentPath: currentPath,
+              floatingActionButton: fab,
+              actions: actions,
+              child: body,
+            ),
     );
   }
 }

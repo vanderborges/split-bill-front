@@ -162,7 +162,8 @@ class ExpensesPage extends ConsumerWidget {
                         return second.createdAt.compareTo(first.createdAt);
                       });
                     return ListView.separated(
-                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
+                          AppSpacing.lg, AppSpacing.lg, fabClearance),
                       itemCount: sortedExpenses.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {

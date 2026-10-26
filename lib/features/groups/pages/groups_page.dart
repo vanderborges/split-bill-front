@@ -34,7 +34,7 @@ class GroupsPage extends ConsumerWidget {
         onPressed: () => _showCreateGroupDialog(context, ref),
       ),
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, fabClearance),
         children: [
           groupsAsync.when(
             data: (groups) {
@@ -1192,9 +1192,11 @@ class _GroupPlaceholdersState extends ConsumerState<_GroupPlaceholders> {
                     leading: PersonAvatar(
                         name: member.nickname, seed: member.userId),
                     title: Text(member.nickname),
+                    // "Fixa"/"Temporária" não diziam nada pra quem usa:
+                    // mostra de quais eventos a pessoa participa.
                     subtitle: Text(member.temporary
-                        ? 'Temporária · ${member.temporaryEventName ?? 'sem evento'}'
-                        : 'Fixa no grupo'),
+                        ? 'Só no evento ${member.temporaryEventName ?? '(sem evento)'}'
+                        : 'Participa de todos os eventos'),
                     trailing: Wrap(
                       children: [
                         IconButton(
@@ -1250,8 +1252,8 @@ Future<bool> showAddPlaceholderDialog(
           ),
           const SizedBox(height: 12),
           Text(
-              'Entra fixa no grupo todo. Pra alguém de um evento só, use '
-              '"Convidado temporário".',
+              'Participa de todos os eventos do grupo. Pra alguém de um '
+              'evento só, use "Convidado temporário".',
               style: Theme.of(context).textTheme.bodySmall),
         ],
       ),

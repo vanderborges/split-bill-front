@@ -2,6 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+/// Espaço que uma lista com botão "+" precisa no fim: 56 do botão + 16 de
+/// margem de cada lado. Sem isso o último item (e os botões dele) ficava
+/// embaixo do "+", sem como rolar mais.
+const double fabClearance = 88;
+
 /// Botão de ação flutuante que nasce expandido mostrando um rótulo (ex.:
 /// "Nova despesa") e, depois de alguns segundos, anima até virar só o
 /// ícone "+" — um aceno rápido do que o botão faz ao entrar na tela, sem
