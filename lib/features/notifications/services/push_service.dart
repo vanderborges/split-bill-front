@@ -83,6 +83,13 @@ class PushService {
       // iOS: mostra o banner mesmo com o app aberto.
       await messaging.setForegroundNotificationPresentationOptions(
           alert: true, badge: true, sound: true);
+      // iOS: o getToken() falha (apns-token-not-set) se o token da Apple
+      // ainda não chegou, o que é comum logo depois da permissão.
+      if (defaultTargetPlatform == TargetPlatform.iOS &&
+          await _waitApnsToken(messaging) == null) {
+        return 'Erro: o iPhone não recebeu o token da Apple (APNs). '
+            'Confira "Push Notifications" no App ID e no perfil da build.';
+      }
       final token = await messaging.getToken();
       if (token == null) {
         return 'Erro: o Firebase não devolveu o token do aparelho.';
@@ -157,6 +164,17 @@ class PushService {
       await _markAsRead(message);
       ref.read(appRouterProvider).go(_routeOf(message));
     });
+  }
+
+  Future<String?> _waitApnsToken(FirebaseMessaging messaging) async {
+    for (var attempt = 0; attempt < 20; attempt++) {
+      final apns = await messaging.getAPNSToken();
+      if (apns != null) {
+        return apns;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    return null;
   }
 
   Future<void> _sendToken(String token) => _dio
