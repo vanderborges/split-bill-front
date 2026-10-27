@@ -275,7 +275,6 @@ Future<(int, int, bool)> _nextMonthlyReference(
 
 Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
   final nameController = TextEditingController();
-  final descriptionController = TextEditingController();
   final now = DateTime.now();
   final monthController = TextEditingController(text: now.month.toString());
   final yearController = TextEditingController(text: now.year.toString());
@@ -283,6 +282,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
   // Com um mês do grupo já aberto, o tipo padrão vira "Mês do grupo" —
   // até a pessoa escolher o tipo à mão.
   var typeTouched = false;
+  String? nameError;
   String? selectedGroupId = ref.read(selectedGroupIdProvider);
 
   // Sugere no campo Mes/Ano o mes seguinte ao ultimo evento mensal ja
@@ -324,7 +324,6 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
   await suggestNextMonth(selectedGroupId);
   if (!context.mounted) {
     nameController.dispose();
-    descriptionController.dispose();
     monthController.dispose();
     yearController.dispose();
     return;
@@ -427,26 +426,26 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                       );
                     },
                   ),
-                  const SizedBox(height: AppSpacing.md),
-                  TextField(
-                    controller: nameController,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      labelText: type == 'MONTHLY' ? 'Nome (opcional)' : 'Nome',
-                      hintText: type == 'MONTHLY'
-                          ? '${monthController.text.padLeft(2, '0')}/${yearController.text}'
-                          : 'Ex.: Viagem para a praia',
+                  // Evento mensal se chama sempre pelo mês (MM/AAAA), então
+                  // só o avulso pede nome.
+                  if (type != 'MONTHLY') ...[
+                    const SizedBox(height: AppSpacing.md),
+                    TextField(
+                      controller: nameController,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(
+                        labelText: 'Nome',
+                        hintText: 'Ex.: Viagem para a praia',
+                        errorText: nameError,
+                      ),
+                      onChanged: (_) {
+                        if (nameError != null) {
+                          setState(() => nameError = null);
+                        }
+                      },
+                      autofocus: true,
                     ),
-                    // No "Criar mês" direto não abre o teclado por cima do botão.
-                    autofocus: !(type == 'MONTHLY' && monthLocked),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  TextField(
-                    controller: descriptionController,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                        labelText: 'Descrição (opcional)'),
-                  ),
+                  ],
                   if (type == 'MONTHLY' && monthLocked) ...[
                     const SizedBox(height: AppSpacing.md),
                     Text(
@@ -490,7 +489,15 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                       const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: FilledButton(
-                          onPressed: () => Navigator.of(context).pop(true),
+                          onPressed: () {
+                            if (type != 'MONTHLY' &&
+                                nameController.text.trim().isEmpty) {
+                              setState(() =>
+                                  nameError = 'Informe o nome do evento.');
+                              return;
+                            }
+                            Navigator.of(context).pop(true);
+                          },
                           child: Text(type == 'MONTHLY' && monthLocked
                               ? 'Criar mês ${monthController.text.padLeft(2, '0')}/${yearController.text}'
                               : 'Salvar'),
@@ -509,7 +516,6 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
 
   if (saved != true || !context.mounted) {
     nameController.dispose();
-    descriptionController.dispose();
     monthController.dispose();
     yearController.dispose();
     return;
@@ -524,7 +530,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
           month > 12 ||
           year == null ||
           year < 2000) {
-        throw Exception('Informe mes e ano validos');
+        throw const FormatException('Informe mês e ano válidos.');
       }
       final groups = await ref.read(groupsProvider.future);
       if (groups.isEmpty) {
@@ -532,12 +538,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
       }
       final groupId = selectedGroupId ?? groups.first.id;
       final event = await ref.read(eventsRepositoryProvider).create(
-            name: nameController.text.trim().isEmpty
-                ? '${month.toString().padLeft(2, '0')}/$year'
-                : nameController.text.trim(),
-            description: descriptionController.text.trim().isEmpty
-                ? null
-                : descriptionController.text.trim(),
+            name: '${month.toString().padLeft(2, '0')}/$year',
             type: type,
             month: month,
             year: year,
@@ -553,9 +554,6 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
       final groupId = selectedGroupId ?? groups.first.id;
       final event = await ref.read(eventsRepositoryProvider).create(
             name: nameController.text.trim(),
-            description: descriptionController.text.trim().isEmpty
-                ? null
-                : descriptionController.text.trim(),
             type: type,
             groupId: groupId,
           );
@@ -565,12 +563,13 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(friendlyApiError(error,
-              fallback: 'Não foi possível criar o evento.'))));
+          content: Text(error is FormatException
+              ? error.message
+              : friendlyApiError(error,
+                  fallback: 'Não foi possível criar o evento.'))));
     }
   } finally {
     nameController.dispose();
-    descriptionController.dispose();
     monthController.dispose();
     yearController.dispose();
   }

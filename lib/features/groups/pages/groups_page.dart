@@ -371,12 +371,22 @@ class _GroupMembers extends ConsumerWidget {
                   contentPadding: EdgeInsets.zero,
                   leading:
                       PersonAvatar(name: member.nickname, seed: member.userId),
-                  title: Text(member.displayName),
+                  title: Text(member.nickname),
                   subtitle: Text(member.roleLabel),
-                  // Pessoa sem cadastro é gerida em "Pessoas sem cadastro".
-                  trailing: isGroupAdmin &&
-                          member.userId != currentUser?.id &&
-                          !member.placeholder
+                  // Pessoa sem cadastro só pode ser renomeada aqui; remover
+                  // fica em "Pessoas sem cadastro".
+                  trailing: isGroupAdmin && member.placeholder
+                      ? IconButton(
+                          tooltip: 'Editar nome',
+                          icon: const Icon(Icons.edit_outlined),
+                          onPressed: () async {
+                            if (await _renamePlaceholder(
+                                context, ref, group.id, member)) {
+                              ref.invalidate(selectedGroupProvider);
+                            }
+                          },
+                        )
+                      : isGroupAdmin && member.userId != currentUser?.id
                       ? Wrap(
                           children: [
                             if (!member.temporary)
@@ -449,8 +459,8 @@ Future<void> _confirmLeaveGroup(
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Sair do grupo'),
-      content: const Text(
-          'Voce so pode sair se nao tiver saldo pendente em eventos abertos.'),
+      content: Text(
+          'Deseja sair de ${group.name}? Só é possível sair sem valores em aberto nos eventos que ainda não foram concluídos.'),
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -815,22 +825,39 @@ class _GroupTemporaryMembersState
                       child: PersonAvatar(
                           name: member.nickname, seed: member.userId),
                     ),
-                    title: Text(member.displayName),
+                    title: Text(member.nickname),
                     subtitle: Text(member.temporaryEventName == null
                         ? 'Sem evento'
                         : member.temporaryEventClosed
                             ? '${member.temporaryEventName} (fechado — oculto)'
                             : member.temporaryEventName!),
-                    trailing: IconButton(
-                      tooltip: 'Incluir em outro evento',
-                      icon: const Icon(Icons.event_repeat),
-                      onPressed: () async {
-                        final changed = await _assignTemporaryToEvent(
-                            context, ref, widget.group, member);
-                        if (changed) {
-                          _reload();
-                        }
-                      },
+                    trailing: Wrap(
+                      children: [
+                        // Só dá pra renomear quem ainda não tem conta: o
+                        // nome de quem tem conta é dele.
+                        if (member.placeholder)
+                          IconButton(
+                            tooltip: 'Editar nome',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () async {
+                              if (await _renamePlaceholder(context, ref,
+                                  widget.group.id, member)) {
+                                _reload();
+                              }
+                            },
+                          ),
+                        IconButton(
+                          tooltip: 'Incluir em outro evento',
+                          icon: const Icon(Icons.event_repeat),
+                          onPressed: () async {
+                            final changed = await _assignTemporaryToEvent(
+                                context, ref, widget.group, member);
+                            if (changed) {
+                              _reload();
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -1191,12 +1218,9 @@ class _GroupPlaceholdersState extends ConsumerState<_GroupPlaceholders> {
                     contentPadding: EdgeInsets.zero,
                     leading: PersonAvatar(
                         name: member.nickname, seed: member.userId),
+                    // Sem separar fixa/temporária aqui: pra quem usa é tudo
+                    // a mesma coisa (pedido do usuário, 27/10/2026).
                     title: Text(member.nickname),
-                    // "Fixa"/"Temporária" não diziam nada pra quem usa:
-                    // mostra de quais eventos a pessoa participa.
-                    subtitle: Text(member.temporary
-                        ? 'Só no evento ${member.temporaryEventName ?? '(sem evento)'}'
-                        : 'Participa de todos os eventos'),
                     trailing: Wrap(
                       children: [
                         IconButton(

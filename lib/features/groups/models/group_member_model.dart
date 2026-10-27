@@ -33,11 +33,10 @@ class GroupMemberModel {
   /// herda tudo.
   final bool placeholder;
 
-  /// Nome com a marca "(sem cadastro)" — usado nas listas de pessoas.
-  String get displayName => placeholder ? '$nickname (sem cadastro)' : nickname;
-
+  /// Pessoa sem cadastro aparece como "Temporário" até alguém criar conta e
+  /// escolher o nome dela — aí vira um integrante de verdade.
   String get roleLabel {
-    if (temporary) {
+    if (temporary || placeholder) {
       return temporaryEventName == null
           ? 'Temporário'
           : 'Temporário · $temporaryEventName';

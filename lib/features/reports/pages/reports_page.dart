@@ -284,6 +284,16 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
   }
 
   @override
+  void didUpdateWidget(_ReportTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Relatório recarregado (despesa nova, acerto alterado): a sugestão
+    // guardada era dos saldos antigos e podia deixar credor sem sugestão.
+    if (!identical(oldWidget.balances, widget.balances)) {
+      _suggestionsFuture = null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final currentUserId = ref.watch(currentUserProvider).valueOrNull?.id;
     final semantic = context.semanticColors;

@@ -10,7 +10,6 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
 import '../../../shared/widgets/person_avatar.dart';
-import '../../../shared/widgets/status_badge.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../notifications/services/push_service.dart';
 import '../../users/models/user_model.dart';
@@ -53,12 +52,6 @@ class ProfilePage extends ConsumerWidget {
                           spacing: AppSpacing.xs,
                           runSpacing: AppSpacing.xs,
                           children: [
-                            StatusBadge(
-                              user.active
-                                  ? AppStatus.confirmado
-                                  : AppStatus.fechado,
-                              label: user.active ? 'Ativo' : 'Inativo',
-                            ),
                             if (user.admin)
                               const Chip(
                                 avatar: Icon(Icons.shield_outlined, size: 16),

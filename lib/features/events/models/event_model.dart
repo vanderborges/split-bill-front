@@ -43,7 +43,7 @@ class EventModel {
   String get typeLabel {
     return switch (type) {
       'MONTHLY' => 'Mensal',
-      'SPORADIC' => 'Esporadico',
+      'SPORADIC' => 'Avulso',
       _ => type,
     };
   }

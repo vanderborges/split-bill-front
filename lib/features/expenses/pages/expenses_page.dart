@@ -198,7 +198,12 @@ class ExpensesPage extends ConsumerWidget {
                             }
                             final users = await _loadEventUsers(
                                 ref, event.groupId,
-                                eventId: event.id);
+                                eventId: event.id,
+                                keepUserIds: {
+                                  ...expense.participants
+                                      .map((participant) => participant.userId),
+                                  ...expense.payers.map((payer) => payer.userId),
+                                });
                             final categories = await _loadCategoryNames(ref);
                             if (context.mounted) {
                               await _openExpenseForm(
@@ -1943,19 +1948,20 @@ Future<String?> _showCreateCategoryDialog(
 }
 
 /// Quem pode participar/pagar: com [eventId], integrantes fixos + pessoas
-/// temporárias daquele evento.
+/// temporárias daquele evento. Quem foi removido do grupo mas está na
+/// despesa sendo editada ([keepUserIds]) continua na lista — senão sairia
+/// da divisão ao salvar.
 Future<List<UserOptionModel>> _loadEventUsers(WidgetRef ref, String groupId,
-    {String? eventId}) async {
+    {String? eventId, Set<String> keepUserIds = const {}}) async {
   final members = await ref
       .read(groupsRepositoryProvider)
       .listMembers(groupId, eventId: eventId);
   return members
-      .where((member) => member.active)
+      .where((member) => member.active || keepUserIds.contains(member.userId))
       .map((member) => UserOptionModel(
             id: member.userId,
-            // "Carla (sem cadastro)" pra pessoa criada só com o nome.
-            nickname: member.displayName,
-            active: member.active,
+            nickname: member.nickname,
+            active: true,
           ))
       .toList();
 }
