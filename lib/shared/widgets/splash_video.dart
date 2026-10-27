@@ -20,11 +20,6 @@ class _SplashVideoState extends State<SplashVideo> {
   late final VideoPlayerController _controller =
       VideoPlayerController.asset('assets/videos/dividiai.mp4');
 
-  /// Quanto o vídeo é "achatado" na horizontal no celular em pé (0.75 = 25%
-  /// mais estreito em relação à altura): mostra mais da imagem com pouca
-  /// distorção.
-  static const _stretch = 0.75;
-
   bool _ready = false;
   bool _finished = false;
   Timer? _safety;
@@ -93,21 +88,27 @@ class _SplashVideoState extends State<SplashVideo> {
             ? LayoutBuilder(builder: (context, constraints) {
                 final screenWidth = constraints.maxWidth;
                 final screenHeight = constraints.maxHeight;
-                // Ocupa a tela toda (pedido do usuário). O vídeo é
-                // horizontal: em tela mais estreita que ele (celular em pé)
-                // é esticado na vertical [_stretch], o que corta menos das
-                // laterais; o que sobra é cortado igualmente dos dois lados.
                 final videoRatio = _controller.value.aspectRatio;
+                // O vídeo é vertical (9:16). Tela em pé (celular): ocupa a
+                // tela toda, cortando o pouco que sobrar nas bordas, sem
+                // distorcer. Tela deitada (computador): mostra o vídeo
+                // inteiro na altura, centralizado — preencher a largura ali
+                // cortaria a maior parte da imagem.
+                if (screenWidth > screenHeight) {
+                  return Center(
+                    child: AspectRatio(
+                      aspectRatio: videoRatio,
+                      child: VideoPlayer(_controller),
+                    ),
+                  );
+                }
                 final screenRatio = screenWidth / screenHeight;
-                final shownRatio = screenRatio < videoRatio
-                    ? videoRatio * _stretch
-                    : videoRatio;
-                final width = screenRatio < shownRatio
-                    ? screenHeight * shownRatio
+                final width = screenRatio < videoRatio
+                    ? screenHeight * videoRatio
                     : screenWidth;
-                final height = screenRatio < shownRatio
+                final height = screenRatio < videoRatio
                     ? screenHeight
-                    : screenWidth / shownRatio;
+                    : screenWidth / videoRatio;
                 return ClipRect(
                   child: OverflowBox(
                     minWidth: width,
