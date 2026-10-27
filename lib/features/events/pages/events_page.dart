@@ -21,6 +21,7 @@ import '../../reports/services/reports_repository.dart';
 import '../models/event_model.dart';
 import '../services/events_repository.dart';
 import '../services/new_event_intent.dart';
+import '../widgets/receiver_choice.dart';
 
 class EventsPage extends ConsumerWidget {
   const EventsPage({super.key});
@@ -585,6 +586,7 @@ Future<void> _startSettlement(
   List<EventModel> events,
 ) async {
   String? targetId;
+  String? receiverUserId;
   final targets = events
       .where((item) => item.id != event.id && item.status == 'OPEN')
       .toList();
@@ -596,12 +598,19 @@ Future<void> _startSettlement(
         builder: (context, setState) {
           return AlertDialog(
             title: Text('Fechar ${event.name}'),
-            content: Column(
+            content: SingleChildScrollView(
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                    'Depois desta etapa nao e mais possivel adicionar ou editar despesas neste evento. '
-                    'Voce pode so fechar o evento ou consolidar o saldo como despesa em outro evento.'),
+                    'Depois desta etapa não é mais possível adicionar ou editar despesas neste evento. '
+                    'Você pode só fechar o evento ou consolidar o saldo como despesa em outro evento.'),
+                const SizedBox(height: 12),
+                ReceiverChoice(
+                  groupId: event.groupId,
+                  eventId: event.id,
+                  onChanged: (value) => receiverUserId = value,
+                ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String?>(
                   initialValue: targetId,
@@ -615,7 +624,7 @@ Future<void> _startSettlement(
                   onChanged: (value) => setState(() => targetId = value),
                 ),
               ],
-            ),
+            )),
             actions: [
               TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
@@ -633,9 +642,8 @@ Future<void> _startSettlement(
     return;
   }
   try {
-    await ref
-        .read(eventsRepositoryProvider)
-        .startSettlement(event.id, consolidateToEventId: targetId);
+    await ref.read(eventsRepositoryProvider).startSettlement(event.id,
+        consolidateToEventId: targetId, receiverUserId: receiverUserId);
     _invalidateEventState(ref);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

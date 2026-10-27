@@ -101,10 +101,16 @@ class EventsRepository {
   /// Primeira etapa do fechamento: congela o evento para novas despesas e
   /// abre a janela de pagamento (status SETTLING).
   Future<EventModel> startSettlement(String id,
-      {String? consolidateToEventId}) async {
+      {String? consolidateToEventId, String? receiverUserId}) async {
     final response = await dio.put<Map<String, dynamic>>(
       '/events/$id/start-settlement',
-      data: {'consolidateToEventId': consolidateToEventId},
+      data: {
+        'consolidateToEventId': consolidateToEventId,
+        'receiverUserId': receiverUserId,
+        // Diz ao backend que houve escolha (null = sugerir pagamentos);
+        // sem isso (app antigo) ele usa o recebedor do grupo.
+        'receiverChosen': true,
+      },
     );
     return EventModel.fromJson(response.data!);
   }

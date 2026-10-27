@@ -83,15 +83,6 @@ class GroupsPage extends ConsumerWidget {
                             context, ref, selectedGroupAsync.valueOrNull!),
                     icon: const Icon(Icons.edit_outlined),
                   ),
-                  IconButton(
-                    tooltip: 'Deletar grupo',
-                    onPressed: selectedGroupAsync.valueOrNull == null ||
-                            !isSelectedGroupAdmin
-                        ? null
-                        : () => _deleteGroup(
-                            context, ref, selectedGroupAsync.valueOrNull!),
-                    icon: const Icon(Icons.delete_outline),
-                  ),
                 ],
               );
             },
@@ -109,8 +100,6 @@ class GroupsPage extends ConsumerWidget {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _GroupReceiverSelector(group: group),
-                      _GroupAutoSettlementSelector(group: group),
                       _GroupMembers(group: group),
                       _GroupPlaceholders(group: group),
                       _GroupTemporaryMembers(group: group),
@@ -166,151 +155,6 @@ Future<void> _deleteGroup(
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(friendlyApiError(error,
               fallback: 'Não foi possível deletar o grupo.'))));
-    }
-  }
-}
-
-/// Admin-only: elege quem recebe os pagamentos deste grupo. Quando eleito,
-/// a sugestão de pagamentos (na tela de Relatórios) manda todo devedor, em
-/// qualquer evento do grupo, direto pra essa pessoa.
-class _GroupReceiverSelector extends ConsumerWidget {
-  const _GroupReceiverSelector({required this.group});
-
-  final GroupModel group;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isGroupAdmin =
-        ref.watch(groupRoleProvider(group.id)).valueOrNull == 'ADMIN';
-    if (!isGroupAdmin) {
-      return const SizedBox.shrink();
-    }
-    return FutureBuilder<List<GroupMemberModel>>(
-      future: ref.read(groupsRepositoryProvider).listMembers(group.id),
-      builder: (context, snapshot) {
-        final members = snapshot.data ?? <GroupMemberModel>[];
-        final value =
-            members.any((member) => member.userId == group.receiverUserId)
-                ? group.receiverUserId
-                : null;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: DropdownButtonFormField<String?>(
-            key: ValueKey('receiver-${group.id}-$value'),
-            initialValue: value,
-            decoration: const InputDecoration(
-                labelText: 'Quem recebe os pagamentos do grupo'),
-            items: [
-              const DropdownMenuItem<String?>(
-                  value: null, child: Text('Ninguém eleito')),
-              // Pessoa temporária ou sem cadastro (sem PIX) não pode ser
-              // recebedora do grupo.
-              ...members
-                  .where((member) => !member.temporary && !member.placeholder)
-                  .map((member) => DropdownMenuItem<String?>(
-                      value: member.userId, child: Text(member.nickname))),
-            ],
-            onChanged: (value) =>
-                _setGroupReceiver(context, ref, group.id, value),
-          ),
-        );
-      },
-    );
-  }
-}
-
-Future<void> _setGroupReceiver(
-  BuildContext context,
-  WidgetRef ref,
-  String groupId,
-  String? userId,
-) async {
-  try {
-    await ref
-        .read(groupsRepositoryProvider)
-        .setReceiver(groupId, userId: userId);
-    ref.invalidate(groupsProvider);
-    ref.invalidate(selectedGroupProvider);
-  } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyApiError(error,
-                fallback: 'Não foi possível eleger o recebedor.'))),
-      );
-    }
-  }
-}
-
-/// Admin-only: dia do mês em que o grupo abre automaticamente pra
-/// pagamento o(s) evento(s) mensal(is) ainda abertos e já dispara o
-/// alerta de cobrança — os mesmos dois passos que o admin faria na mão.
-/// O fechamento definitivo continua manual (depende de todo mundo pagar).
-class _GroupAutoSettlementSelector extends ConsumerWidget {
-  const _GroupAutoSettlementSelector({required this.group});
-
-  final GroupModel group;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isGroupAdmin =
-        ref.watch(groupRoleProvider(group.id)).valueOrNull == 'ADMIN';
-    if (!isGroupAdmin) {
-      return const SizedBox.shrink();
-    }
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          DropdownButtonFormField<int?>(
-            key: ValueKey(
-                'auto-settlement-${group.id}-${group.autoSettlementDay}'),
-            initialValue: group.autoSettlementDay,
-            decoration: const InputDecoration(
-                labelText: 'Fechamento automático (dia do mês)'),
-            items: [
-              const DropdownMenuItem<int?>(
-                  value: null, child: Text('Desativado')),
-              ...List.generate(31, (index) => index + 1).map((day) =>
-                  DropdownMenuItem<int?>(value: day, child: Text('Dia $day'))),
-            ],
-            onChanged: (value) =>
-                _setAutoSettlementDay(context, ref, group.id, value),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'No dia escolhido, o(s) evento(s) mensal(is) ainda aberto(s) '
-            'deste grupo são abertos pra pagamento automaticamente e todo '
-            'mundo recebe o aviso de cobrança. O fechamento definitivo '
-            'continua manual, só depois que todos pagarem.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-Future<void> _setAutoSettlementDay(
-  BuildContext context,
-  WidgetRef ref,
-  String groupId,
-  int? day,
-) async {
-  try {
-    await ref
-        .read(groupsRepositoryProvider)
-        .setAutoSettlementDay(groupId, day: day);
-    ref.invalidate(groupsProvider);
-    ref.invalidate(selectedGroupProvider);
-  } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyApiError(error,
-                fallback: 'Não foi possível salvar o fechamento automático.'))),
-      );
     }
   }
 }
@@ -387,25 +231,26 @@ class _GroupMembers extends ConsumerWidget {
                           },
                         )
                       : isGroupAdmin && member.userId != currentUser?.id
-                      ? Wrap(
-                          children: [
-                            if (!member.temporary)
-                              IconButton(
-                                tooltip: 'Alterar perfil no grupo',
-                                icon:
-                                    const Icon(Icons.manage_accounts_outlined),
-                                onPressed: () => _showEditMemberRoleDialog(
-                                    context, ref, group, member),
-                              ),
-                            IconButton(
-                              tooltip: 'Remover integrante',
-                              icon: const Icon(Icons.person_remove_outlined),
-                              onPressed: () => _confirmRemoveMember(
-                                  context, ref, group, member),
-                            ),
-                          ],
-                        )
-                      : null,
+                          ? Wrap(
+                              children: [
+                                if (!member.temporary)
+                                  IconButton(
+                                    tooltip: 'Alterar perfil no grupo',
+                                    icon: const Icon(
+                                        Icons.manage_accounts_outlined),
+                                    onPressed: () => _showEditMemberRoleDialog(
+                                        context, ref, group, member),
+                                  ),
+                                IconButton(
+                                  tooltip: 'Remover integrante',
+                                  icon:
+                                      const Icon(Icons.person_remove_outlined),
+                                  onPressed: () => _confirmRemoveMember(
+                                      context, ref, group, member),
+                                ),
+                              ],
+                            )
+                          : null,
                 ),
               ),
           ],
@@ -541,59 +386,67 @@ Future<void> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
   }
 }
 
+/// Editar grupo: só o nome (a descrição saiu do app). "Excluir grupo" fica
+/// aqui dentro, em vez de um botão solto ao lado do seletor de grupo.
 Future<void> _showEditGroupDialog(
     BuildContext context, WidgetRef ref, GroupModel group) async {
   final nameController = TextEditingController(text: group.name);
-  final descriptionController =
-      TextEditingController(text: group.description ?? '');
-  final saved = await showDialog<bool>(
+  final action = await showDialog<String>(
     barrierDismissible: false,
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Editar grupo'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           TextField(
               controller: nameController,
               textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(labelText: 'Nome')),
-          TextField(
-              controller: descriptionController,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Descricao')),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error),
+              onPressed: () => Navigator.of(context).pop('delete'),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Excluir grupo'),
+            ),
+          ),
         ],
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop(null),
             child: const Text('Cancelar')),
         FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(context).pop('save'),
             child: const Text('Salvar')),
       ],
     ),
   );
-  if (saved != true || !context.mounted) {
-    nameController.dispose();
-    descriptionController.dispose();
+  final name = nameController.text.trim();
+  nameController.dispose();
+  if (action == null || !context.mounted) {
     return;
   }
-  final name = nameController.text.trim();
+  if (action == 'delete') {
+    await _deleteGroup(context, ref, group);
+    return;
+  }
   if (name.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Informe um nome para o grupo.')));
-    nameController.dispose();
-    descriptionController.dispose();
     return;
   }
   try {
     await ref.read(groupsRepositoryProvider).update(
           groupId: group.id,
           name: name,
-          description: descriptionController.text.trim().isEmpty
-              ? null
-              : descriptionController.text.trim(),
+          // Mantém a descrição antiga, se houver: o campo só sumiu da tela.
+          description: group.description,
         );
     ref.invalidate(groupsProvider);
     ref.invalidate(selectedGroupProvider);
@@ -603,33 +456,21 @@ Future<void> _showEditGroupDialog(
           content: Text(friendlyApiError(error,
               fallback: 'Não foi possível atualizar o grupo.'))));
     }
-  } finally {
-    nameController.dispose();
-    descriptionController.dispose();
   }
 }
 
 Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
   final nameController = TextEditingController();
-  final descriptionController = TextEditingController();
   final saved = await showDialog<bool>(
     barrierDismissible: false,
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Novo grupo'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-              controller: nameController,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Nome')),
-          TextField(
-              controller: descriptionController,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(labelText: 'Descricao')),
-        ],
-      ),
+      content: TextField(
+          controller: nameController,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(labelText: 'Nome')),
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -640,20 +481,18 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
       ],
     ),
   );
+  final name = nameController.text.trim();
+  nameController.dispose();
   if (saved != true || !context.mounted) {
-    nameController.dispose();
-    descriptionController.dispose();
+    return;
+  }
+  if (name.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Informe um nome para o grupo.')));
     return;
   }
   try {
-    final currentUser = await ref.read(currentUserProvider.future);
-    if (currentUser == null) throw Exception('Sessao expirada');
-    final group = await ref.read(groupsRepositoryProvider).create(
-          name: nameController.text.trim(),
-          description: descriptionController.text.trim().isEmpty
-              ? null
-              : descriptionController.text.trim(),
-        );
+    final group = await ref.read(groupsRepositoryProvider).create(name: name);
     ref.read(selectedGroupIdProvider.notifier).state = group.id;
     ref.invalidate(groupsProvider);
     ref.invalidate(selectedGroupProvider);
@@ -664,9 +503,6 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
           content: Text(friendlyApiError(error,
               fallback: 'Não foi possível criar o grupo.'))));
     }
-  } finally {
-    nameController.dispose();
-    descriptionController.dispose();
   }
 }
 
@@ -840,8 +676,8 @@ class _GroupTemporaryMembersState
                             tooltip: 'Editar nome',
                             icon: const Icon(Icons.edit_outlined),
                             onPressed: () async {
-                              if (await _renamePlaceholder(context, ref,
-                                  widget.group.id, member)) {
+                              if (await _renamePlaceholder(
+                                  context, ref, widget.group.id, member)) {
                                 _reload();
                               }
                             },

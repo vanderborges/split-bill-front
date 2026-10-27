@@ -43,21 +43,10 @@ class ProfilePage extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Sem status/selo abaixo do nome (pedido do usuário).
                         Text(
                           user.fullName,
                           style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Wrap(
-                          spacing: AppSpacing.xs,
-                          runSpacing: AppSpacing.xs,
-                          children: [
-                            if (user.admin)
-                              const Chip(
-                                avatar: Icon(Icons.shield_outlined, size: 16),
-                                label: Text('Administrador'),
-                              ),
-                          ],
                         ),
                       ],
                     ),

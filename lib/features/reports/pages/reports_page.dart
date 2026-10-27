@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:share_plus/share_plus.dart';
@@ -17,14 +18,15 @@ import '../../../shared/widgets/status_badge.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../events/services/events_repository.dart';
+import '../../events/widgets/receiver_choice.dart';
 import '../../expenses/services/expenses_repository.dart';
 import '../../groups/services/groups_repository.dart';
 import '../../months/services/months_repository.dart';
 import '../../settlements/models/event_settlement_model.dart';
+import '../../settlements/models/my_payment_model.dart';
 import '../../settlements/services/event_settlements_repository.dart';
 import '../models/balance_expense_detail_model.dart';
 import '../models/monthly_report_model.dart';
-import '../models/payment_suggestion_model.dart';
 import '../services/reports_repository.dart';
 
 class ReportsPage extends ConsumerWidget {
@@ -152,8 +154,8 @@ class ReportsPage extends ConsumerWidget {
                               FilledButton(
                                 onPressed: report.eventId == null
                                     ? null
-                                    : () => _confirmStartSettlement(
-                                        context, ref, report.eventId!),
+                                    : () => _confirmStartSettlement(context,
+                                        ref, report.groupId, report.eventId!),
                                 child: const Text('Fechar evento'),
                               ),
                             if (report.status == 'SETTLING' && isGroupAdmin)
@@ -190,10 +192,8 @@ class ReportsPage extends ConsumerWidget {
                             : () => _shareReport(
                                 report,
                                 settlementsAsync.valueOrNull!,
-                                groupsAsync.valueOrNull
-                                    ?.where((g) => g.id == report.groupId)
-                                    .firstOrNull
-                                    ?.receiverNickname),
+                                // Recebedor escolhido no "Fechar evento".
+                                eventAsync.valueOrNull?.receiverNickname),
                         icon: const Icon(Icons.share_outlined),
                       ),
                     ],
@@ -275,23 +275,6 @@ class _ReportTable extends ConsumerStatefulWidget {
 class _ReportTableState extends ConsumerState<_ReportTable> {
   final Set<String> expandedUserIds = {};
   final Map<String, Future<List<BalanceExpenseDetailModel>>> detailsByUser = {};
-  Future<List<PaymentSuggestionModel>>? _suggestionsFuture;
-  var _showSuggestions = false;
-
-  Future<List<PaymentSuggestionModel>> _suggestions(String eventId) {
-    return _suggestionsFuture ??=
-        ref.read(reportsRepositoryProvider).getPaymentSuggestions(eventId);
-  }
-
-  @override
-  void didUpdateWidget(_ReportTable oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Relatório recarregado (despesa nova, acerto alterado): a sugestão
-    // guardada era dos saldos antigos e podia deixar credor sem sugestão.
-    if (!identical(oldWidget.balances, widget.balances)) {
-      _suggestionsFuture = null;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -312,45 +295,10 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
         return first.nickname.compareTo(second.nickname);
       });
 
-    final eventId = widget.eventId;
-    final canShowSuggestions = widget.canUpdateSettlements && eventId != null;
-
-    // Sugestão de "quem paga quanto pra quem" (admin-only) — não muda nada
-    // no cálculo de saldo/acerto, é só uma orientação visual de como
-    // fechar as contas com o menor número de transferências (ou tudo
-    // direto pro recebedor eleito). Aparece por baixo de cada pessoa
-    // envolvida só quando a opção é marcada — fica fora do caminho por
-    // padrão, já que boa parte das vezes ninguém quer ver.
-    final rows = !canShowSuggestions || !_showSuggestions
-        ? _buildRows(context, sortedBalances, settlementsByUser, currentUserId,
-            semantic, const [])
-        : FutureBuilder<List<PaymentSuggestionModel>>(
-            future: _suggestions(eventId),
-            builder: (context, snapshot) => _buildRows(
-                context,
-                sortedBalances,
-                settlementsByUser,
-                currentUserId,
-                semantic,
-                snapshot.data ?? const []),
-          );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (canShowSuggestions)
-          CheckboxListTile(
-            value: _showSuggestions,
-            onChanged: (value) =>
-                setState(() => _showSuggestions = value ?? false),
-            controlAffinity: ListTileControlAffinity.leading,
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Sugerir pagamentos'),
-          ),
-        rows,
-      ],
-    );
+    // A "Sugestão de pagamentos" saiu daqui: agora é escolhida no "Fechar
+    // evento" e chega pra cada um pelo botão "Pagar" / cobrança.
+    return _buildRows(
+        context, sortedBalances, settlementsByUser, currentUserId, semantic);
   }
 
   Widget _buildRows(
@@ -359,7 +307,6 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
     Map<String, EventSettlementModel> settlementsByUser,
     String? currentUserId,
     dynamic semantic,
-    List<PaymentSuggestionModel> suggestions,
   ) {
     return Column(
       children: sortedBalances.map((balance) {
@@ -446,19 +393,25 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                         onChanged: (value) =>
                             _updateSettlement(context, ref, settlement!, value),
                       );
-                final mySuggestions = suggestions
-                    .where((suggestion) =>
-                        suggestion.fromUserId == balance.userId ||
-                        suggestion.toUserId == balance.userId)
-                    .toList();
-                final suggestionHint = mySuggestions.isEmpty
-                    ? null
-                    : _SuggestionHint(
-                        isCurrentUser: isCurrentUser,
-                        nickname: balance.nickname,
-                        userId: balance.userId,
-                        suggestions: mySuggestions,
-                      );
+                // "Pagar" só na linha de quem está logado, com o evento
+                // aguardando pagamento e ainda devendo.
+                final payButton = widget.isAwaitingPayment &&
+                        isCurrentUser &&
+                        settlement != null &&
+                        settlement.role == 'DEBTOR' &&
+                        settlement.amount != 0 &&
+                        settlement.normalizedStatus == 'PENDING' &&
+                        widget.eventId != null
+                    ? Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.icon(
+                          onPressed: () =>
+                              _openPayDialog(context, ref, widget.eventId!),
+                          icon: const Icon(Icons.payments_outlined, size: 18),
+                          label: const Text('Pagar'),
+                        ),
+                      )
+                    : null;
 
                 if (compact) {
                   return Column(
@@ -481,7 +434,10 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                           status,
                         ],
                       ),
-                      if (suggestionHint != null) suggestionHint,
+                      if (payButton != null) ...[
+                        const SizedBox(height: 6),
+                        payButton,
+                      ],
                       if (expanded) _BalanceDetails(details: _details(balance)),
                     ],
                   );
@@ -508,10 +464,10 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                         ),
                       ],
                     ),
-                    if (suggestionHint != null)
+                    if (payButton != null)
                       Padding(
-                        padding: const EdgeInsets.only(left: 48, top: 4),
-                        child: suggestionHint,
+                        padding: const EdgeInsets.only(top: 6),
+                        child: payButton,
                       ),
                     if (expanded)
                       Padding(
@@ -552,62 +508,11 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
   }
 }
 
-/// Sugestão de pagamento ("você deve pagar/receber de Fulano") exibida
-/// logo abaixo da pessoa a que se refere, em vez de uma lista separada —
-/// cada pessoa pode ter mais de uma sugestão quando não há recebedor
-/// eleito pro grupo (o acerto minimiza transferências, mas pode envolver
-/// mais de uma contraparte).
-class _SuggestionHint extends StatelessWidget {
-  const _SuggestionHint({
-    required this.isCurrentUser,
-    required this.nickname,
-    required this.userId,
-    required this.suggestions,
-  });
-
-  final bool isCurrentUser;
-  final String nickname;
-  final String userId;
-  final List<PaymentSuggestionModel> suggestions;
-
-  @override
-  Widget build(BuildContext context) {
-    final subject = isCurrentUser ? 'Você' : nickname;
-    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
-          fontStyle: FontStyle.italic,
-        );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: suggestions.map((suggestion) {
-        final isPaying = suggestion.fromUserId == userId;
-        final otherNickname =
-            isPaying ? suggestion.toNickname : suggestion.fromNickname;
-        final verb = isPaying ? 'deve pagar' : 'deve receber';
-        final preposition = isPaying ? 'para' : 'de';
-        return Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Row(
-            children: [
-              Icon(Icons.lightbulb_outline,
-                  size: 14, color: style?.color?.withValues(alpha: 0.7)),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  '$subject $verb ${formatCurrencyBRL(suggestion.amount)} $preposition $otherNickname',
-                  style: style,
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
-}
-
 /// Mostra o status de pagamento de um participante: um badge simples para
 /// quem só pode visualizar, ou um controle editável (só para admin do
-/// grupo) quando há saldo de fato para acertar.
+/// grupo) quando há saldo de fato para acertar. Quando a pessoa tocou em
+/// "Pagar" > "Confirmar pagamento", fica "Pagamento informado" até o admin
+/// escolher "Confirmar pagamento" (Pago) ou "Pendente" (volta pra ela).
 class _SettlementStatus extends StatelessWidget {
   const _SettlementStatus({
     required this.settlement,
@@ -625,27 +530,40 @@ class _SettlementStatus extends StatelessWidget {
       return const StatusBadge(AppStatus.quitado);
     }
 
-    final isPaid = settlement!.normalizedStatus == 'PAID';
+    final status = settlement!.normalizedStatus;
+    final badge = switch (status) {
+      'PAID' => const StatusBadge(AppStatus.confirmado, label: 'Pago'),
+      'INFORMED' => const StatusBadge(AppStatus.pagamentoInformado,
+          label: 'Pagamento informado'),
+      _ => const StatusBadge(AppStatus.pendente),
+    };
 
     if (!canUpdate) {
-      return StatusBadge(isPaid ? AppStatus.confirmado : AppStatus.pendente,
-          label: isPaid ? 'Pago' : 'Pendente');
+      return badge;
     }
 
     return DropdownButton<String>(
-      value: isPaid ? 'PAID' : 'PENDING',
+      value: status == 'PAID' || status == 'INFORMED' ? status : 'PENDING',
       isDense: true,
       underline: const SizedBox.shrink(),
-      selectedItemBuilder: (context) => const [
-        StatusBadge(AppStatus.pendente),
-        StatusBadge(AppStatus.confirmado, label: 'Pago'),
+      selectedItemBuilder: (context) => [
+        const StatusBadge(AppStatus.pendente),
+        const StatusBadge(AppStatus.confirmado, label: 'Pago'),
+        if (status == 'INFORMED') badge,
       ],
-      items: const [
-        DropdownMenuItem(value: 'PENDING', child: Text('Pendente')),
-        DropdownMenuItem(value: 'PAID', child: Text('Pago')),
+      items: [
+        const DropdownMenuItem(value: 'PENDING', child: Text('Pendente')),
+        const DropdownMenuItem(
+            value: 'PAID', child: Text('Confirmar pagamento')),
+        // Só aparece como valor atual; o admin não marca "informado".
+        if (status == 'INFORMED')
+          const DropdownMenuItem(
+              value: 'INFORMED',
+              enabled: false,
+              child: Text('Pagamento informado')),
       ],
       onChanged: (value) {
-        if (value != null) {
+        if (value != null && value != status) {
           onChanged(value);
         }
       },
@@ -892,22 +810,38 @@ bool _hasPendingSettlement(
   if (settlements == null) {
     return true;
   }
-  return settlements
-      .any((settlement) => settlement.normalizedStatus == 'PENDING');
+  return settlements.any((settlement) =>
+      settlement.normalizedStatus == 'PENDING' ||
+      settlement.normalizedStatus == 'INFORMED');
 }
 
 Future<void> _confirmStartSettlement(
-    BuildContext context, WidgetRef ref, String eventId) async {
+    BuildContext context, WidgetRef ref, String groupId, String eventId) async {
+  String? receiverUserId;
   final confirmed = await showDialog<bool>(
     barrierDismissible: false,
     context: context,
     builder: (context) {
       return AlertDialog(
         title: const Text('Fechar evento'),
-        content: const Text(
-            'A partir de agora nao e mais possivel adicionar ou editar despesas neste evento. '
-            'Ele fica aguardando pagamento e e concluido sozinho quando todos pagarem. '
-            'Use a tela de Eventos se quiser consolidar o saldo em outro evento antes disso. Deseja continuar?'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                  'A partir de agora não é mais possível adicionar ou editar despesas neste evento. '
+                  'Ele fica aguardando pagamento e é concluído sozinho quando todos pagarem. '
+                  'Use a tela de Eventos se quiser consolidar o saldo em outro evento antes disso.'),
+              const SizedBox(height: 12),
+              ReceiverChoice(
+                groupId: groupId,
+                eventId: eventId,
+                onChanged: (value) => receiverUserId = value,
+              ),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -925,7 +859,9 @@ Future<void> _confirmStartSettlement(
   }
 
   try {
-    await ref.read(eventsRepositoryProvider).startSettlement(eventId);
+    await ref
+        .read(eventsRepositoryProvider)
+        .startSettlement(eventId, receiverUserId: receiverUserId);
     ref.invalidate(monthsProvider);
     ref.invalidate(currentMonthProvider);
     ref.invalidate(currentMonthReportProvider);
@@ -1071,4 +1007,82 @@ String _groupName(List<dynamic>? groups, String groupId) {
 
 String _eventLabel(dynamic event, List<dynamic>? groups) {
   return '${event.name} | ${_groupName(groups, event.groupId)}';
+}
+
+/// Botão "Pagar": mostra o mesmo texto da notificação de cobrança, com a
+/// chave PIX pra copiar. "Confirmar pagamento" deixa o acerto como
+/// "Pagamento informado" e avisa os admins do grupo, que confirmam (Pago) ou
+/// devolvem pra pendente.
+Future<void> _openPayDialog(
+    BuildContext context, WidgetRef ref, String eventId) async {
+  final repository = ref.read(eventSettlementsRepositoryProvider);
+  final MyPaymentModel payment;
+  try {
+    payment = await repository.myPayment(eventId);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível carregar o pagamento.'))));
+    }
+    return;
+  }
+  if (!context.mounted) {
+    return;
+  }
+  final pixKey = payment.pixKey;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Pagar'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(payment.message),
+          if (pixKey != null) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: pixKey));
+                if (dialogContext.mounted) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(
+                      content: Text(
+                          'Chave PIX de ${payment.receiverName ?? 'quem recebe'} copiada.')));
+                }
+              },
+              icon: const Icon(Icons.copy_outlined, size: 18),
+              label: const Text('Copiar chave PIX'),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Voltar')),
+        FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Confirmar pagamento')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return;
+  }
+  try {
+    await repository.informPayment(eventId);
+    ref.invalidate(selectedEventSettlementsProvider);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Pagamento informado. O administrador do grupo vai confirmar.')));
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível confirmar o pagamento.'))));
+    }
+  }
 }

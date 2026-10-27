@@ -202,7 +202,8 @@ class ExpensesPage extends ConsumerWidget {
                                 keepUserIds: {
                                   ...expense.participants
                                       .map((participant) => participant.userId),
-                                  ...expense.payers.map((payer) => payer.userId),
+                                  ...expense.payers
+                                      .map((payer) => payer.userId),
                                 });
                             final categories = await _loadCategoryNames(ref);
                             if (context.mounted) {

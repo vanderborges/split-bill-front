@@ -29,6 +29,7 @@ class EventSettlementModel {
     return switch (normalizedStatus) {
       'PENDING' => 'Pendente',
       'PAID' => 'Pago',
+      'INFORMED' => 'Pagamento informado',
       _ => status,
     };
   }

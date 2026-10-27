@@ -10,6 +10,8 @@ class EventModel {
     required this.month,
     required this.year,
     this.createdAt,
+    this.receiverUserId,
+    this.receiverNickname,
   });
 
   final String id;
@@ -22,6 +24,11 @@ class EventModel {
   final int? month;
   final int? year;
   final DateTime? createdAt;
+
+  /// Quem recebe os pagamentos (escolhido no "Fechar evento"); null =
+  /// sugestão de pagamentos entre devedores e credores.
+  final String? receiverUserId;
+  final String? receiverNickname;
 
   bool get isClosed => status == 'CLOSED';
 
@@ -62,6 +69,8 @@ class EventModel {
       createdAt: json['createdAt'] == null
           ? null
           : DateTime.tryParse(json['createdAt'] as String),
+      receiverUserId: json['receiverUserId'] as String?,
+      receiverNickname: json['receiverNickname'] as String?,
     );
   }
 }
