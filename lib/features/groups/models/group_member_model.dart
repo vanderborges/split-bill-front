@@ -36,7 +36,10 @@ class GroupMemberModel {
   /// Pessoa sem cadastro aparece como "Temporário" até alguém criar conta e
   /// escolher o nome dela — aí vira um integrante de verdade.
   String get roleLabel {
-    if (temporary || placeholder) {
+    // Desde a junção de "sem cadastro" e "temporários" (27/10/2026), o
+    // rótulo segue só o flag de temporário: sem cadastro que o admin tornou
+    // integrante aparece como Integrante.
+    if (temporary) {
       return temporaryEventName == null
           ? 'Temporário'
           : 'Temporário · $temporaryEventName';

@@ -18,6 +18,7 @@ import '../../../shared/widgets/status_badge.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../events/services/events_repository.dart';
+import '../../events/widgets/event_picker_field.dart';
 import '../../events/widgets/receiver_choice.dart';
 import '../../expenses/services/expenses_repository.dart';
 import '../../groups/services/groups_repository.dart';
@@ -74,15 +75,12 @@ class ReportsPage extends ConsumerWidget {
             data: (event) => eventsAsync.when(
               data: (events) => events.isEmpty
                   ? const Text('Nenhum evento cadastrado neste grupo.')
-                  : DropdownButtonFormField<String>(
-                      initialValue: event?.id,
-                      decoration: const InputDecoration(labelText: 'Evento'),
-                      items: events
-                          .map((item) => DropdownMenuItem(
-                              value: item.id,
-                              child: Text(
-                                  _eventLabel(item, groupsAsync.valueOrNull))))
-                          .toList(),
+                  : EventPickerField(
+                      key: ValueKey(event?.id),
+                      events: events,
+                      selectedId: event?.id,
+                      groupNameOf: (groupId) =>
+                          _groupName(groupsAsync.valueOrNull, groupId),
                       onChanged: (value) {
                         final picked = events.where((item) => item.id == value);
                         if (picked.isNotEmpty) {
@@ -136,89 +134,74 @@ class EventBalanceView extends ConsumerWidget {
             message: 'Crie ou selecione um evento para ver o relatório.',
           );
         }
+        // Sem título/status aqui: o status fica na lista do seletor de
+        // evento. Sem nenhum botão de ação, os cards sobem; com o evento
+        // fechado não tem compartilhar.
+        final hasActions = isGroupAdmin &&
+            (report.status == 'OPEN' || report.status == 'SETTLING');
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Status do evento ao lado do nome; abaixo, as ações do
-            // evento (Fechar/cobrança/Concluir) à esquerda e o
-            // compartilhar fixo à direita — com o evento fechado sobra
-            // só o compartilhar, no mesmo lugar.
-            Row(
-              children: [
-                Flexible(
-                  child: Text('${report.groupName} | ${report.eventName ?? ''}',
-                      style: Theme.of(context).textTheme.bodySmall),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                StatusBadge(switch (report.status) {
-                  'CLOSED' => AppStatus.fechado,
-                  'SETTLING' => AppStatus.aguardandoPagamento,
-                  _ => AppStatus.aberto,
-                }),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: AppSpacing.sm,
-                    runSpacing: AppSpacing.xs,
-                    children: [
-                      if (report.status == 'OPEN' && isGroupAdmin)
-                        FilledButton(
-                          onPressed: report.eventId == null
-                              ? null
-                              : () => _confirmStartSettlement(context, ref,
-                                  report.groupId, report.eventId!),
-                          child: const Text('Fechar evento'),
-                        ),
-                      if (report.status == 'SETTLING' && isGroupAdmin)
-                        OutlinedButton.icon(
-                          onPressed: report.eventId == null
-                              ? null
-                              : () => _sendBillingAlert(
-                                  context, ref, report.eventId!),
-                          icon: const Icon(Icons.campaign_outlined),
-                          label: const Text('Enviar alerta de cobrança'),
-                        ),
-                      if (report.status == 'SETTLING' && isGroupAdmin)
-                        Tooltip(
-                          message: _hasPendingSettlement(settlementsAsync)
-                              ? 'Confirme todos os pagamentos antes de concluir o evento.'
-                              : '',
-                          child: FilledButton(
-                            onPressed: report.eventId == null ||
-                                    _hasPendingSettlement(settlementsAsync)
-                                ? null
-                                : () => _confirmCloseEvent(
-                                    context, ref, report.eventId!),
-                            child: const Text('Concluir evento'),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Compartilhar resumo',
-                  onPressed: settlementsAsync.valueOrNull == null
-                      ? null
-                      : () => _shareReport(
-                          report,
-                          settlementsAsync.valueOrNull!,
-                          // Recebedor escolhido no "Fechar evento".
-                          eventAsync.valueOrNull?.receiverNickname),
-                  icon: const Icon(Icons.share_outlined),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
+            if (hasActions) ...[
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  if (report.status == 'OPEN' && isGroupAdmin)
+                    FilledButton(
+                      onPressed: report.eventId == null
+                          ? null
+                          : () => _confirmStartSettlement(
+                              context, ref, report.groupId, report.eventId!),
+                      child: const Text('Fechar evento'),
+                    ),
+                  if (report.status == 'SETTLING' && isGroupAdmin)
+                    OutlinedButton.icon(
+                      onPressed: report.eventId == null
+                          ? null
+                          : () =>
+                              _sendBillingAlert(context, ref, report.eventId!),
+                      icon: const Icon(Icons.campaign_outlined),
+                      label: const Text('Enviar alerta de cobrança'),
+                    ),
+                  if (report.status == 'SETTLING' && isGroupAdmin)
+                    Tooltip(
+                      message: _hasPendingSettlement(settlementsAsync)
+                          ? 'Confirme todos os pagamentos antes de concluir o evento.'
+                          : '',
+                      child: FilledButton(
+                        onPressed: report.eventId == null ||
+                                _hasPendingSettlement(settlementsAsync)
+                            ? null
+                            : () => _confirmCloseEvent(
+                                context, ref, report.eventId!),
+                        child: const Text('Concluir evento'),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(
               children: [
                 Text('Total de despesas: ',
                     style: Theme.of(context).textTheme.bodyMedium),
                 MoneyText(report.totalExpenses),
+                const Spacer(),
+                if (report.status != 'CLOSED')
+                  IconButton(
+                    tooltip: 'Compartilhar resumo',
+                    onPressed: settlementsAsync.valueOrNull == null
+                        ? null
+                        : () => _shareReport(
+                            report,
+                            settlementsAsync.valueOrNull!,
+                            // Recebedor escolhido no "Fechar evento".
+                            eventAsync.valueOrNull?.receiverNickname,
+                            eventAsync.valueOrNull?.receiverUserId),
+                    icon: const Icon(Icons.share_outlined),
+                  ),
               ],
             ),
             const SizedBox(height: 16),
@@ -701,13 +684,13 @@ int _statusOrder(EventSettlementModel? settlement) {
 /// UX) pelo share sheet nativo — WhatsApp é uma das opções, não a única.
 /// Separa "A pagar" e "A receber", com os pendentes primeiro (mesma ordem
 /// da tela). Quando o grupo tem recebedor eleito, o texto diz pra quem
-/// pagar; sem recebedor, orienta a falar com o administrador. Não
-/// menciona chave PIX: o backend não expõe a chave para participantes
-/// comuns.
+/// pagar e o PIX dele; sem recebedor, vai o PIX de cada credor em "A
+/// receber".
 void _shareReport(
   MonthlyReportModel report,
   List<EventSettlementModel> settlements,
   String? receiverNickname,
+  String? receiverUserId,
 ) {
   final settlementsByUser = {
     for (final settlement in settlements) settlement.userId: settlement,
@@ -733,7 +716,8 @@ void _shareReport(
     ..writeln()
     ..writeln('Total de despesas: ${formatCurrencyBRL(report.totalExpenses)}');
 
-  void writeSection(String header, List<MonthlyBalanceModel> balances) {
+  void writeSection(String header, List<MonthlyBalanceModel> balances,
+      {bool withPix = false}) {
     if (balances.isEmpty) {
       return;
     }
@@ -751,18 +735,28 @@ void _shareReport(
           : isPending
               ? ' (pendente)'
               : ' (pago)';
+      // Sem recebedor escolhido, cada credor recebe direto: vai o PIX dele.
+      final pix =
+          withPix && balance.pixKey != null ? ' — PIX: ${balance.pixKey}' : '';
       buffer.writeln(
-          '• ${balance.nickname}: ${formatCurrencyBRL(balance.balance.abs())}$statusSuffix');
+          '• ${balance.nickname}: ${formatCurrencyBRL(balance.balance.abs())}$statusSuffix$pix');
     }
   }
 
+  final hasReceiver = receiverNickname != null && receiverNickname.isNotEmpty;
   writeSection('A pagar:', debtors);
-  writeSection('A receber:', creditors);
+  writeSection('A receber:', creditors, withPix: !hasReceiver);
 
   buffer.writeln();
-  if (receiverNickname != null && receiverNickname.isNotEmpty) {
-    buffer.write(
-        'Pagamentos devem ser feitos para $receiverNickname. Consulte o DividiAí para mais detalhes.');
+  if (hasReceiver) {
+    final receiverPix = report.balances
+        .where((balance) => balance.userId == receiverUserId)
+        .map((balance) => balance.pixKey)
+        .whereType<String>()
+        .firstOrNull;
+    buffer.write('Pagamentos devem ser feitos para $receiverNickname');
+    buffer.write(receiverPix == null ? '. ' : ' (PIX: $receiverPix). ');
+    buffer.write('Consulte o DividiAí para mais detalhes.');
   } else {
     buffer.write(
         'Pagamentos são combinados com o administrador do grupo. Consulte o DividiAí para mais detalhes.');
@@ -1017,9 +1011,6 @@ String _groupName(List<dynamic>? groups, String groupId) {
   return 'Grupo';
 }
 
-String _eventLabel(dynamic event, List<dynamic>? groups) {
-  return '${event.name} | ${_groupName(groups, event.groupId)}';
-}
 
 /// Botão "Pagar": mostra o mesmo texto da notificação de cobrança, com a
 /// chave PIX pra copiar. "Confirmar pagamento" deixa o acerto como

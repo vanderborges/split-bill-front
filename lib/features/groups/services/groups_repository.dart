@@ -141,10 +141,17 @@ class GroupsRepository {
   /// Admin: cadastra só o nome. Com [eventId] a pessoa fica temporária
   /// daquele evento; sem, integrante fixa do grupo.
   Future<GroupMemberModel> createPlaceholder(String groupId,
-      {required String nickname, String? eventId}) async {
+      {required String nickname,
+      String? eventId,
+      bool temporary = false}) async {
     final response = await dio.post<Map<String, dynamic>>(
       '/groups/$groupId/placeholders',
-      data: {'nickname': nickname, if (eventId != null) 'eventId': eventId},
+      data: {
+        'nickname': nickname,
+        if (eventId != null) 'eventId': eventId,
+        // Temporário do grupo ("Convidar temporário").
+        if (temporary) 'temporary': true,
+      },
     );
     return GroupMemberModel.fromJson(response.data!);
   }
@@ -164,6 +171,14 @@ class GroupsRepository {
   }
 
   /// Admin: reativa a pessoa temporária em outro evento (aberto).
+  /// Temporário vira integrante fixo do grupo.
+  Future<GroupMemberModel> promoteTemporary(
+      String groupId, String userId) async {
+    final response = await dio
+        .put<Map<String, dynamic>>('/groups/$groupId/members/$userId/promote');
+    return GroupMemberModel.fromJson(response.data!);
+  }
+
   Future<GroupMemberModel> assignTemporaryEvent({
     required String groupId,
     required String userId,

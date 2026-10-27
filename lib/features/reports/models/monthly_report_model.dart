@@ -49,6 +49,7 @@ class MonthlyBalanceModel {
     required this.totalConsumed,
     required this.totalPaid,
     required this.balance,
+    this.pixKey,
   });
 
   final String userId;
@@ -57,6 +58,9 @@ class MonthlyBalanceModel {
   final double totalPaid;
   final double balance;
 
+  /// Chave PIX da pessoa (para o texto de compartilhar); null = sem chave.
+  final String? pixKey;
+
   factory MonthlyBalanceModel.fromJson(Map<String, dynamic> json) {
     return MonthlyBalanceModel(
       userId: json['userId'] as String,
@@ -64,6 +68,7 @@ class MonthlyBalanceModel {
       totalConsumed: double.parse(json['totalConsumed'].toString()),
       totalPaid: double.parse(json['totalPaid'].toString()),
       balance: double.parse(json['balance'].toString()),
+      pixKey: json['pixKey'] as String?,
     );
   }
 }

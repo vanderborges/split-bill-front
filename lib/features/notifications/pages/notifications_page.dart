@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
@@ -8,6 +9,7 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
+import '../../events/services/events_repository.dart';
 import '../models/notification_model.dart';
 import '../services/notifications_repository.dart';
 
@@ -66,9 +68,7 @@ class NotificationsPage extends ConsumerWidget {
                     // grupo não.
                     if (notification.isBilling)
                       GestureDetector(
-                        onTap: notification.isRead
-                            ? null
-                            : () => _markAsRead(ref, notification),
+                        onTap: () => _open(context, ref, notification),
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(
                               AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
@@ -141,9 +141,32 @@ class NotificationsPage extends ConsumerWidget {
                 ),
               ),
             ),
-      onTap: notification.isRead ? null : () => _markAsRead(ref, notification),
+      onTap: () => _open(context, ref, notification),
     );
   }
+}
+
+/// Toque na notificação: marca como lida e abre a tela que faz sentido —
+/// cobrança e pagamento informado/confirmado abrem o saldo do evento em
+/// Despesas; "entrou no grupo" abre Grupos. Sem destino (backend antigo
+/// sem grupo do evento), só marca como lida.
+void _open(
+    BuildContext context, WidgetRef ref, NotificationModel notification) {
+  if (!notification.isRead) {
+    _markAsRead(ref, notification);
+  }
+  if (notification.type == 'MEMBER_JOINED') {
+    context.go('/groups');
+    return;
+  }
+  final eventId = notification.eventId;
+  final groupId = notification.groupId;
+  if (eventId == null || groupId == null) {
+    return;
+  }
+  selectEvent(ref, groupId: groupId, eventId: eventId);
+  ref.invalidate(selectedEventProvider);
+  context.go('/expenses?view=saldo');
 }
 
 Future<void> _markAsRead(WidgetRef ref, NotificationModel notification) async {

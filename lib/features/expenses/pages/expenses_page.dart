@@ -21,6 +21,7 @@ import '../../dashboard/services/dashboard_repository.dart';
 import '../../events/models/event_model.dart';
 import '../../events/services/events_repository.dart';
 import '../../events/services/new_event_intent.dart';
+import '../../events/widgets/event_picker_field.dart';
 import '../../groups/models/group_model.dart';
 import '../../groups/services/groups_repository.dart';
 import '../../reports/pages/reports_page.dart';
@@ -30,8 +31,45 @@ import '../models/expense_model.dart';
 import '../services/expense_categories_repository.dart';
 import '../services/expenses_repository.dart';
 
-class ExpensesPage extends ConsumerWidget {
-  const ExpensesPage({super.key});
+/// Tela de Despesas. [openBalance] (rota `/expenses?view=saldo`, usada
+/// pelo "Ver saldo" do evento e pelo toque nas notificações) abre direto na
+/// visão "Saldo".
+class ExpensesPage extends ConsumerStatefulWidget {
+  const ExpensesPage({super.key, this.openBalance = false});
+
+  final bool openBalance;
+
+  @override
+  ConsumerState<ExpensesPage> createState() => _ExpensesPageState();
+}
+
+class _ExpensesPageState extends ConsumerState<ExpensesPage> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.openBalance) {
+      ref.read(showEventBalanceProvider.notifier).state = true;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ExpensesPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.openBalance && !oldWidget.openBalance) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(showEventBalanceProvider.notifier).state = true;
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => const _ExpensesView();
+}
+
+class _ExpensesView extends ConsumerWidget {
+  const _ExpensesView();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -68,7 +106,6 @@ class ExpensesPage extends ConsumerWidget {
               ),
             );
           }
-          final groupName = _groupName(groupsAsync.valueOrNull, event.groupId);
           final isGroupAdmin =
               ref.watch(groupRoleProvider(event.groupId)).valueOrNull ==
                   'ADMIN';
@@ -90,15 +127,14 @@ class ExpensesPage extends ConsumerWidget {
                     if (items.every((item) => item.id != event.id)) {
                       items.add(event);
                     }
-                    return DropdownButtonFormField<String>(
-                      initialValue: event.id,
-                      decoration: const InputDecoration(labelText: 'Evento'),
-                      items: items
-                          .map((item) => DropdownMenuItem(
-                              value: item.id,
-                              child: Text(
-                                  _eventLabel(item, groupsAsync.valueOrNull))))
-                          .toList(),
+                    return EventPickerField(
+                      // Muda a key ao trocar de evento por fora (ex.: toque
+                      // numa notificação) pra o campo pegar o novo valor.
+                      key: ValueKey(event.id),
+                      events: items,
+                      selectedId: event.id,
+                      groupNameOf: (groupId) =>
+                          _groupName(groupsAsync.valueOrNull, groupId),
                       onChanged: (value) {
                         final picked = items.where((item) => item.id == value);
                         if (picked.isNotEmpty) {
@@ -114,13 +150,6 @@ class ExpensesPage extends ConsumerWidget {
                       style: Theme.of(context).textTheme.titleMedium),
                   error: (_, __) => Text('Evento ${event.name}',
                       style: Theme.of(context).textTheme.titleMedium),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                child: Text(
-                  '$groupName | ${event.name}',
-                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
               Padding(
@@ -298,10 +327,6 @@ String _groupName(List<dynamic>? groups, String groupId) {
     }
   }
   return 'Grupo';
-}
-
-String _eventLabel(EventModel event, List<dynamic>? groups) {
-  return '${event.name} | ${_groupName(groups, event.groupId)}';
 }
 
 bool _canChangeExpense(

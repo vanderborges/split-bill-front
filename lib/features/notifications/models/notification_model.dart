@@ -9,6 +9,7 @@ class NotificationModel {
     required this.pixKey,
     required this.receiverName,
     this.type = 'BILLING',
+    this.groupId,
   });
 
   final String id;
@@ -23,6 +24,9 @@ class NotificationModel {
   /// BILLING (cobrança) ou MEMBER_JOINED (aviso pro admin de que alguém
   /// entrou no grupo). Backend antigo não manda: trata como cobrança.
   final String type;
+
+  /// Grupo do evento (backend novo): o toque abre o evento certo.
+  final String? groupId;
 
   bool get isRead => readAt != null;
 
@@ -44,6 +48,7 @@ class NotificationModel {
       pixKey: json['pixKey'] as String?,
       receiverName: json['receiverName'] as String?,
       type: json['type'] as String? ?? 'BILLING',
+      groupId: json['groupId'] as String?,
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
@@ -107,6 +108,8 @@ class ProfilePage extends ConsumerWidget {
                 icon: const Icon(Icons.delete_forever_outlined),
                 label: const Text('Excluir conta'),
               ),
+              const SizedBox(height: AppSpacing.lg),
+              const _AppVersionText(),
             ],
           );
         },
@@ -116,6 +119,31 @@ class ProfilePage extends ConsumerWidget {
           onRetry: () => ref.invalidate(currentUserProvider),
         ),
       ),
+    );
+  }
+}
+
+/// Versão instalada do app (ex.: "Versão 1.0.0 (35)").
+final appVersionProvider = FutureProvider<String>((ref) async {
+  final info = await PackageInfo.fromPlatform();
+  return info.buildNumber.isEmpty
+      ? info.version
+      : '${info.version} (${info.buildNumber})';
+});
+
+class _AppVersionText extends ConsumerWidget {
+  const _AppVersionText();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final version = ref.watch(appVersionProvider).valueOrNull;
+    if (version == null) {
+      return const SizedBox.shrink();
+    }
+    return Text(
+      'Versão $version',
+      textAlign: TextAlign.center,
+      style: Theme.of(context).textTheme.bodySmall,
     );
   }
 }

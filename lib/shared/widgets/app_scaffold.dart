@@ -98,7 +98,6 @@ class _WideScaffold extends ConsumerWidget {
       '/groups',
       '/events',
       '/expenses',
-      '/reports',
       '/summary',
       if (showUsers) '/users',
       '/profile',
@@ -142,11 +141,6 @@ class _WideScaffold extends ConsumerWidget {
             label: Text('Despesas'),
           ),
           NavigationDrawerDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart),
-            label: Text('Relatórios'),
-          ),
-          NavigationDrawerDestination(
             icon: Icon(Icons.list_alt_outlined),
             selectedIcon: Icon(Icons.list_alt),
             label: Text('Extrato'),
@@ -176,8 +170,9 @@ class _WideScaffold extends ConsumerWidget {
   }
 }
 
-/// Layout para celular: barra inferior com os 5 destinos mais usados
-/// (Início, Eventos, Grupos, Extrato, Relatório). Nova despesa já tem seu
+/// Layout para celular: barra inferior com os 4 destinos mais usados
+/// (Início, Eventos, Grupos, Extrato; o Relatório saiu da barra e o saldo
+/// fica em Despesas > Saldo). Nova despesa já tem seu
 /// próprio botão (+) nas telas de Eventos/Despesas, então não duplicamos
 /// aqui. O nome da pessoa logada aparece na AppBar e abre o Perfil ao
 /// tocar; Sair e Usuários (admin) ficam no Perfil. Despesas abre tocando
@@ -211,7 +206,6 @@ class _NarrowScaffold extends ConsumerWidget {
       '/events' || '/expenses' => 1,
       '/groups' => 2,
       '/summary' => 3,
-      '/reports' => 4,
       _ => null,
     };
     if (index == null) {
@@ -264,7 +258,7 @@ class _NarrowScaffold extends ConsumerWidget {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex(currentPath),
         onDestinationSelected: (index) {
-          const paths = ['/', '/events', '/groups', '/summary', '/reports'];
+          const paths = ['/', '/events', '/groups', '/summary'];
           context.go(paths[index]);
         },
         destinations: const [
@@ -287,11 +281,6 @@ class _NarrowScaffold extends ConsumerWidget {
             icon: Icon(Icons.list_alt_outlined),
             selectedIcon: Icon(Icons.list_alt),
             label: 'Extrato',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart),
-            label: 'Relatório',
           ),
         ],
       ),

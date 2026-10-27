@@ -57,8 +57,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               _noTransitionPage(const EventsPage())),
       GoRoute(
           path: '/expenses',
-          pageBuilder: (context, state) =>
-              _noTransitionPage(const ExpensesPage())),
+          pageBuilder: (context, state) => _noTransitionPage(ExpensesPage(
+              openBalance: state.uri.queryParameters['view'] == 'saldo'))),
       GoRoute(
           path: '/reports',
           pageBuilder: (context, state) =>

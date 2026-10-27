@@ -101,7 +101,6 @@ class GroupsPage extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _GroupMembers(group: group),
-                      _GroupPlaceholders(group: group),
                       _GroupTemporaryMembers(group: group),
                     ],
                   ),
@@ -217,40 +216,55 @@ class _GroupMembers extends ConsumerWidget {
                       PersonAvatar(name: member.nickname, seed: member.userId),
                   title: Text(member.nickname),
                   subtitle: Text(member.roleLabel),
-                  // Pessoa sem cadastro só pode ser renomeada aqui; remover
-                  // fica em "Pessoas sem cadastro".
-                  trailing: isGroupAdmin && member.placeholder
-                      ? IconButton(
-                          tooltip: 'Editar nome',
-                          icon: const Icon(Icons.edit_outlined),
-                          onPressed: () async {
-                            if (await _renamePlaceholder(
-                                context, ref, group.id, member)) {
-                              ref.invalidate(selectedGroupProvider);
-                            }
-                          },
+                  // Temporário: "Tornar integrante" no lugar do perfil.
+                  // Pessoa sem cadastro: renomear e remover (só sem despesa).
+                  trailing: isGroupAdmin && member.userId != currentUser?.id
+                      ? Wrap(
+                          children: [
+                            if (member.placeholder)
+                              IconButton(
+                                tooltip: 'Editar nome',
+                                icon: const Icon(Icons.edit_outlined),
+                                onPressed: () async {
+                                  if (await _renamePlaceholder(
+                                      context, ref, group.id, member)) {
+                                    ref.invalidate(selectedGroupProvider);
+                                  }
+                                },
+                              ),
+                            if (member.temporary)
+                              IconButton(
+                                tooltip: 'Tornar integrante',
+                                icon: const Icon(Icons.how_to_reg_outlined),
+                                onPressed: () => _promoteTemporary(
+                                    context, ref, group, member),
+                              )
+                            else if (!member.placeholder)
+                              IconButton(
+                                tooltip: 'Alterar perfil no grupo',
+                                icon:
+                                    const Icon(Icons.manage_accounts_outlined),
+                                onPressed: () => _showEditMemberRoleDialog(
+                                    context, ref, group, member),
+                              ),
+                            IconButton(
+                              tooltip: 'Remover integrante',
+                              icon: const Icon(Icons.person_remove_outlined),
+                              onPressed: () async {
+                                if (member.placeholder) {
+                                  if (await _removePlaceholder(
+                                      context, ref, group.id, member)) {
+                                    ref.invalidate(selectedGroupProvider);
+                                  }
+                                } else {
+                                  await _confirmRemoveMember(
+                                      context, ref, group, member);
+                                }
+                              },
+                            ),
+                          ],
                         )
-                      : isGroupAdmin && member.userId != currentUser?.id
-                          ? Wrap(
-                              children: [
-                                if (!member.temporary)
-                                  IconButton(
-                                    tooltip: 'Alterar perfil no grupo',
-                                    icon: const Icon(
-                                        Icons.manage_accounts_outlined),
-                                    onPressed: () => _showEditMemberRoleDialog(
-                                        context, ref, group, member),
-                                  ),
-                                IconButton(
-                                  tooltip: 'Remover integrante',
-                                  icon:
-                                      const Icon(Icons.person_remove_outlined),
-                                  onPressed: () => _confirmRemoveMember(
-                                      context, ref, group, member),
-                                ),
-                              ],
-                            )
-                          : null,
+                      : null,
                 ),
               ),
           ],
@@ -559,10 +573,13 @@ Future<void> _showInviteDialog(
   );
 }
 
-/// Admin-only: pessoas temporárias — contas que entram no grupo só para um
-/// evento (via convite temporário). Ficam aqui mesmo depois que o evento
-/// fecha (aí ficam ocultas nas outras listas) para poderem ser reativadas
-/// em outro evento.
+/// Admin-only: temporários do grupo ("Pessoas sem cadastro" e "Pessoas
+/// temporárias" viraram uma lista só, 27/10/2026). Cadastrados pelo
+/// "Convidar temporário" (só o nome), entram nas despesas de qualquer evento
+/// e saem da lista quando todos os eventos com despesa deles fecham. Quem
+/// entra pelo convite escolhendo o nome continua temporário até o admin
+/// tornar integrante. Temporários antigos, presos a um evento, continuam
+/// aparecendo aqui (ocultos quando o evento fecha) para irem a outro evento.
 class _GroupTemporaryMembers extends ConsumerStatefulWidget {
   const _GroupTemporaryMembers({required this.group});
 
@@ -588,11 +605,20 @@ class _GroupTemporaryMembersState
   @override
   void didUpdateWidget(_GroupTemporaryMembers oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Grupo recarregado (ex.: pessoa sem cadastro criada/removida) também
-    // recarrega a lista.
+    // Grupo recarregado (ex.: integrante alterado) também recarrega a lista.
     if (!identical(oldWidget.group, widget.group)) {
       _future = null;
     }
+  }
+
+  String _subtitle(GroupMemberModel member) {
+    final account = member.placeholder ? 'Sem conta no app' : 'Com conta';
+    if (member.temporaryEventName == null) {
+      return account;
+    }
+    return member.temporaryEventClosed
+        ? '$account · ${member.temporaryEventName} (fechado — oculto)'
+        : '$account · ${member.temporaryEventName}';
   }
 
   @override
@@ -607,14 +633,17 @@ class _GroupTemporaryMembersState
       child: FutureBuilder<List<GroupMemberModel>>(
         future: _load(),
         builder: (context, snapshot) {
-          final temporaries = snapshot.data ?? <GroupMemberModel>[];
+          final temporaries = [...snapshot.data ?? <GroupMemberModel>[]]..sort(
+              (first, second) => first.nickname
+                  .toLowerCase()
+                  .compareTo(second.nickname.toLowerCase()));
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   Expanded(
-                      child: Text('Pessoas temporárias',
+                      child: Text('Temporários',
                           style: Theme.of(context).textTheme.titleMedium)),
                   TextButton.icon(
                     onPressed: () async {
@@ -624,13 +653,14 @@ class _GroupTemporaryMembersState
                       }
                     },
                     icon: const Icon(Icons.person_add_alt),
-                    label: const Text('Convidado temporário'),
+                    label: const Text('Convidar temporário'),
                   ),
                 ],
               ),
               Text(
-                'Entram só para um evento, com ou sem conta no app, e somem '
-                'das listas quando ele fecha.',
+                'Cadastre só o nome para já lançar despesas. A pessoa sai da '
+                'lista quando todos os eventos com despesa dela forem '
+                'fechados. Para ficar no grupo, torne-a integrante.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               if (snapshot.connectionState != ConnectionState.done)
@@ -651,11 +681,7 @@ class _GroupTemporaryMembersState
                           name: member.nickname, seed: member.userId),
                     ),
                     title: Text(member.nickname),
-                    subtitle: Text(member.temporaryEventName == null
-                        ? 'Sem evento'
-                        : member.temporaryEventClosed
-                            ? '${member.temporaryEventName} (fechado — oculto)'
-                            : member.temporaryEventName!),
+                    subtitle: Text(_subtitle(member)),
                     trailing: Wrap(
                       children: [
                         // Só dá pra renomear quem ainda não tem conta: o
@@ -672,16 +698,38 @@ class _GroupTemporaryMembersState
                             },
                           ),
                         IconButton(
-                          tooltip: 'Incluir em outro evento',
-                          icon: const Icon(Icons.event_repeat),
+                          tooltip: 'Tornar integrante',
+                          icon: const Icon(Icons.how_to_reg_outlined),
                           onPressed: () async {
-                            final changed = await _assignTemporaryToEvent(
-                                context, ref, widget.group, member);
-                            if (changed) {
+                            if (await _promoteTemporary(
+                                context, ref, widget.group, member)) {
                               _reload();
                             }
                           },
                         ),
+                        if (member.temporaryEventId != null)
+                          IconButton(
+                            tooltip: 'Incluir em outro evento',
+                            icon: const Icon(Icons.event_repeat),
+                            onPressed: () async {
+                              final changed = await _assignTemporaryToEvent(
+                                  context, ref, widget.group, member);
+                              if (changed) {
+                                _reload();
+                              }
+                            },
+                          ),
+                        if (member.placeholder)
+                          IconButton(
+                            tooltip: 'Remover',
+                            icon: const Icon(Icons.person_remove_outlined),
+                            onPressed: () async {
+                              if (await _removePlaceholder(
+                                  context, ref, widget.group.id, member)) {
+                                _reload();
+                              }
+                            },
+                          ),
                       ],
                     ),
                   ),
@@ -691,6 +739,50 @@ class _GroupTemporaryMembersState
         },
       ),
     );
+  }
+}
+
+/// "Tornar integrante": o temporário passa a participar do grupo como
+/// integrante fixo. Retorna true se mudou.
+Future<bool> _promoteTemporary(BuildContext context, WidgetRef ref,
+    GroupModel group, GroupMemberModel member) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Tornar integrante'),
+      content: Text('${member.nickname} deixa de ser temporário(a) e passa a '
+          'ser integrante do grupo, participando de todos os eventos.'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Tornar integrante')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return false;
+  }
+  try {
+    await ref
+        .read(groupsRepositoryProvider)
+        .promoteTemporary(group.id, member.userId);
+    ref.invalidate(selectedGroupProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${member.nickname} agora é integrante do grupo.')));
+    }
+    return true;
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível tornar integrante.'))));
+    }
+    return false;
   }
 }
 
@@ -754,91 +846,45 @@ Future<EventModel?> _pickOpenEvent(
   );
 }
 
-/// Convidado temporário: o admin escolhe o evento (já vem preenchido com
-/// [event]) e digita o nome. A pessoa entra na hora como "sem cadastro"
-/// só daquele evento — já dá pra lançar despesas — e o admin recebe o link
-/// do convite temporário. Se ela criar conta pelo link e escolher o nome
-/// em "Quem é você?", fica com as despesas, continuando só naquele evento;
-/// se não entrar, segue só como nome e some das listas quando o evento
-/// fecha. Retorna true se cadastrou.
+/// "Convidar temporário": o admin digita só o nome e a pessoa já entra no
+/// grupo como temporária (sem conta) — dá pra lançar despesas dela em
+/// qualquer evento aberto. Depois aparece o link do convite do grupo: quem
+/// criar conta por ele e escolher o nome em "Quem é você?" fica com as
+/// despesas e continua temporário. Retorna true se cadastrou.
 Future<bool> showTemporaryGuestDialog(
-    BuildContext context, WidgetRef ref, String groupId,
-    {EventModel? event}) async {
-  List<EventModel> openEvents;
-  if (event != null) {
-    openEvents = [event];
-  } else {
-    try {
-      openEvents =
-          (await ref.read(eventsRepositoryProvider).list(groupId: groupId))
-              .where((item) => item.status != 'CLOSED')
-              .toList();
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(friendlyApiError(error,
-                fallback: 'Não foi possível carregar os eventos.'))));
-      }
-      return false;
-    }
-    if (!context.mounted) {
-      return false;
-    }
-    if (openEvents.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Nenhum evento aberto disponível neste grupo.')));
-      return false;
-    }
-  }
+    BuildContext context, WidgetRef ref, String groupId) async {
   final nameController = TextEditingController();
-  var selected = openEvents.first;
   final result = await showDialog<bool>(
     context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const Text('Convidado temporário'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: nameController,
-              autofocus: true,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Nome'),
-            ),
-            const SizedBox(height: 16),
-            if (event != null)
-              Text('Participa só do evento "${event.name}".',
-                  style: Theme.of(context).textTheme.bodySmall)
-            else
-              DropdownButtonFormField<String>(
-                initialValue: selected.id,
-                decoration: const InputDecoration(labelText: 'Evento'),
-                items: openEvents
-                    .map((item) => DropdownMenuItem(
-                        value: item.id, child: Text(item.name)))
-                    .toList(),
-                onChanged: (value) => setState(() => selected =
-                    openEvents.firstWhere((item) => item.id == value)),
-              ),
-            const SizedBox(height: 12),
-            Text(
-              'Já entra no evento com o nome, sem precisar de conta. Se '
-              'criar conta pelo link do convite, fica com as despesas dele.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Adicionar')),
+    builder: (context) => AlertDialog(
+      title: const Text('Convidar temporário'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: nameController,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(labelText: 'Nome'),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Já entra com o nome, sem precisar de conta, e pode participar '
+            'das despesas de qualquer evento aberto. Se criar conta pelo link '
+            'do convite, fica com as despesas dele.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
       ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Adicionar')),
+      ],
     ),
   );
   final nickname = nameController.text.trim();
@@ -854,7 +900,8 @@ Future<bool> showTemporaryGuestDialog(
   try {
     await ref
         .read(groupsRepositoryProvider)
-        .createPlaceholder(groupId, nickname: nickname, eventId: selected.id);
+        .createPlaceholder(groupId, nickname: nickname, temporary: true);
+    ref.invalidate(selectedGroupProvider);
     ref.invalidate(dashboardGroupBalancesProvider);
   } catch (error) {
     if (context.mounted) {
@@ -869,9 +916,7 @@ Future<bool> showTemporaryGuestDialog(
   }
   final GroupInviteModel invite;
   try {
-    invite = await ref
-        .read(groupInviteRepositoryProvider)
-        .getOrCreateTemporary(groupId, selected.id);
+    invite = await ref.read(groupInviteRepositoryProvider).getOrCreate(groupId);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -893,9 +938,9 @@ Future<bool> showTemporaryGuestDialog(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('$nickname já participa do evento "${selected.name}". '
-              'Mande este link se quiser que crie conta e acompanhe '
-              'pelo app (opcional):'),
+          Text('Mande este link se quiser que $nickname crie conta e '
+              'acompanhe pelo app (opcional). No convite, é só escolher o '
+              'próprio nome:'),
           const SizedBox(height: 12),
           SelectableText(url),
         ],
@@ -953,194 +998,6 @@ Future<bool> _assignTemporaryToEvent(BuildContext context, WidgetRef ref,
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(friendlyApiError(error,
               fallback: 'Não foi possível incluir no evento.'))));
-    }
-    return false;
-  }
-}
-
-/// Admin: pessoas sem cadastro (só o nome). Entram nas despesas como
-/// qualquer integrante; quem entrar pelo convite e escolher o nome em
-/// "Quem é você?" fica com as despesas dele.
-class _GroupPlaceholders extends ConsumerStatefulWidget {
-  const _GroupPlaceholders({required this.group});
-
-  final GroupModel group;
-
-  @override
-  ConsumerState<_GroupPlaceholders> createState() => _GroupPlaceholdersState();
-}
-
-class _GroupPlaceholdersState extends ConsumerState<_GroupPlaceholders> {
-  Future<List<GroupMemberModel>>? _future;
-
-  Future<List<GroupMemberModel>> _load() => _future ??=
-      ref.read(groupsRepositoryProvider).listPlaceholders(widget.group.id);
-
-  void _reload() {
-    setState(() => _future = null);
-    // Recarrega integrantes e temporários, que também mostram esses nomes.
-    ref.invalidate(selectedGroupProvider);
-  }
-
-  @override
-  void didUpdateWidget(_GroupPlaceholders oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.group, widget.group)) {
-      _future = null;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isGroupAdmin =
-        ref.watch(groupRoleProvider(widget.group.id)).valueOrNull == 'ADMIN';
-    if (!isGroupAdmin) {
-      return const SizedBox.shrink();
-    }
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: FutureBuilder<List<GroupMemberModel>>(
-        future: _load(),
-        builder: (context, snapshot) {
-          final placeholders = snapshot.data ?? <GroupMemberModel>[];
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                      child: Text('Pessoas sem cadastro',
-                          style: Theme.of(context).textTheme.titleMedium)),
-                  TextButton.icon(
-                    onPressed: () async {
-                      final created = await showAddPlaceholderDialog(
-                          context, ref, widget.group.id);
-                      if (created) {
-                        _reload();
-                      }
-                    },
-                    icon: const Icon(Icons.person_add_alt_1_outlined),
-                    label: const Text('Adicionar nome'),
-                  ),
-                ],
-              ),
-              Text(
-                'Cadastre só o nome para já lançar despesas. Ao entrar pelo '
-                'convite, a pessoa escolhe o nome dela e fica com as despesas.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              if (snapshot.connectionState != ConnectionState.done)
-                const LinearProgressIndicator()
-              else if (snapshot.hasError)
-                ErrorState(
-                  message: friendlyApiError(snapshot.error!,
-                      fallback: 'Não foi possível carregar os nomes.'),
-                  onRetry: _reload,
-                )
-              else
-                ...placeholders.map(
-                  (member) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: PersonAvatar(
-                        name: member.nickname, seed: member.userId),
-                    // Sem separar fixa/temporária aqui: pra quem usa é tudo
-                    // a mesma coisa (pedido do usuário, 27/10/2026).
-                    title: Text(member.nickname),
-                    trailing: Wrap(
-                      children: [
-                        IconButton(
-                          tooltip: 'Renomear',
-                          icon: const Icon(Icons.edit_outlined),
-                          onPressed: () async {
-                            if (await _renamePlaceholder(
-                                context, ref, widget.group.id, member)) {
-                              _reload();
-                            }
-                          },
-                        ),
-                        IconButton(
-                          tooltip: 'Remover',
-                          icon: const Icon(Icons.person_remove_outlined),
-                          onPressed: () async {
-                            if (await _removePlaceholder(
-                                context, ref, widget.group.id, member)) {
-                              _reload();
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// Cadastra uma pessoa sem cadastro fixa no grupo (quem é só de um evento
-/// entra por "Convidado temporário"). Retorna true se criou.
-Future<bool> showAddPlaceholderDialog(
-    BuildContext context, WidgetRef ref, String groupId) async {
-  final nameController = TextEditingController();
-  final result = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Pessoa sem cadastro'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: nameController,
-            autofocus: true,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Nome'),
-          ),
-          const SizedBox(height: 12),
-          Text(
-              'Participa de todos os eventos do grupo. Para alguém de um '
-              'evento só, use "Convidado temporário".',
-              style: Theme.of(context).textTheme.bodySmall),
-        ],
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar')),
-        FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Salvar')),
-      ],
-    ),
-  );
-  final nickname = nameController.text.trim();
-  nameController.dispose();
-  if (result != true || !context.mounted) {
-    return false;
-  }
-  if (nickname.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe o nome da pessoa.')));
-    return false;
-  }
-  try {
-    await ref
-        .read(groupsRepositoryProvider)
-        .createPlaceholder(groupId, nickname: nickname);
-    ref.invalidate(dashboardGroupBalancesProvider);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$nickname adicionado(a) ao grupo.')));
-    }
-    return true;
-  } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(friendlyApiError(error,
-              fallback: 'Não foi possível adicionar a pessoa.'))));
     }
     return false;
   }

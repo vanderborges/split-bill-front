@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/session_reset.dart';
+import '../../../shared/widgets/splash_video.dart';
 import '../../groups/services/group_invite_repository.dart';
 import '../../notifications/services/push_service.dart';
 import '../services/auth_repository.dart';
@@ -24,11 +27,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool showPassword = false;
   bool rememberMe = true;
   bool autoLoggingIn = true;
+
+  /// Abertura com vídeo: completa quando o vídeo acaba ou é pulado. Só
+  /// toca na primeira vez que o app abre — voltar pro login (ex.: Sair)
+  /// não repete o vídeo.
+  final _splashDone = Completer<void>();
+  static bool _splashPlayed = false;
   Future<bool>? biometricAvailable;
 
   @override
   void initState() {
     super.initState();
+    if (_splashPlayed) {
+      _splashDone.complete();
+    }
     biometricAvailable = _canSignInWithBiometrics();
     _tryAutoLogin();
   }
@@ -62,12 +74,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       }
       final pendingInviteId = ref.read(pendingInviteIdProvider);
       resetSessionScopedProviders(ref);
+      // Só sai da abertura depois do vídeo (ou de a pessoa pular).
+      await _splashDone.future;
       if (mounted) {
         context.go(_afterLoginRoute(pendingInviteId));
       }
     } catch (_) {
       // Qualquer outra falha: segue pro login manual.
     } finally {
+      await _splashDone.future;
       if (mounted) {
         setState(() => autoLoggingIn = false);
       }
@@ -83,6 +98,21 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (autoLoggingIn && !_splashDone.isCompleted) {
+      return Scaffold(
+        body: SplashVideo(onFinished: () {
+          _splashPlayed = true;
+          if (!_splashDone.isCompleted) {
+            _splashDone.complete();
+            // Login ainda validando (ex.: servidor acordando): cai no
+            // "carregando" abaixo.
+            if (mounted) {
+              setState(() {});
+            }
+          }
+        }),
+      );
+    }
     if (autoLoggingIn) {
       return Scaffold(
         body: Center(

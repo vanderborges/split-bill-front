@@ -190,7 +190,7 @@ class EventsPage extends ConsumerWidget {
                             } else if (value == 'report') {
                               selectEvent(ref,
                                   groupId: event.groupId, eventId: event.id);
-                              context.go('/reports');
+                              context.go('/expenses?view=saldo');
                             } else if (value == 'start-settlement') {
                               await _startSettlement(
                                   context, ref, event, events);
@@ -200,8 +200,7 @@ class EventsPage extends ConsumerWidget {
                               await _reopenEvent(context, ref, event);
                             } else if (value == 'add-temporary') {
                               await showTemporaryGuestDialog(
-                                  context, ref, event.groupId,
-                                  event: event);
+                                  context, ref, event.groupId);
                             } else if (value == 'delete') {
                               await _deleteEvent(context, ref, event);
                             }
@@ -210,7 +209,7 @@ class EventsPage extends ConsumerWidget {
                             const PopupMenuItem(
                                 value: 'expenses', child: Text('Ver despesas')),
                             const PopupMenuItem(
-                                value: 'report', child: Text('Ver relatório')),
+                                value: 'report', child: Text('Ver saldo')),
                             if (isEventAdmin && event.isOpen)
                               const PopupMenuItem(
                                   value: 'start-settlement',
@@ -225,7 +224,7 @@ class EventsPage extends ConsumerWidget {
                             if (isEventAdmin && !event.isClosed)
                               const PopupMenuItem(
                                   value: 'add-temporary',
-                                  child: Text('Convidado temporário')),
+                                  child: Text('Convidar temporário')),
                             if (isEventAdmin)
                               const PopupMenuItem(
                                   value: 'delete', child: Text('Deletar')),
