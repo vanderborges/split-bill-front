@@ -26,7 +26,7 @@ class UsersPage extends ConsumerWidget {
     final isAdmin = currentUser?.admin ?? false;
 
     return AppScaffold(
-      title: 'Usuarios',
+      title: 'Usuários',
       floatingActionButton: isAdmin
           ? AutoCollapsingFab(
               label: 'Novo usuário',
@@ -39,8 +39,8 @@ class UsersPage extends ConsumerWidget {
             return EmptyState(
               icon: Icons.group_outlined,
               message: isAdmin
-                  ? 'Nenhum usuario cadastrado.'
-                  : 'Nenhum usuario disponivel.',
+                  ? 'Nenhum usuário cadastrado.'
+                  : 'Nenhum usuário disponível.',
             );
           }
           return ListView.separated(
@@ -68,13 +68,13 @@ class UsersPage extends ConsumerWidget {
                             icon: const Icon(Icons.lock_reset_outlined),
                           ),
                           IconButton(
-                            tooltip: 'Editar usuario',
+                            tooltip: 'Editar usuário',
                             onPressed: () =>
                                 _showUserDialog(context, ref, user),
                             icon: const Icon(Icons.edit_outlined),
                           ),
                           IconButton(
-                            tooltip: 'Apagar usuario',
+                            tooltip: 'Apagar usuário',
                             onPressed: () => _confirmDeleteUser(
                                 context, ref, user.id, user.fullName),
                             icon: const Icon(Icons.delete_outline),
@@ -111,8 +111,9 @@ Future<void> _openFreshUserDetails(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyApiError(error,
-            fallback: 'Não foi possível atualizar o usuário.'))),
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível atualizar o usuário.'))),
       );
     }
   }
@@ -129,13 +130,13 @@ Future<void> _showUserDetailsDialog(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Apelido: ${user.nickname}'),
-          Text('Email: ${user.email}'),
+          Text('E-mail: ${user.email}'),
           Text('Telefone: ${user.phone}'),
           Text('Chave PIX: ${user.pixKey}'),
           if (user.billingUserId != null)
             Text(
                 'Saldo junto com: ${_billingUserLabel(users, user.billingUserId)}'),
-          Text('Perfil: ${user.admin ? 'Administrador' : 'Usuario'}'),
+          Text('Perfil: ${user.admin ? 'Administrador' : 'Usuário'}'),
           Text('Status: ${user.active ? 'Ativo' : 'Inativo'}'),
         ],
       ),
@@ -185,7 +186,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
       return StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: Text(user == null ? 'Cadastrar usuario' : 'Editar usuario'),
+            title: Text(user == null ? 'Cadastrar usuário' : 'Editar usuário'),
             content: SizedBox(
               width: 420,
               child: SingleChildScrollView(
@@ -208,7 +209,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
                     TextField(
                       controller: emailController,
                       keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(labelText: 'Email'),
+                      decoration: const InputDecoration(labelText: 'E-mail'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -228,7 +229,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
                           labelText: 'Cobrar saldo junto com'),
                       items: [
                         const DropdownMenuItem<String?>(
-                            value: null, child: Text('Ninguem')),
+                            value: null, child: Text('Ninguém')),
                         ...billingCandidates.map((candidate) =>
                             DropdownMenuItem<String?>(
                                 value: candidate.id,
@@ -326,7 +327,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
 
   if (!isValidEmail(email)) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Informe um email valido.')),
+      const SnackBar(content: Text('Informe um e-mail válido.')),
     );
     _disposeControllers([
       fullNameController,
@@ -371,8 +372,9 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyApiError(error,
-            fallback: 'Não foi possível salvar o usuário.'))),
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível salvar o usuário.'))),
       );
     }
   } finally {
@@ -440,8 +442,9 @@ Future<void> _showResetPasswordDialog(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyApiError(error,
-            fallback: 'Não foi possível reiniciar a senha.'))),
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível reiniciar a senha.'))),
       );
     }
   }
@@ -458,7 +461,7 @@ Future<void> _confirmDeleteUser(
     context: context,
     builder: (context) {
       return AlertDialog(
-        title: const Text('Apagar usuario'),
+        title: const Text('Apagar usuário'),
         content: Text('Deseja apagar $fullName?'),
         actions: [
           TextButton(
@@ -482,8 +485,9 @@ Future<void> _confirmDeleteUser(
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyApiError(error,
-            fallback: 'Não foi possível apagar o usuário.'))),
+        SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível apagar o usuário.'))),
       );
     }
   }

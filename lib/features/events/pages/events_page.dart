@@ -134,7 +134,7 @@ class EventsPage extends ConsumerWidget {
                         : 'Nenhum evento aberto.',
                     message: allEvents.isEmpty
                         ? 'Toque em "+" para criar um mês ou evento avulso.'
-                        : 'Desmarque "Ocultar fechados" pra ver todos.',
+                        : 'Desmarque "Ocultar fechados" para ver todos.',
                   );
                 }
                 final groupsById = {
@@ -210,7 +210,7 @@ class EventsPage extends ConsumerWidget {
                             const PopupMenuItem(
                                 value: 'expenses', child: Text('Ver despesas')),
                             const PopupMenuItem(
-                                value: 'report', child: Text('Ver relatorio')),
+                                value: 'report', child: Text('Ver relatório')),
                             if (isEventAdmin && event.isOpen)
                               const PopupMenuItem(
                                   value: 'start-settlement',
@@ -391,7 +391,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     type == 'MONTHLY'
-                        ? 'Reúne as despesas do mês a mês do grupo e permite parcelamentos automáticos.'
+                        ? 'Reúne as despesas mês a mês do grupo e permite parcelamentos automáticos.'
                         : 'Uma ocasião pontual (viagem, festa, jantar). Sem parcelamento.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
@@ -463,7 +463,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                               child: TextField(
                             controller: monthController,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Mes'),
+                            decoration: const InputDecoration(labelText: 'Mês'),
                           )),
                         ),
                         const SizedBox(width: AppSpacing.md),
@@ -617,7 +617,7 @@ Future<void> _startSettlement(
                   decoration: const InputDecoration(labelText: 'Consolidar em'),
                   items: [
                     const DropdownMenuItem<String?>(
-                        value: null, child: Text('Nao consolidar')),
+                        value: null, child: Text('Não consolidar')),
                     ...targets.map((target) => DropdownMenuItem<String?>(
                         value: target.id, child: Text(target.name))),
                   ],
@@ -674,7 +674,7 @@ Future<void> _closeEvent(
     builder: (context) => AlertDialog(
       title: Text('Concluir ${event.name}'),
       content: const Text(
-          'Confirma que todos os pagamentos ja foram acertados? Depois de concluido, o evento nao pode mais ser alterado.'),
+          'Confirma que todos os pagamentos já foram acertados? Depois de concluído, o evento não pode mais ser alterado.'),
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(false),

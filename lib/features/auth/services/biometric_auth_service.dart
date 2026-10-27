@@ -34,7 +34,7 @@ class BiometricAuthService {
 
   Future<bool> authenticate() {
     return localAuth.authenticate(
-      localizedReason: 'Use sua biometria para entrar no DividiAi',
+      localizedReason: 'Use sua biometria para entrar no DividiAí',
       biometricOnly: true,
       persistAcrossBackgrounding: true,
     );

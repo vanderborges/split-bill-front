@@ -23,6 +23,7 @@ import '../../events/services/events_repository.dart';
 import '../../events/services/new_event_intent.dart';
 import '../../groups/models/group_model.dart';
 import '../../groups/services/groups_repository.dart';
+import '../../reports/pages/reports_page.dart';
 import '../../reports/services/reports_repository.dart';
 import '../../users/models/user_option_model.dart';
 import '../models/expense_model.dart';
@@ -40,6 +41,7 @@ class ExpensesPage extends ConsumerWidget {
     final groupsAsync = ref.watch(groupsProvider);
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final showOnlyMine = ref.watch(showOnlyMyExpensesProvider);
+    final showBalance = ref.watch(showEventBalanceProvider);
 
     // Evento selecionado que não está aberto (aguardando pagamento ou
     // fechado) não aceita despesa — nem mostra o botão.
@@ -48,7 +50,7 @@ class ExpensesPage extends ConsumerWidget {
 
     return AppScaffold(
       title: 'Despesas',
-      floatingActionButton: selectedEventClosedForExpenses
+      floatingActionButton: selectedEventClosedForExpenses || showBalance
           ? null
           : AutoCollapsingFab(
               label: 'Nova despesa',
@@ -121,122 +123,157 @@ class ExpensesPage extends ConsumerWidget {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
-              CheckboxListTile(
-                value: showOnlyMine,
-                onChanged: (value) => ref
-                    .read(showOnlyMyExpensesProvider.notifier)
-                    .state = value ?? false,
-                controlAffinity: ListTileControlAffinity.leading,
-                dense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                title: const Text('Mostrar só minhas despesas'),
-              ),
-              Expanded(
-                child: expensesAsync.when(
-                  data: (expenses) {
-                    final visibleExpenses = showOnlyMine
-                        ? expenses
-                            .where((expense) =>
-                                _isUserInvolved(expense, currentUser?.id))
-                            .toList()
-                        : expenses;
-                    if (visibleExpenses.isEmpty) {
-                      return EmptyState(
-                        icon: Icons.receipt_long_outlined,
-                        title: showOnlyMine
-                            ? 'Você não participa de nenhuma despesa deste evento.'
-                            : 'Nenhuma despesa cadastrada.',
-                        message: showOnlyMine
-                            ? 'Desmarque o filtro para ver as despesas de todo o grupo.'
-                            : 'Toque em "+" para registrar o primeiro gasto deste evento.',
-                      );
-                    }
-                    final sortedExpenses = [...visibleExpenses]
-                      ..sort((first, second) {
-                        final dateComparison =
-                            second.expenseDate.compareTo(first.expenseDate);
-                        if (dateComparison != 0) {
-                          return dateComparison;
-                        }
-                        return second.createdAt.compareTo(first.createdAt);
-                      });
-                    return ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
-                          AppSpacing.lg, AppSpacing.lg, fabClearance),
-                      itemCount: sortedExpenses.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final expense = sortedExpenses[index];
-                        final canChange = _canChangeExpense(
-                          expense,
-                          currentUser?.id,
-                          isGroupAdmin,
-                        );
-                        final shareSummary = _expenseShareSummary(expense);
-                        final installmentLabel = expense.installmentLabel;
-                        return ListTile(
-                          leading: SizedBox(
-                            width: 64,
-                            child: Text(
-                              _formatDateShort(expense.expenseDate),
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.visible,
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ),
-                          onTap: () async {
-                            // Sempre abre o detalhe enxuto primeiro; o
-                            // formulário completo só vem pelo "Editar".
-                            final wantsEdit = await _openExpenseDetails(
-                                context, expense,
-                                canEdit: canChange && event.isOpen);
-                            if (!wantsEdit || !context.mounted) {
-                              return;
-                            }
-                            final users = await _loadEventUsers(
-                                ref, event.groupId,
-                                eventId: event.id,
-                                keepUserIds: {
-                                  ...expense.participants
-                                      .map((participant) => participant.userId),
-                                  ...expense.payers
-                                      .map((payer) => payer.userId),
-                                });
-                            final categories = await _loadCategoryNames(ref);
-                            if (context.mounted) {
-                              await _openExpenseForm(
-                                  context, ref, event, users, categories,
-                                  expense: expense);
-                            }
-                          },
-                          title: Text(expense.description),
-                          subtitle: [shareSummary, installmentLabel]
-                                  .whereType<String>()
-                                  .isEmpty
-                              ? null
-                              : Text([shareSummary, installmentLabel]
-                                  .whereType<String>()
-                                  .join(' | ')),
-                          trailing: showOnlyMine
-                              ? _UserBalanceText(
-                                  _userBalance(expense, currentUser?.id))
-                              : MoneyText(expense.amount),
-                        );
-                      },
-                    );
-                  },
-                  loading: () => const LoadingState(),
-                  error: (error, _) => ErrorState(
-                    message: friendlyApiError(error,
-                        fallback: 'Não foi possível carregar as despesas.'),
-                    onRetry: () =>
-                        ref.invalidate(selectedEventExpensesProvider),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(
+                          value: false,
+                          icon: Icon(Icons.receipt_long_outlined),
+                          label: Text('Despesas')),
+                      ButtonSegment(
+                          value: true,
+                          icon: Icon(Icons.account_balance_wallet_outlined),
+                          label: Text('Saldo')),
+                    ],
+                    selected: {showBalance},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (selection) => ref
+                        .read(showEventBalanceProvider.notifier)
+                        .state = selection.first,
                   ),
                 ),
               ),
+              // Saldo: o mesmo conteúdo do Relatório (ações do evento,
+              // pagamento, compartilhar e os cards de saldo).
+              if (showBalance)
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    children: const [EventBalanceView()],
+                  ),
+                ),
+              if (!showBalance)
+                CheckboxListTile(
+                  value: showOnlyMine,
+                  onChanged: (value) => ref
+                      .read(showOnlyMyExpensesProvider.notifier)
+                      .state = value ?? false,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  dense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  title: const Text('Mostrar só minhas despesas'),
+                ),
+              if (!showBalance)
+                Expanded(
+                  child: expensesAsync.when(
+                    data: (expenses) {
+                      final visibleExpenses = showOnlyMine
+                          ? expenses
+                              .where((expense) =>
+                                  _isUserInvolved(expense, currentUser?.id))
+                              .toList()
+                          : expenses;
+                      if (visibleExpenses.isEmpty) {
+                        return EmptyState(
+                          icon: Icons.receipt_long_outlined,
+                          title: showOnlyMine
+                              ? 'Você não participa de nenhuma despesa deste evento.'
+                              : 'Nenhuma despesa cadastrada.',
+                          message: showOnlyMine
+                              ? 'Desmarque o filtro para ver as despesas de todo o grupo.'
+                              : 'Toque em "+" para registrar o primeiro gasto deste evento.',
+                        );
+                      }
+                      final sortedExpenses = [...visibleExpenses]
+                        ..sort((first, second) {
+                          final dateComparison =
+                              second.expenseDate.compareTo(first.expenseDate);
+                          if (dateComparison != 0) {
+                            return dateComparison;
+                          }
+                          return second.createdAt.compareTo(first.createdAt);
+                        });
+                      return ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
+                            AppSpacing.lg, AppSpacing.lg, fabClearance),
+                        itemCount: sortedExpenses.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final expense = sortedExpenses[index];
+                          final canChange = _canChangeExpense(
+                            expense,
+                            currentUser?.id,
+                            isGroupAdmin,
+                          );
+                          final shareSummary = _expenseShareSummary(expense);
+                          final installmentLabel = expense.installmentLabel;
+                          return ListTile(
+                            leading: SizedBox(
+                              width: 64,
+                              child: Text(
+                                _formatDateShort(expense.expenseDate),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.visible,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                            onTap: () async {
+                              // Sempre abre o detalhe enxuto primeiro; o
+                              // formulário completo só vem pelo "Editar".
+                              final wantsEdit = await _openExpenseDetails(
+                                  context, expense,
+                                  canEdit: canChange && event.isOpen);
+                              if (!wantsEdit || !context.mounted) {
+                                return;
+                              }
+                              final users = await _loadEventUsers(
+                                  ref, event.groupId,
+                                  eventId: event.id,
+                                  keepUserIds: {
+                                    ...expense.participants.map(
+                                        (participant) => participant.userId),
+                                    ...expense.payers
+                                        .map((payer) => payer.userId),
+                                  });
+                              final categories = await _loadCategoryNames(ref);
+                              if (context.mounted) {
+                                await _openExpenseForm(
+                                    context, ref, event, users, categories,
+                                    expense: expense);
+                              }
+                            },
+                            title: Text(expense.description),
+                            subtitle: [shareSummary, installmentLabel]
+                                    .whereType<String>()
+                                    .isEmpty
+                                ? null
+                                : Text([shareSummary, installmentLabel]
+                                    .whereType<String>()
+                                    .join(' | ')),
+                            trailing: showOnlyMine
+                                ? _UserBalanceText(
+                                    _userBalance(expense, currentUser?.id))
+                                : MoneyText(expense.amount),
+                          );
+                        },
+                      );
+                    },
+                    loading: () => const LoadingState(),
+                    error: (error, _) => ErrorState(
+                      message: friendlyApiError(error,
+                          fallback: 'Não foi possível carregar as despesas.'),
+                      onRetry: () =>
+                          ref.invalidate(selectedEventExpensesProvider),
+                    ),
+                  ),
+                ),
             ],
           );
         },
@@ -653,7 +690,7 @@ Future<void> _openExpenseForm(
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
           content:
-              Text('Cadastre ao menos um usuario antes de criar despesas.')),
+              Text('Cadastre ao menos um usuário antes de criar despesas.')),
     );
     return;
   }
@@ -1039,7 +1076,7 @@ Future<void> _openExpenseForm(
                     TextField(
                       controller: descriptionController,
                       textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(labelText: 'Descricao'),
+                      decoration: const InputDecoration(labelText: 'Descrição'),
                     ),
                     const SizedBox(height: AppSpacing.md),
                     OutlinedButton.icon(
@@ -1347,7 +1384,7 @@ Future<void> _openExpenseForm(
                                 if (totalShares > selectedParticipants.length)
                                   Text('$totalShares cotas'),
                                 if (shareValue == null)
-                                  const Text('Divisao: -')
+                                  const Text('Divisão: -')
                                 else
                                   Row(
                                     mainAxisSize: MainAxisSize.min,

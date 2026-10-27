@@ -50,7 +50,7 @@ class _SignInPrompt extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Voce foi convidado para um grupo',
+        Text('Você foi convidado para um grupo',
             style: Theme.of(context).textTheme.headlineSmall,
             textAlign: TextAlign.center),
         const SizedBox(height: 8),
@@ -109,11 +109,11 @@ class _JoinGroupState extends ConsumerState<_JoinGroup> {
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Este link de convite nao e mais valido.'),
+              const Text('Este link de convite não é mais válido.'),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: () => context.go('/'),
-                child: const Text('Ir para o inicio'),
+                child: const Text('Ir para o início'),
               ),
             ],
           );
@@ -123,7 +123,7 @@ class _JoinGroupState extends ConsumerState<_JoinGroup> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Voce foi convidado para o grupo',
+            Text('Você foi convidado para o grupo',
                 style: Theme.of(context).textTheme.bodyLarge,
                 textAlign: TextAlign.center),
             const SizedBox(height: 4),
@@ -255,7 +255,7 @@ class _JoinGroupState extends ConsumerState<_JoinGroup> {
       ref.invalidate(selectedGroupProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Voce entrou no grupo!')),
+          const SnackBar(content: Text('Você entrou no grupo!')),
         );
         context.go('/groups');
       }

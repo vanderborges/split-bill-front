@@ -89,7 +89,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('DividiAi',
+              Text('DividiAí',
                   style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 24),
               const CircularProgressIndicator(),
@@ -108,13 +108,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('DividiAi',
+                Text('DividiAí',
                     style: Theme.of(context).textTheme.headlineMedium),
                 const SizedBox(height: 24),
                 TextField(
                   controller: emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email'),
+                  decoration: const InputDecoration(labelText: 'E-mail'),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -201,7 +201,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final password = passwordController.text;
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe email e senha.')),
+        const SnackBar(content: Text('Informe e-mail e senha.')),
       );
       return;
     }
@@ -224,7 +224,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Email ou senha invalidos.')),
+          const SnackBar(content: Text('E-mail ou senha inválidos.')),
         );
       }
     } finally {
@@ -254,7 +254,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Sessao expirada. Entre com email e senha.'),
+              content: Text('Sessão expirada. Entre com e-mail e senha.'),
             ),
           );
         }
@@ -268,7 +268,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Nao foi possivel autenticar com biometria.'),
+            content: Text('Não foi possível autenticar com biometria.'),
           ),
         );
       }

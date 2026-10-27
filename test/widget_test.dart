@@ -14,6 +14,6 @@ void main() {
   testWidgets('App builds', (WidgetTester tester) async {
     await tester.pumpWidget(const ProviderScope(child: DividiAiApp()));
 
-    expect(find.text('DividiAi'), findsWidgets);
+    expect(find.text('DividiAí'), findsWidgets);
   });
 }

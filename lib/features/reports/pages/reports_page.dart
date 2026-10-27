@@ -36,19 +36,11 @@ class ReportsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final eventAsync = ref.watch(selectedEventProvider);
     final eventsAsync = ref.watch(eventsProvider);
-    final reportAsync = ref.watch(selectedEventReportProvider);
-    final settlementsAsync = ref.watch(selectedEventSettlementsProvider);
     final groupsAsync = ref.watch(groupsProvider);
     final selectedGroupId = ref.watch(selectedGroupIdProvider);
-    final isGroupAdmin = eventAsync.valueOrNull != null
-        ? ref
-                .watch(groupRoleProvider(eventAsync.valueOrNull!.groupId))
-                .valueOrNull ==
-            'ADMIN'
-        : false;
 
     return AppScaffold(
-      title: 'Relatorios',
+      title: 'Relatórios',
       // Os seletores de grupo/evento ficam sempre visíveis, mesmo sem
       // nenhum relatório ainda — antes ficavam escondidos atrás do estado
       // vazio, e quem não tinha nada cadastrado não via nem a lista de
@@ -110,135 +102,154 @@ class ReportsPage extends ConsumerWidget {
             error: (_, __) => const SizedBox.shrink(),
           ),
           const SizedBox(height: 16),
-          reportAsync.when(
-            data: (report) {
-              if (report == null) {
-                return const EmptyState(
-                  icon: Icons.bar_chart_outlined,
-                  title: 'Nenhum relatório para mostrar.',
-                  message: 'Crie ou selecione um evento para ver o relatório.',
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Status do evento ao lado do nome; abaixo, as ações do
-                  // evento (Fechar/cobrança/Concluir) à esquerda e o
-                  // compartilhar fixo à direita — com o evento fechado sobra
-                  // só o compartilhar, no mesmo lugar.
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                            '${report.groupName} | ${report.eventName ?? ''}',
-                            style: Theme.of(context).textTheme.bodySmall),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      StatusBadge(switch (report.status) {
-                        'CLOSED' => AppStatus.fechado,
-                        'SETTLING' => AppStatus.aguardandoPagamento,
-                        _ => AppStatus.aberto,
-                      }),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: AppSpacing.sm,
-                          runSpacing: AppSpacing.xs,
-                          children: [
-                            if (report.status == 'OPEN' && isGroupAdmin)
-                              FilledButton(
-                                onPressed: report.eventId == null
-                                    ? null
-                                    : () => _confirmStartSettlement(context,
-                                        ref, report.groupId, report.eventId!),
-                                child: const Text('Fechar evento'),
-                              ),
-                            if (report.status == 'SETTLING' && isGroupAdmin)
-                              OutlinedButton.icon(
-                                onPressed: report.eventId == null
-                                    ? null
-                                    : () => _sendBillingAlert(
-                                        context, ref, report.eventId!),
-                                icon: const Icon(Icons.campaign_outlined),
-                                label: const Text('Enviar alerta de cobrança'),
-                              ),
-                            if (report.status == 'SETTLING' && isGroupAdmin)
-                              Tooltip(
-                                message: _hasPendingSettlement(settlementsAsync)
-                                    ? 'Confirme todos os pagamentos antes de concluir o evento.'
-                                    : '',
-                                child: FilledButton(
-                                  onPressed: report.eventId == null ||
-                                          _hasPendingSettlement(
-                                              settlementsAsync)
-                                      ? null
-                                      : () => _confirmCloseEvent(
-                                          context, ref, report.eventId!),
-                                  child: const Text('Concluir evento'),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Compartilhar resumo',
-                        onPressed: settlementsAsync.valueOrNull == null
-                            ? null
-                            : () => _shareReport(
-                                report,
-                                settlementsAsync.valueOrNull!,
-                                // Recebedor escolhido no "Fechar evento".
-                                eventAsync.valueOrNull?.receiverNickname),
-                        icon: const Icon(Icons.share_outlined),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Text('Total de despesas: ',
-                          style: Theme.of(context).textTheme.bodyMedium),
-                      MoneyText(report.totalExpenses),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  settlementsAsync.when(
-                    data: (settlements) => _ReportTable(
-                      key: ValueKey('${report.eventId}-${report.monthId}'),
-                      balances: report.balances,
-                      settlements: settlements,
-                      canUpdateSettlements: isGroupAdmin,
-                      isAwaitingPayment: report.status == 'SETTLING',
-                      isEventOpen: report.status == 'OPEN',
-                      eventId: report.eventId,
-                    ),
-                    loading: () => const Padding(
-                      padding: EdgeInsets.all(AppSpacing.xl),
-                      child: LoadingState(),
-                    ),
-                    error: (error, _) => ErrorState(
-                      message: friendlyApiError(error,
-                          fallback: 'Não foi possível carregar os pagamentos.'),
-                      onRetry: () =>
-                          ref.invalidate(selectedEventSettlementsProvider),
-                    ),
-                  ),
-                ],
-              );
-            },
-            loading: () => const LoadingState(),
-            error: (error, _) => ErrorState(
-              message: friendlyApiError(error,
-                  fallback: 'Não foi possível carregar o relatório.'),
-              onRetry: () => ref.invalidate(selectedEventReportProvider),
-            ),
-          ),
+          const EventBalanceView(),
         ],
+      ),
+    );
+  }
+}
+
+/// Saldo do evento selecionado: status, ações do evento (Fechar, cobrança,
+/// Concluir), compartilhar, total e os cards de saldo com pagamento. Usado
+/// no Relatório e na visão "Saldo" da tela de Despesas.
+class EventBalanceView extends ConsumerWidget {
+  const EventBalanceView({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eventAsync = ref.watch(selectedEventProvider);
+    final reportAsync = ref.watch(selectedEventReportProvider);
+    final settlementsAsync = ref.watch(selectedEventSettlementsProvider);
+    final isGroupAdmin = eventAsync.valueOrNull != null
+        ? ref
+                .watch(groupRoleProvider(eventAsync.valueOrNull!.groupId))
+                .valueOrNull ==
+            'ADMIN'
+        : false;
+
+    return reportAsync.when(
+      data: (report) {
+        if (report == null) {
+          return const EmptyState(
+            icon: Icons.bar_chart_outlined,
+            title: 'Nenhum relatório para mostrar.',
+            message: 'Crie ou selecione um evento para ver o relatório.',
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Status do evento ao lado do nome; abaixo, as ações do
+            // evento (Fechar/cobrança/Concluir) à esquerda e o
+            // compartilhar fixo à direita — com o evento fechado sobra
+            // só o compartilhar, no mesmo lugar.
+            Row(
+              children: [
+                Flexible(
+                  child: Text('${report.groupName} | ${report.eventName ?? ''}',
+                      style: Theme.of(context).textTheme.bodySmall),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                StatusBadge(switch (report.status) {
+                  'CLOSED' => AppStatus.fechado,
+                  'SETTLING' => AppStatus.aguardandoPagamento,
+                  _ => AppStatus.aberto,
+                }),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.xs,
+                    children: [
+                      if (report.status == 'OPEN' && isGroupAdmin)
+                        FilledButton(
+                          onPressed: report.eventId == null
+                              ? null
+                              : () => _confirmStartSettlement(context, ref,
+                                  report.groupId, report.eventId!),
+                          child: const Text('Fechar evento'),
+                        ),
+                      if (report.status == 'SETTLING' && isGroupAdmin)
+                        OutlinedButton.icon(
+                          onPressed: report.eventId == null
+                              ? null
+                              : () => _sendBillingAlert(
+                                  context, ref, report.eventId!),
+                          icon: const Icon(Icons.campaign_outlined),
+                          label: const Text('Enviar alerta de cobrança'),
+                        ),
+                      if (report.status == 'SETTLING' && isGroupAdmin)
+                        Tooltip(
+                          message: _hasPendingSettlement(settlementsAsync)
+                              ? 'Confirme todos os pagamentos antes de concluir o evento.'
+                              : '',
+                          child: FilledButton(
+                            onPressed: report.eventId == null ||
+                                    _hasPendingSettlement(settlementsAsync)
+                                ? null
+                                : () => _confirmCloseEvent(
+                                    context, ref, report.eventId!),
+                            child: const Text('Concluir evento'),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Compartilhar resumo',
+                  onPressed: settlementsAsync.valueOrNull == null
+                      ? null
+                      : () => _shareReport(
+                          report,
+                          settlementsAsync.valueOrNull!,
+                          // Recebedor escolhido no "Fechar evento".
+                          eventAsync.valueOrNull?.receiverNickname),
+                  icon: const Icon(Icons.share_outlined),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text('Total de despesas: ',
+                    style: Theme.of(context).textTheme.bodyMedium),
+                MoneyText(report.totalExpenses),
+              ],
+            ),
+            const SizedBox(height: 16),
+            settlementsAsync.when(
+              data: (settlements) => _ReportTable(
+                key: ValueKey('${report.eventId}-${report.monthId}'),
+                balances: report.balances,
+                settlements: settlements,
+                canUpdateSettlements: isGroupAdmin,
+                isAwaitingPayment: report.status == 'SETTLING',
+                isEventOpen: report.status == 'OPEN',
+                eventId: report.eventId,
+              ),
+              loading: () => const Padding(
+                padding: EdgeInsets.all(AppSpacing.xl),
+                child: LoadingState(),
+              ),
+              error: (error, _) => ErrorState(
+                message: friendlyApiError(error,
+                    fallback: 'Não foi possível carregar os pagamentos.'),
+                onRetry: () => ref.invalidate(selectedEventSettlementsProvider),
+              ),
+            ),
+          ],
+        );
+      },
+      loading: () => const LoadingState(),
+      error: (error, _) => ErrorState(
+        message: friendlyApiError(error,
+            fallback: 'Não foi possível carregar o relatório.'),
+        onRetry: () => ref.invalidate(selectedEventReportProvider),
       ),
     );
   }
@@ -285,6 +296,12 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
         settlement.userId: settlement,
     };
     final sortedBalances = [...widget.balances]..sort((first, second) {
+        // Quem está acessando vem sempre primeiro.
+        final firstIsMe = first.userId == currentUserId;
+        final secondIsMe = second.userId == currentUserId;
+        if (firstIsMe != secondIsMe) {
+          return firstIsMe ? -1 : 1;
+        }
         final firstSettlement = settlementsByUser[first.userId];
         final secondSettlement = settlementsByUser[second.userId];
         final statusComparison = _statusOrder(firstSettlement)
@@ -413,6 +430,8 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                       )
                     : null;
 
+                // Nome e valor na mesma linha; o status de pagamento vai
+                // embaixo, alinhado à direita (evento aberto não tem status).
                 if (compact) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,20 +439,13 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                       Row(
                         children: [
                           Expanded(child: name),
+                          const SizedBox(width: AppSpacing.sm),
+                          amount,
                           toggle,
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(
-                              child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: amount)),
-                          const SizedBox(width: 12),
-                          status,
-                        ],
-                      ),
+                      if (!widget.isEventOpen)
+                        Align(alignment: Alignment.centerRight, child: status),
                       if (payButton != null) ...[
                         const SizedBox(height: 6),
                         payButton,
@@ -779,7 +791,7 @@ Future<void> _updateSettlement(
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(
-                'Nao foi possivel atualizar pagamento: ${_errorMessage(error)}')),
+                'Não foi possível atualizar o pagamento: ${_errorMessage(error)}')),
       );
     }
   }
@@ -792,7 +804,7 @@ String _errorMessage(Object error) {
       return data['message'].toString();
     }
     if (error.response?.statusCode == 403) {
-      return 'apenas admins do grupo podem alterar pagamentos';
+      return 'apenas administradores do grupo podem alterar pagamentos';
     }
     if (error.message != null) {
       return error.message!;
@@ -944,7 +956,7 @@ Future<void> _confirmCloseEvent(
       return AlertDialog(
         title: const Text('Concluir evento'),
         content: const Text(
-            'Depois de concluido, o evento nao permite novas alteracoes. Deseja continuar?'),
+            'Depois de concluído, o evento não permite novas alterações. Deseja continuar?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -1030,42 +1042,70 @@ Future<void> _openPayDialog(
   if (!context.mounted) {
     return;
   }
-  final pixKey = payment.pixKey;
+  // Uma linha por informação: o valor devido; depois, pra cada pessoa a
+  // pagar, o valor e o link de copiar o PIX; por último o "Confirmar
+  // pagamento". Backend antigo (sem headline) cai no texto corrido.
+  final headline = payment.headline ?? payment.message;
+  final payees = payment.headline == null ? <PayeeModel>[] : payment.payees;
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Pagar'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(payment.message),
-          if (pixKey != null) ...[
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
+    builder: (dialogContext) {
+      Widget copyPix(String pixKey, String receiverName) => Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(padding: EdgeInsets.zero),
               onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: pixKey));
                 if (dialogContext.mounted) {
                   ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(
-                      content: Text(
-                          'Chave PIX de ${payment.receiverName ?? 'quem recebe'} copiada.')));
+                      content: Text('Chave PIX de $receiverName copiada.')));
                 }
               },
               icon: const Icon(Icons.copy_outlined, size: 18),
               label: const Text('Copiar chave PIX'),
             ),
-          ],
+          );
+
+      return AlertDialog(
+        title: const Text('Pagamento'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(headline,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              if (payment.headline != null && payees.isEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('Combine com o grupo para quem enviar o pagamento.'),
+              ],
+              for (final payee in payees) ...[
+                const SizedBox(height: 12),
+                Text(
+                    'Pague ${formatCurrencyBRL(payee.amount)} para ${payee.name}.'),
+                if (payee.pixKey != null)
+                  copyPix(payee.pixKey!, payee.name)
+                else
+                  Text('${payee.name} não cadastrou chave PIX.',
+                      style: Theme.of(dialogContext).textTheme.bodySmall),
+              ],
+              if (payment.headline == null && payment.pixKey != null) ...[
+                const SizedBox(height: 12),
+                copyPix(payment.pixKey!, payment.receiverName ?? 'quem recebe'),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Voltar')),
+          FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Confirmar pagamento')),
         ],
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Voltar')),
-        FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Confirmar pagamento')),
-      ],
-    ),
+      );
+    },
   );
   if (confirmed != true || !context.mounted) {
     return;

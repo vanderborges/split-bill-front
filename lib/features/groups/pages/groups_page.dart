@@ -367,7 +367,7 @@ Future<void> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
   if (saved != true || !context.mounted) return;
   try {
     final currentUser = await ref.read(currentUserProvider.future);
-    if (currentUser == null) throw Exception('Sessao expirada');
+    if (currentUser == null) throw Exception('Sessão expirada');
     await ref.read(groupsRepositoryProvider).addMember(
           groupId: group.id,
           userId: member.userId,
@@ -508,7 +508,7 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
 
 Future<void> _showInviteDialog(
     BuildContext context, WidgetRef ref, GroupModel group) async {
-  GroupInviteModel invite;
+  final GroupInviteModel invite;
   try {
     invite =
         await ref.read(groupInviteRepositoryProvider).getOrCreate(group.id);
@@ -523,49 +523,38 @@ Future<void> _showInviteDialog(
   if (!context.mounted) {
     return;
   }
+  // O link do grupo é fixo: sem "Gerar novo link", pra ninguém invalidar
+  // sem querer um link já compartilhado.
+  final url = '${Environment.webBaseUrl}/invite/${invite.id}';
   await showDialog<void>(
     context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) {
-        final url = '${Environment.webBaseUrl}/invite/${invite.id}';
-        return AlertDialog(
-          title: const Text('Convidar para o grupo'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Envie este link para adicionar alguem ao grupo:'),
-              const SizedBox(height: 12),
-              SelectableText(url),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                final regenerated = await ref
-                    .read(groupInviteRepositoryProvider)
-                    .regenerate(group.id);
-                setState(() => invite = regenerated);
-              },
-              child: const Text('Gerar novo link'),
-            ),
-            TextButton(
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: url));
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Link copiado.')));
-                }
-              },
-              child: const Text('Copiar link'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Fechar'),
-            ),
-          ],
-        );
-      },
+    builder: (context) => AlertDialog(
+      title: const Text('Convidar para o grupo'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Envie este link para adicionar alguém ao grupo:'),
+          const SizedBox(height: 12),
+          SelectableText(url),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: url));
+            if (context.mounted) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(const SnackBar(content: Text('Link copiado.')));
+            }
+          },
+          child: const Text('Copiar link'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Fechar'),
+        ),
+      ],
     ),
   );
 }
@@ -1036,7 +1025,7 @@ class _GroupPlaceholdersState extends ConsumerState<_GroupPlaceholders> {
                 ],
               ),
               Text(
-                'Cadastre só o nome pra já lançar despesas. Ao entrar pelo '
+                'Cadastre só o nome para já lançar despesas. Ao entrar pelo '
                 'convite, a pessoa escolhe o nome dela e fica com as despesas.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
@@ -1112,7 +1101,7 @@ Future<bool> showAddPlaceholderDialog(
           ),
           const SizedBox(height: 12),
           Text(
-              'Participa de todos os eventos do grupo. Pra alguém de um '
+              'Participa de todos os eventos do grupo. Para alguém de um '
               'evento só, use "Convidado temporário".',
               style: Theme.of(context).textTheme.bodySmall),
         ],

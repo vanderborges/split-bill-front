@@ -17,6 +17,11 @@ final expensesRepositoryProvider = Provider<ExpensesRepository>((ref) {
 final showOnlyMyExpensesProvider =
     StateProvider.autoDispose<bool>((ref) => true);
 
+/// Visão da tela de despesas: false = lista de despesas, true = saldo do
+/// evento (o mesmo conteúdo do Relatório). Volta para despesas ao reabrir.
+final showEventBalanceProvider =
+    StateProvider.autoDispose<bool>((ref) => false);
+
 final currentMonthExpensesProvider =
     FutureProvider<List<ExpenseModel>>((ref) async {
   final month = await ref.watch(currentMonthProvider.future);

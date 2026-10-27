@@ -58,7 +58,7 @@ class ProfilePage extends ConsumerWidget {
                   title: const Text('Nome'), subtitle: Text(user.fullName)),
               ListTile(
                   title: const Text('Apelido'), subtitle: Text(user.nickname)),
-              ListTile(title: const Text('Email'), subtitle: Text(user.email)),
+              ListTile(title: const Text('E-mail'), subtitle: Text(user.email)),
               ListTile(
                   title: const Text('Telefone'), subtitle: Text(user.phone)),
               ListTile(
@@ -288,7 +288,7 @@ Future<void> _showEditProfileDialog(
               TextField(
                 controller: emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
+                decoration: const InputDecoration(labelText: 'E-mail'),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -348,7 +348,7 @@ Future<void> _showEditProfileDialog(
 
   if (!isValidEmail(values[2])) {
     ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe um email valido.')));
+        const SnackBar(content: Text('Informe um e-mail válido.')));
     _disposeControllers([
       fullNameController,
       nicknameController,
@@ -411,7 +411,7 @@ Future<void> _showDeleteAccountDialog(
         children: [
           const Text(
             'Esta ação é permanente. Sua conta, seus dados de perfil e seu '
-            'acesso ao DividiAi serão excluídos e não podem ser recuperados. '
+            'acesso ao DividiAí serão excluídos e não podem ser recuperados. '
             'Despesas e grupos compartilhados com outras pessoas podem '
             'continuar visíveis para elas.',
           ),

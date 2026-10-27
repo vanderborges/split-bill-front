@@ -54,7 +54,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                       style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 6),
                   Text(
-                    'Depois do cadastro, crie seu proprio grupo ou entre em um pelo link de convite.',
+                    'Depois do cadastro, crie seu próprio grupo ou entre em um pelo link de convite.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 24),
@@ -79,7 +79,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     controller: emailController,
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(labelText: 'Email'),
+                    decoration: const InputDecoration(labelText: 'E-mail'),
                     validator: _email,
                   ),
                   const SizedBox(height: 12),
@@ -161,7 +161,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cadastro criado. Faca login para continuar.')),
+        const SnackBar(
+            content: Text('Cadastro criado. Faça login para continuar.')),
       );
       context.go('/login');
     } catch (error) {
@@ -171,7 +172,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content:
-                Text('Nao foi possivel cadastrar: ${_errorMessage(error)}')),
+                Text('Não foi possível cadastrar: ${_errorMessage(error)}')),
       );
     } finally {
       if (mounted) {
@@ -183,7 +184,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
 String? _required(String? value) {
   if (value == null || value.trim().isEmpty) {
-    return 'Campo obrigatorio';
+    return 'Campo obrigatório';
   }
   return null;
 }
@@ -194,7 +195,7 @@ String? _email(String? value) {
     return requiredMessage;
   }
   if (!isValidEmail(value!)) {
-    return 'Email invalido';
+    return 'E-mail inválido';
   }
   return null;
 }
@@ -216,7 +217,7 @@ String? _confirmPassword(String? value, String password) {
     return requiredMessage;
   }
   if (value != password) {
-    return 'As senhas nao conferem';
+    return 'As senhas não conferem';
   }
   return null;
 }

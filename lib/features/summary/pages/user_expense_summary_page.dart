@@ -59,7 +59,7 @@ class _UserExpenseSummaryPageState
           groupsAsync.when(
             data: (groups) {
               if (groups.isEmpty) {
-                return const Text('Voce nao participa de nenhum grupo.');
+                return const Text('Você não participa de nenhum grupo.');
               }
               if (groupId == null ||
                   groups.every((group) => group.id != groupId)) {

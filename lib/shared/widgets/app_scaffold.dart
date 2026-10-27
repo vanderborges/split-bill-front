@@ -144,7 +144,7 @@ class _WideScaffold extends ConsumerWidget {
           NavigationDrawerDestination(
             icon: Icon(Icons.bar_chart_outlined),
             selectedIcon: Icon(Icons.bar_chart),
-            label: Text('Relatorios'),
+            label: Text('Relatórios'),
           ),
           NavigationDrawerDestination(
             icon: Icon(Icons.list_alt_outlined),
@@ -155,7 +155,7 @@ class _WideScaffold extends ConsumerWidget {
             const NavigationDrawerDestination(
               icon: Icon(Icons.group_outlined),
               selectedIcon: Icon(Icons.group),
-              label: Text('Usuarios'),
+              label: Text('Usuários'),
             ),
           NavigationDrawerDestination(
             icon: Icon(Icons.person_outline),
