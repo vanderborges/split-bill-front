@@ -22,6 +22,12 @@ final showOnlyMyExpensesProvider =
 final showEventBalanceProvider =
     StateProvider.autoDispose<bool>((ref) => false);
 
+/// Rolou a lista de despesas/saldo pra baixo: esconde os controles do topo
+/// (Despesas/Saldo, filtro, Fechar evento), deixando só o seletor de
+/// evento. Rolar pra cima mostra de novo.
+final expensesHeaderCollapsedProvider =
+    StateProvider.autoDispose<bool>((ref) => false);
+
 final currentMonthExpensesProvider =
     FutureProvider<List<ExpenseModel>>((ref) async {
   final month = await ref.watch(currentMonthProvider.future);

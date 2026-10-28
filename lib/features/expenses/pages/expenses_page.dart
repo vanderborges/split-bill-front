@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -80,14 +81,20 @@ class _ExpensesView extends ConsumerWidget {
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final showOnlyMine = ref.watch(showOnlyMyExpensesProvider);
     final showBalance = ref.watch(showEventBalanceProvider);
+    final headerCollapsed = ref.watch(expensesHeaderCollapsedProvider);
 
     // Evento selecionado que não está aberto (aguardando pagamento ou
     // fechado) não aceita despesa — nem mostra o botão.
     final selectedEventClosedForExpenses =
         eventAsync.valueOrNull?.isOpen == false;
+    // Título = nome do grupo do evento selecionado.
+    final selectedEvent = eventAsync.valueOrNull;
+    final title = selectedEvent == null
+        ? 'Despesas'
+        : _groupName(groupsAsync.valueOrNull, selectedEvent.groupId);
 
     return AppScaffold(
-      title: 'Despesas',
+      title: title,
       floatingActionButton: selectedEventClosedForExpenses || showBalance
           ? null
           : AutoCollapsingFab(
@@ -152,154 +159,204 @@ class _ExpensesView extends ConsumerWidget {
                       style: Theme.of(context).textTheme.titleMedium),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(
-                          value: false,
-                          icon: Icon(Icons.receipt_long_outlined),
-                          label: Text('Despesas')),
-                      ButtonSegment(
-                          value: true,
-                          icon: Icon(Icons.account_balance_wallet_outlined),
-                          label: Text('Saldo')),
-                    ],
-                    selected: {showBalance},
-                    showSelectedIcon: false,
-                    onSelectionChanged: (selection) => ref
-                        .read(showEventBalanceProvider.notifier)
-                        .state = selection.first,
-                  ),
+              // Controles que somem ao rolar a lista pra baixo (fica só o
+              // seletor de evento) e voltam ao rolar pra cima.
+              ClipRect(
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  alignment: Alignment.topCenter,
+                  child: headerCollapsed
+                      ? const SizedBox(width: double.infinity)
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
+                                  AppSpacing.sm, AppSpacing.lg, 0),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: SegmentedButton<bool>(
+                                  segments: const [
+                                    ButtonSegment(
+                                        value: false,
+                                        icon: Icon(Icons.receipt_long_outlined),
+                                        label: Text('Despesas')),
+                                    ButtonSegment(
+                                        value: true,
+                                        icon: Icon(Icons
+                                            .account_balance_wallet_outlined),
+                                        label: Text('Saldo')),
+                                  ],
+                                  selected: {showBalance},
+                                  showSelectedIcon: false,
+                                  onSelectionChanged: (selection) => ref
+                                      .read(showEventBalanceProvider.notifier)
+                                      .state = selection.first,
+                                ),
+                              ),
+                            ),
+                            if (!showBalance)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.only(right: AppSpacing.lg),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: CheckboxListTile(
+                                        value: showOnlyMine,
+                                        onChanged: (value) => ref
+                                            .read(showOnlyMyExpensesProvider
+                                                .notifier)
+                                            .state = value ?? false,
+                                        controlAffinity:
+                                            ListTileControlAffinity.leading,
+                                        dense: true,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: AppSpacing.lg),
+                                        title: const Text(
+                                            'Mostrar só minhas despesas'),
+                                      ),
+                                    ),
+                                    // Mesmo "Fechar evento" do Saldo; só admin.
+                                    if (isGroupAdmin && event.isOpen)
+                                      FilledButton.tonal(
+                                        onPressed: () => confirmStartSettlement(
+                                            context,
+                                            ref,
+                                            event.groupId,
+                                            event.id),
+                                        child: const Text('Fechar evento'),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
                 ),
               ),
               // Saldo: o mesmo conteúdo do Relatório (ações do evento,
               // pagamento, compartilhar e os cards de saldo).
               if (showBalance)
                 Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(AppSpacing.lg),
-                    children: const [EventBalanceView()],
+                  child: NotificationListener<UserScrollNotification>(
+                    onNotification: (notification) =>
+                        _onUserScroll(ref, notification),
+                    child: ListView(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      children: const [EventBalanceView()],
+                    ),
                   ),
                 ),
               if (!showBalance)
-                CheckboxListTile(
-                  value: showOnlyMine,
-                  onChanged: (value) => ref
-                      .read(showOnlyMyExpensesProvider.notifier)
-                      .state = value ?? false,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  dense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                  title: const Text('Mostrar só minhas despesas'),
-                ),
-              if (!showBalance)
                 Expanded(
-                  child: expensesAsync.when(
-                    data: (expenses) {
-                      final visibleExpenses = showOnlyMine
-                          ? expenses
-                              .where((expense) =>
-                                  _isUserInvolved(expense, currentUser?.id))
-                              .toList()
-                          : expenses;
-                      if (visibleExpenses.isEmpty) {
-                        return EmptyState(
-                          icon: Icons.receipt_long_outlined,
-                          title: showOnlyMine
-                              ? 'Você não participa de nenhuma despesa deste evento.'
-                              : 'Nenhuma despesa cadastrada.',
-                          message: showOnlyMine
-                              ? 'Desmarque o filtro para ver as despesas de todo o grupo.'
-                              : 'Toque em "+" para registrar o primeiro gasto deste evento.',
-                        );
-                      }
-                      final sortedExpenses = [...visibleExpenses]
-                        ..sort((first, second) {
-                          final dateComparison =
-                              second.expenseDate.compareTo(first.expenseDate);
-                          if (dateComparison != 0) {
-                            return dateComparison;
-                          }
-                          return second.createdAt.compareTo(first.createdAt);
-                        });
-                      return ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
-                            AppSpacing.lg, AppSpacing.lg, fabClearance),
-                        itemCount: sortedExpenses.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final expense = sortedExpenses[index];
-                          final canChange = _canChangeExpense(
-                            expense,
-                            currentUser?.id,
-                            isGroupAdmin,
+                  child: NotificationListener<UserScrollNotification>(
+                    onNotification: (notification) =>
+                        _onUserScroll(ref, notification),
+                    child: expensesAsync.when(
+                      data: (expenses) {
+                        final visibleExpenses = showOnlyMine
+                            ? expenses
+                                .where((expense) =>
+                                    _isUserInvolved(expense, currentUser?.id))
+                                .toList()
+                            : expenses;
+                        if (visibleExpenses.isEmpty) {
+                          return EmptyState(
+                            icon: Icons.receipt_long_outlined,
+                            title: showOnlyMine
+                                ? 'Você não participa de nenhuma despesa deste evento.'
+                                : 'Nenhuma despesa cadastrada.',
+                            message: showOnlyMine
+                                ? 'Desmarque o filtro para ver as despesas de todo o grupo.'
+                                : 'Toque em "+" para registrar o primeiro gasto deste evento.',
                           );
-                          final shareSummary = _expenseShareSummary(expense);
-                          final installmentLabel = expense.installmentLabel;
-                          return ListTile(
-                            leading: SizedBox(
-                              width: 64,
-                              child: Text(
-                                _formatDateShort(expense.expenseDate),
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.visible,
-                                style: Theme.of(context).textTheme.bodySmall,
+                        }
+                        final sortedExpenses = [...visibleExpenses]
+                          ..sort((first, second) {
+                            final dateComparison =
+                                second.expenseDate.compareTo(first.expenseDate);
+                            if (dateComparison != 0) {
+                              return dateComparison;
+                            }
+                            return second.createdAt.compareTo(first.createdAt);
+                          });
+                        return ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
+                              AppSpacing.lg, AppSpacing.lg, fabClearance),
+                          itemCount: sortedExpenses.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final expense = sortedExpenses[index];
+                            final canChange = _canChangeExpense(
+                              expense,
+                              currentUser?.id,
+                              isGroupAdmin,
+                            );
+                            final shareSummary = _expenseShareSummary(expense);
+                            final installmentLabel = expense.installmentLabel;
+                            return ListTile(
+                              leading: SizedBox(
+                                width: 64,
+                                child: Text(
+                                  _formatDateShort(expense.expenseDate),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  overflow: TextOverflow.visible,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
                               ),
-                            ),
-                            onTap: () async {
-                              // Sempre abre o detalhe enxuto primeiro; o
-                              // formulário completo só vem pelo "Editar".
-                              final wantsEdit = await _openExpenseDetails(
-                                  context, expense,
-                                  canEdit: canChange && event.isOpen);
-                              if (!wantsEdit || !context.mounted) {
-                                return;
-                              }
-                              final users = await _loadEventUsers(
-                                  ref, event.groupId,
-                                  eventId: event.id,
-                                  keepUserIds: {
-                                    ...expense.participants.map(
-                                        (participant) => participant.userId),
-                                    ...expense.payers
-                                        .map((payer) => payer.userId),
-                                  });
-                              final categories = await _loadCategoryNames(ref);
-                              if (context.mounted) {
-                                await _openExpenseForm(
-                                    context, ref, event, users, categories,
-                                    expense: expense);
-                              }
-                            },
-                            title: Text(expense.description),
-                            subtitle: [shareSummary, installmentLabel]
-                                    .whereType<String>()
-                                    .isEmpty
-                                ? null
-                                : Text([shareSummary, installmentLabel]
-                                    .whereType<String>()
-                                    .join(' | ')),
-                            trailing: showOnlyMine
-                                ? _UserBalanceText(
-                                    _userBalance(expense, currentUser?.id))
-                                : MoneyText(expense.amount),
-                          );
-                        },
-                      );
-                    },
-                    loading: () => const LoadingState(),
-                    error: (error, _) => ErrorState(
-                      message: friendlyApiError(error,
-                          fallback: 'Não foi possível carregar as despesas.'),
-                      onRetry: () =>
-                          ref.invalidate(selectedEventExpensesProvider),
+                              onTap: () async {
+                                // Sempre abre o detalhe enxuto primeiro; o
+                                // formulário completo só vem pelo "Editar".
+                                final wantsEdit = await _openExpenseDetails(
+                                    context, expense,
+                                    canEdit: canChange && event.isOpen);
+                                if (!wantsEdit || !context.mounted) {
+                                  return;
+                                }
+                                final users = await _loadEventUsers(
+                                    ref, event.groupId,
+                                    eventId: event.id,
+                                    keepUserIds: {
+                                      ...expense.participants.map(
+                                          (participant) => participant.userId),
+                                      ...expense.payers
+                                          .map((payer) => payer.userId),
+                                    });
+                                final categories =
+                                    await _loadCategoryNames(ref);
+                                if (context.mounted) {
+                                  await _openExpenseForm(
+                                      context, ref, event, users, categories,
+                                      expense: expense);
+                                }
+                              },
+                              title: Text(expense.description),
+                              subtitle: [shareSummary, installmentLabel]
+                                      .whereType<String>()
+                                      .isEmpty
+                                  ? null
+                                  : Text([shareSummary, installmentLabel]
+                                      .whereType<String>()
+                                      .join(' | ')),
+                              trailing: showOnlyMine
+                                  ? _UserBalanceText(
+                                      _userBalance(expense, currentUser?.id))
+                                  : MoneyText(expense.amount),
+                            );
+                          },
+                        );
+                      },
+                      loading: () => const LoadingState(),
+                      error: (error, _) => ErrorState(
+                        message: friendlyApiError(error,
+                            fallback: 'Não foi possível carregar as despesas.'),
+                        onRetry: () =>
+                            ref.invalidate(selectedEventExpensesProvider),
+                      ),
                     ),
                   ),
                 ),
@@ -315,6 +372,23 @@ class _ExpensesView extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Rolar pra baixo esconde os controles do topo; pra cima (ou voltar ao
+/// início da lista) mostra de novo.
+bool _onUserScroll(WidgetRef ref, UserScrollNotification notification) {
+  if (notification.depth != 0) {
+    return false;
+  }
+  final collapsed = ref.read(expensesHeaderCollapsedProvider.notifier);
+  if (notification.direction == ScrollDirection.reverse &&
+      notification.metrics.pixels > 0) {
+    collapsed.state = true;
+  } else if (notification.direction == ScrollDirection.forward ||
+      notification.metrics.pixels <= 0) {
+    collapsed.state = false;
+  }
+  return false;
 }
 
 String _groupName(List<dynamic>? groups, String groupId) {
@@ -1100,6 +1174,7 @@ Future<void> _openExpenseForm(
                     const SizedBox(height: AppSpacing.lg),
                     TextField(
                       controller: descriptionController,
+                      maxLength: 80,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: const InputDecoration(labelText: 'Descrição'),
                     ),
@@ -1428,17 +1503,8 @@ Future<void> _openExpenseForm(
                       ),
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    if (selectedParticipants.isNotEmpty && splitByValue)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: dialogAmount == null
-                              ? null
-                              : () => setState(fillShareAmountsEqually),
-                          icon: const Icon(Icons.balance),
-                          label: const Text('Dividir igualmente'),
-                        ),
-                      ),
+                    // Sem o link "Dividir igualmente" aqui: o botão
+                    // "Igualmente" acima já faz isso (pedido do usuário).
                     if (selectedParticipants.isEmpty)
                       const Text('Selecione ao menos um participante.')
                     else
@@ -1585,6 +1651,7 @@ Future<void> _openExpenseForm(
                                   TextField(
                                     controller:
                                         shareDescriptionControllers[user.id],
+                                    maxLength: 160,
                                     textCapitalization:
                                         TextCapitalization.sentences,
                                     decoration: const InputDecoration(
@@ -1963,6 +2030,7 @@ Future<String?> _showCreateCategoryDialog(
         title: const Text('Novo tipo de despesa'),
         content: TextField(
           controller: controller,
+          maxLength: 40,
           textCapitalization: TextCapitalization.words,
           decoration: const InputDecoration(labelText: 'Nome'),
           autofocus: true,

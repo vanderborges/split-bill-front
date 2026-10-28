@@ -8,6 +8,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../features/auth/services/auth_repository.dart';
 import '../../features/notifications/services/notifications_repository.dart';
 import '../session_reset.dart';
+import 'glass.dart';
 import 'hide_fab_on_scroll.dart';
 import 'person_avatar.dart';
 
@@ -105,8 +106,10 @@ class _WideScaffold extends ConsumerWidget {
     final selectedIndex = routes.indexOf(currentPath);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
+      appBar: glassAppBar(
+        context,
+        title: title,
+        showDrawerButton: true,
         actions: [const _NotificationBell(), ...?actions],
       ),
       drawer: NavigationDrawer(
@@ -219,8 +222,10 @@ class _NarrowScaffold extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
+      // Barra superior e menu inferior em "liquid glass" (padrão WhatsApp).
+      appBar: glassAppBar(
+        context,
+        title: title,
         actions: [
           const _NotificationBell(),
           if (currentUser != null)
@@ -255,31 +260,31 @@ class _NarrowScaffold extends ConsumerWidget {
           ...?actions,
         ],
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: GlassNavBar(
         selectedIndex: _selectedIndex(currentPath),
-        onDestinationSelected: (index) {
+        onSelected: (index) {
           const paths = ['/', '/events', '/groups', '/summary'];
           context.go(paths[index]);
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+        items: const [
+          GlassNavItem(
+            icon: Icons.home_outlined,
+            selectedIcon: Icons.home,
             label: 'Início',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.event_outlined),
-            selectedIcon: Icon(Icons.event),
+          GlassNavItem(
+            icon: Icons.event_outlined,
+            selectedIcon: Icons.event,
             label: 'Eventos',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.groups_outlined),
-            selectedIcon: Icon(Icons.groups),
+          GlassNavItem(
+            icon: Icons.groups_outlined,
+            selectedIcon: Icons.groups,
             label: 'Grupos',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.list_alt_outlined),
-            selectedIcon: Icon(Icons.list_alt),
+          GlassNavItem(
+            icon: Icons.list_alt_outlined,
+            selectedIcon: Icons.list_alt,
             label: 'Extrato',
           ),
         ],

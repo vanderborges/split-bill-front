@@ -232,14 +232,15 @@ class _GroupMembers extends ConsumerWidget {
                                   }
                                 },
                               ),
-                            if (member.temporary)
+                            // Tornar integrante: só quem já criou conta.
+                            if (member.temporary && !member.placeholder)
                               IconButton(
                                 tooltip: 'Tornar integrante',
                                 icon: const Icon(Icons.how_to_reg_outlined),
                                 onPressed: () => _promoteTemporary(
                                     context, ref, group, member),
                               )
-                            else if (!member.placeholder)
+                            else if (!member.temporary && !member.placeholder)
                               IconButton(
                                 tooltip: 'Alterar perfil no grupo',
                                 icon:
@@ -416,6 +417,7 @@ Future<void> _showEditGroupDialog(
         children: [
           TextField(
               controller: nameController,
+              maxLength: 50,
               textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(labelText: 'Nome')),
           const SizedBox(height: 16),
@@ -482,6 +484,7 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
       title: const Text('Novo grupo'),
       content: TextField(
           controller: nameController,
+          maxLength: 50,
           autofocus: true,
           textCapitalization: TextCapitalization.sentences,
           decoration: const InputDecoration(labelText: 'Nome')),
@@ -660,7 +663,8 @@ class _GroupTemporaryMembersState
               Text(
                 'Cadastre só o nome para já lançar despesas. A pessoa sai da '
                 'lista quando todos os eventos com despesa dela forem '
-                'fechados. Para ficar no grupo, torne-a integrante.',
+                'fechados. Depois que ela criar conta pelo convite, dá para '
+                'torná-la integrante do grupo.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               if (snapshot.connectionState != ConnectionState.done)
@@ -697,16 +701,17 @@ class _GroupTemporaryMembersState
                               }
                             },
                           ),
-                        IconButton(
-                          tooltip: 'Tornar integrante',
-                          icon: const Icon(Icons.how_to_reg_outlined),
-                          onPressed: () async {
-                            if (await _promoteTemporary(
-                                context, ref, widget.group, member)) {
-                              _reload();
-                            }
-                          },
-                        ),
+                        if (!member.placeholder)
+                          IconButton(
+                            tooltip: 'Tornar integrante',
+                            icon: const Icon(Icons.how_to_reg_outlined),
+                            onPressed: () async {
+                              if (await _promoteTemporary(
+                                  context, ref, widget.group, member)) {
+                                _reload();
+                              }
+                            },
+                          ),
                         if (member.temporaryEventId != null)
                           IconButton(
                             tooltip: 'Incluir em outro evento',
@@ -864,6 +869,7 @@ Future<bool> showTemporaryGuestDialog(
         children: [
           TextField(
             controller: nameController,
+            maxLength: 40,
             autofocus: true,
             textCapitalization: TextCapitalization.words,
             decoration: const InputDecoration(labelText: 'Nome'),
@@ -1012,6 +1018,7 @@ Future<bool> _renamePlaceholder(BuildContext context, WidgetRef ref,
       title: const Text('Renomear'),
       content: TextField(
         controller: controller,
+        maxLength: 40,
         autofocus: true,
         textCapitalization: TextCapitalization.words,
         decoration: const InputDecoration(labelText: 'Nome'),

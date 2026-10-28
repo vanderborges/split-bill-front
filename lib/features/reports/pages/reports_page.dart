@@ -152,7 +152,7 @@ class EventBalanceView extends ConsumerWidget {
                     FilledButton(
                       onPressed: report.eventId == null
                           ? null
-                          : () => _confirmStartSettlement(
+                          : () => confirmStartSettlement(
                               context, ref, report.groupId, report.eventId!),
                       child: const Text('Fechar evento'),
                     ),
@@ -821,7 +821,9 @@ bool _hasPendingSettlement(
       settlement.normalizedStatus == 'INFORMED');
 }
 
-Future<void> _confirmStartSettlement(
+/// "Fechar evento" (admin): escolhe quem recebe e abre o evento para
+/// pagamento. Usado no Saldo/Relatório e na lista de Despesas.
+Future<void> confirmStartSettlement(
     BuildContext context, WidgetRef ref, String groupId, String eventId) async {
   String? receiverUserId;
   final confirmed = await showDialog<bool>(
@@ -1010,7 +1012,6 @@ String _groupName(List<dynamic>? groups, String groupId) {
   }
   return 'Grupo';
 }
-
 
 /// Botão "Pagar": mostra o mesmo texto da notificação de cobrança, com a
 /// chave PIX pra copiar. "Confirmar pagamento" deixa o acerto como

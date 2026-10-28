@@ -60,6 +60,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   const SizedBox(height: 24),
                   TextFormField(
                     controller: fullNameController,
+                    maxLength: 80,
                     textInputAction: TextInputAction.next,
                     textCapitalization: TextCapitalization.words,
                     decoration:
@@ -69,6 +70,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: nicknameController,
+                    maxLength: 30,
                     textInputAction: TextInputAction.next,
                     textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(labelText: 'Apelido'),
@@ -77,6 +79,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: emailController,
+                    maxLength: 120,
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(labelText: 'E-mail'),
@@ -85,6 +88,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: phoneController,
+                    maxLength: 20,
                     keyboardType: TextInputType.phone,
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(labelText: 'Telefone'),
@@ -93,6 +97,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: pixKeyController,
+                    maxLength: 120,
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(labelText: 'Chave PIX'),
                     validator: _required,
@@ -100,6 +105,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: passwordController,
+                    maxLength: 64,
                     obscureText: true,
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(labelText: 'Senha'),
@@ -108,6 +114,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: confirmPasswordController,
+                    maxLength: 64,
                     obscureText: true,
                     textInputAction: TextInputAction.done,
                     decoration:

@@ -5,7 +5,7 @@ import '../models/event_model.dart';
 
 /// Seletor de evento de Despesas/Relatório: na lista aberta cada item mostra
 /// "evento | grupo" com a pílula de status à direita; o item selecionado
-/// mostra só o nome do evento.
+/// mostra o nome do evento com a pílula.
 class EventPickerField extends StatelessWidget {
   const EventPickerField({
     super.key,
@@ -26,11 +26,17 @@ class EventPickerField extends StatelessWidget {
       initialValue: selectedId,
       isExpanded: true,
       decoration: const InputDecoration(labelText: 'Evento'),
+      // Selecionado: só o nome do evento + a pílula de status.
       selectedItemBuilder: (context) => events
-          .map((event) => Align(
-                alignment: Alignment.centerLeft,
-                child: Text(event.name,
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+          .map((event) => Row(
+                children: [
+                  Expanded(
+                    child: Text(event.name,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: 8),
+                  EventStatusBadge(event.status),
+                ],
               ))
           .toList(),
       items: events

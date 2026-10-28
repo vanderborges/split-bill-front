@@ -143,12 +143,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 const SizedBox(height: 24),
                 TextField(
                   controller: emailController,
+                  maxLength: 120,
                   keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(labelText: 'E-mail'),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: passwordController,
+                  maxLength: 64,
                   obscureText: !showPassword,
                   decoration: InputDecoration(
                     labelText: 'Senha',

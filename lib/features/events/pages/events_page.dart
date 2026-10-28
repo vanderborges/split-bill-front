@@ -432,6 +432,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                     const SizedBox(height: AppSpacing.md),
                     TextField(
                       controller: nameController,
+                      maxLength: 50,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
                         labelText: 'Nome',

@@ -195,6 +195,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
                   children: [
                     TextField(
                       controller: fullNameController,
+                      maxLength: 80,
                       textCapitalization: TextCapitalization.words,
                       decoration:
                           const InputDecoration(labelText: 'Nome completo'),
@@ -202,24 +203,28 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
                     const SizedBox(height: 12),
                     TextField(
                       controller: nicknameController,
+                      maxLength: 30,
                       textCapitalization: TextCapitalization.words,
                       decoration: const InputDecoration(labelText: 'Apelido'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: emailController,
+                      maxLength: 120,
                       keyboardType: TextInputType.emailAddress,
                       decoration: const InputDecoration(labelText: 'E-mail'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: phoneController,
+                      maxLength: 20,
                       keyboardType: TextInputType.phone,
                       decoration: const InputDecoration(labelText: 'Telefone'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: pixKeyController,
+                      maxLength: 120,
                       decoration: const InputDecoration(labelText: 'Chave PIX'),
                     ),
                     const SizedBox(height: 12),
@@ -242,6 +247,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
                       const SizedBox(height: 12),
                       TextField(
                         controller: passwordController,
+                        maxLength: 64,
                         obscureText: true,
                         decoration: const InputDecoration(labelText: 'Senha'),
                       ),
@@ -402,6 +408,7 @@ Future<void> _showResetPasswordDialog(
       title: Text('Reiniciar senha de ${user.fullName}'),
       content: TextField(
         controller: passwordController,
+        maxLength: 64,
         obscureText: true,
         decoration: const InputDecoration(labelText: 'Nova senha'),
       ),

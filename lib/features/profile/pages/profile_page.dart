@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/theme_mode_provider.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/session_reset.dart';
 import '../../../shared/validators.dart';
@@ -64,6 +65,8 @@ class ProfilePage extends ConsumerWidget {
                   title: const Text('Telefone'), subtitle: Text(user.phone)),
               ListTile(
                   title: const Text('Chave PIX'), subtitle: Text(user.pixKey)),
+              const SizedBox(height: AppSpacing.md),
+              const _ThemeModeSelector(),
               const SizedBox(height: AppSpacing.lg),
               FilledButton.icon(
                 onPressed: () => _showEditProfileDialog(context, ref, user),
@@ -119,6 +122,50 @@ class ProfilePage extends ConsumerWidget {
           onRetry: () => ref.invalidate(currentUserProvider),
         ),
       ),
+    );
+  }
+}
+
+/// Modo da tela: claro, escuro ou o padrão do sistema do aparelho.
+class _ThemeModeSelector extends ConsumerWidget {
+  const _ThemeModeSelector();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          child: Text('Modo da tela',
+              style: Theme.of(context).textTheme.titleSmall),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<ThemeMode>(
+            segments: const [
+              ButtonSegment(
+                  value: ThemeMode.light,
+                  icon: Icon(Icons.light_mode_outlined),
+                  label: Text('Claro')),
+              ButtonSegment(
+                  value: ThemeMode.dark,
+                  icon: Icon(Icons.dark_mode_outlined),
+                  label: Text('Escuro')),
+              ButtonSegment(
+                  value: ThemeMode.system,
+                  icon: Icon(Icons.brightness_auto_outlined),
+                  label: Text('Sistema')),
+            ],
+            selected: {mode},
+            showSelectedIcon: false,
+            onSelectionChanged: (selection) =>
+                ref.read(themeModeProvider.notifier).set(selection.first),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -214,11 +261,13 @@ Future<void> _showChangePasswordDialog(
         children: [
           TextField(
               controller: currentPasswordController,
+              maxLength: 64,
               obscureText: true,
               decoration: const InputDecoration(labelText: 'Senha atual')),
           const SizedBox(height: 12),
           TextField(
               controller: newPasswordController,
+              maxLength: 64,
               obscureText: true,
               decoration: const InputDecoration(labelText: 'Nova senha')),
           const SizedBox(height: 12),
@@ -304,29 +353,34 @@ Future<void> _showEditProfileDialog(
             children: [
               TextField(
                   controller: fullNameController,
+                  maxLength: 80,
                   textCapitalization: TextCapitalization.words,
                   decoration:
                       const InputDecoration(labelText: 'Nome completo')),
               const SizedBox(height: 12),
               TextField(
                   controller: nicknameController,
+                  maxLength: 30,
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(labelText: 'Apelido')),
               const SizedBox(height: 12),
               TextField(
                 controller: emailController,
+                maxLength: 120,
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(labelText: 'E-mail'),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: phoneController,
+                maxLength: 20,
                 keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(labelText: 'Telefone'),
               ),
               const SizedBox(height: 12),
               TextField(
                   controller: pixKeyController,
+                  maxLength: 120,
                   decoration: const InputDecoration(labelText: 'Chave PIX')),
             ],
           ),
