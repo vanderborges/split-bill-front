@@ -26,12 +26,12 @@ class EventPickerField extends StatelessWidget {
       initialValue: selectedId,
       isExpanded: true,
       decoration: const InputDecoration(labelText: 'Evento'),
-      // Selecionado: só o nome do evento + a pílula de status.
+      // Selecionado: "Evento | Grupo" + a pílula de status.
       selectedItemBuilder: (context) => events
           .map((event) => Row(
                 children: [
                   Expanded(
-                    child: Text(event.name,
+                    child: Text('${event.name} | ${groupNameOf(event.groupId)}',
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
                   const SizedBox(width: 8),
