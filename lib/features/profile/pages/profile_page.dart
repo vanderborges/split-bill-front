@@ -14,7 +14,6 @@ import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
 import '../../../shared/widgets/person_avatar.dart';
 import '../../auth/services/auth_repository.dart';
-import '../../notifications/services/push_service.dart';
 import '../../users/models/user_model.dart';
 import '../../users/services/users_repository.dart';
 
@@ -90,10 +89,6 @@ class ProfilePage extends ConsumerWidget {
                   icon: const Icon(Icons.group_outlined),
                   label: const Text('Usuários'),
                 ),
-              ],
-              if (pushSupported) ...[
-                const SizedBox(height: AppSpacing.md),
-                const _PushStatusTile(),
               ],
               const SizedBox(height: AppSpacing.md),
               OutlinedButton.icon(
@@ -193,49 +188,6 @@ class _AppVersionText extends ConsumerWidget {
       'Versão $version',
       textAlign: TextAlign.center,
       style: Theme.of(context).textTheme.bodySmall,
-    );
-  }
-}
-
-/// Situação do push neste aparelho + botão pra registrar de novo. Mostra
-/// o erro real quando o registro falha (antes era silencioso).
-class _PushStatusTile extends ConsumerStatefulWidget {
-  const _PushStatusTile();
-
-  @override
-  ConsumerState<_PushStatusTile> createState() => _PushStatusTileState();
-}
-
-class _PushStatusTileState extends ConsumerState<_PushStatusTile> {
-  bool _busy = false;
-
-  Future<void> _register() async {
-    setState(() => _busy = true);
-    await ref.read(pushServiceProvider).registerDevice();
-    if (mounted) {
-      setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final status = ref.watch(pushStatusProvider);
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.notifications_active_outlined),
-        title: const Text('Notificações no celular'),
-        subtitle: Text(status ?? 'Ainda não verificado.'),
-        trailing: _busy
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : TextButton(
-                onPressed: _register,
-                child: const Text('Ativar'),
-              ),
-      ),
     );
   }
 }

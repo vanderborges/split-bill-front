@@ -21,10 +21,6 @@ final pendingPushRouteProvider = StateProvider<String?>((ref) => null);
 
 final pushServiceProvider = Provider<PushService>((ref) => PushService(ref));
 
-/// Resultado da última tentativa de registrar este aparelho, mostrado no
-/// Perfil: sem isso, uma falha no registro ficava invisível.
-final pushStatusProvider = StateProvider<String?>((ref) => null);
-
 /// Liga o Firebase antes do runApp. Falha aqui nunca impede o app de abrir.
 Future<void> initializePush() async {
   final options = DefaultFirebaseOptions.currentPlatform;
@@ -58,12 +54,10 @@ class PushService {
       defaultTargetPlatform == TargetPlatform.iOS ? 'IOS' : 'ANDROID';
 
   /// Chamado com o usuário logado: pede permissão (só pergunta na 1ª vez)
-  /// e manda o token deste aparelho pro backend. Devolve (e guarda em
-  /// [pushStatusProvider]) o que aconteceu, pro Perfil mostrar.
-  Future<String> registerDevice() async {
-    final status = await _register();
-    ref.read(pushStatusProvider.notifier).state = status;
-    return status;
+  /// e manda o token deste aparelho pro backend. O resultado vai só pro
+  /// log de debug (o cartão de diagnóstico do Perfil saiu em 28/10/2026).
+  Future<void> registerDevice() async {
+    debugPrint('Push: ${await _register()}');
   }
 
   Future<String> _register() async {
