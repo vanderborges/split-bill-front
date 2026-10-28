@@ -1,7 +1,7 @@
 name: split_bill_front
 description: App para gestao de despesas compartilhadas.
 publish_to: "none"
-version: 1.0.0+40
+version: 1.0.0+41
 environment:
   sdk: ">=3.4.0 <4.0.0"
 
@@ -23,7 +23,6 @@ dependencies:
   firebase_core: ^5.1.0
   firebase_messaging: ^17.0.1
   package_info_plus: ^9.0.1
-  video_player: ^2.14.1
 
 dev_dependencies:
   flutter_test:
@@ -36,7 +35,6 @@ flutter:
   assets:
     - assets/icon/app_icon.png
     - assets/images/bom_dia.webp
-    - assets/videos/dividiai.mp4
 
 flutter_launcher_icons:
   android: true

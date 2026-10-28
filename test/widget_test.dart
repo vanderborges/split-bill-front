@@ -9,13 +9,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:split_bill_front/main.dart';
-import 'package:split_bill_front/shared/widgets/splash_video.dart';
+import 'package:split_bill_front/shared/widgets/splash_loading.dart';
 
 void main() {
   testWidgets('App builds', (WidgetTester tester) async {
     await tester.pumpWidget(const ProviderScope(child: DividiAiApp()));
 
-    // A abertura é o vídeo do DividiAí.
-    expect(find.byType(SplashVideo), findsOneWidget);
+    // A abertura é a animação do DividiAí.
+    expect(find.byType(SplashLoading), findsOneWidget);
   });
 }
