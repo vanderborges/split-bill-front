@@ -44,8 +44,8 @@ class GlassSurface extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  scheme.surface.withValues(alpha: dark ? 0.55 : 0.80),
-                  scheme.surface.withValues(alpha: dark ? 0.40 : 0.62),
+                  scheme.surface.withValues(alpha: dark ? 0.42 : 0.55),
+                  scheme.surface.withValues(alpha: dark ? 0.30 : 0.40),
                 ],
               ),
               border: Border.all(
@@ -60,6 +60,12 @@ class GlassSurface extends StatelessWidget {
     );
   }
 }
+
+/// Espaço extra no fim das listas pra o último item não ficar escondido
+/// atrás da pílula do menu inferior (o conteúdo rola por trás dela).
+/// No layout largo, sem barra inferior, é 0.
+double bottomBarInset(BuildContext context) =>
+    MediaQuery.paddingOf(context).bottom;
 
 /// Item da barra de navegação em pílula.
 class GlassNavItem {

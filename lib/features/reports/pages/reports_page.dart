@@ -9,6 +9,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/ptbr_sort.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
@@ -47,7 +48,7 @@ class ReportsPage extends ConsumerWidget {
       // vazio, e quem não tinha nada cadastrado não via nem a lista de
       // grupos pra navegar.
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomBarInset(context)),
         children: [
           groupsAsync.when(
             data: (groups) => DropdownButtonFormField<String?>(
@@ -684,8 +685,7 @@ int _statusOrder(EventSettlementModel? settlement) {
 /// UX) pelo share sheet nativo — WhatsApp é uma das opções, não a única.
 /// Separa "A pagar" e "A receber", com os pendentes primeiro (mesma ordem
 /// da tela). Quando o grupo tem recebedor eleito, o texto diz pra quem
-/// pagar e o PIX dele; sem recebedor, vai o PIX de cada credor em "A
-/// receber".
+/// pagar e o PIX dele. A lista de pessoas não leva chave PIX.
 void _shareReport(
   MonthlyReportModel report,
   List<EventSettlementModel> settlements,
@@ -716,8 +716,7 @@ void _shareReport(
     ..writeln()
     ..writeln('Total de despesas: ${formatCurrencyBRL(report.totalExpenses)}');
 
-  void writeSection(String header, List<MonthlyBalanceModel> balances,
-      {bool withPix = false}) {
+  void writeSection(String header, List<MonthlyBalanceModel> balances) {
     if (balances.isEmpty) {
       return;
     }
@@ -735,17 +734,14 @@ void _shareReport(
           : isPending
               ? ' (pendente)'
               : ' (pago)';
-      // Sem recebedor escolhido, cada credor recebe direto: vai o PIX dele.
-      final pix =
-          withPix && balance.pixKey != null ? ' — PIX: ${balance.pixKey}' : '';
       buffer.writeln(
-          '• ${balance.nickname}: ${formatCurrencyBRL(balance.balance.abs())}$statusSuffix$pix');
+          '• ${balance.nickname}: ${formatCurrencyBRL(balance.balance.abs())}$statusSuffix');
     }
   }
 
   final hasReceiver = receiverNickname != null && receiverNickname.isNotEmpty;
   writeSection('A pagar:', debtors);
-  writeSection('A receber:', creditors, withPix: !hasReceiver);
+  writeSection('A receber:', creditors);
 
   buffer.writeln();
   if (hasReceiver) {

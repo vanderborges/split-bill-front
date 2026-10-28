@@ -209,12 +209,16 @@ class _NarrowScaffold extends ConsumerWidget {
       '/events' || '/expenses' => 1,
       '/groups' => 2,
       '/summary' => 3,
+      // Perfil não é aba da barra: nenhuma fica marcada.
+      '/profile' => -1,
       _ => null,
     };
     if (index == null) {
       return _lastIndex;
     }
-    _lastIndex = index;
+    if (index >= 0) {
+      _lastIndex = index;
+    }
     return index;
   }
 
@@ -289,8 +293,11 @@ class _NarrowScaffold extends ConsumerWidget {
           ),
         ],
       ),
+      // O conteúdo rola por trás da pílula do menu (vidro desfocado); as
+      // listas somam bottomBarInset no fim pra o último item aparecer.
+      extendBody: true,
       floatingActionButton: floatingActionButton,
-      body: SafeArea(child: child),
+      body: SafeArea(bottom: false, child: child),
     );
   }
 }

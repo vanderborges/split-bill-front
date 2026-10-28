@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
@@ -142,7 +143,8 @@ class EventsPage extends ConsumerWidget {
                     group.id: group,
                 };
                 return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, fabClearance),
+                  padding: EdgeInsets.fromLTRB(
+                      16, 16, 16, fabClearance + bottomBarInset(context)),
                   itemCount: events.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {

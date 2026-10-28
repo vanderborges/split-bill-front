@@ -5,6 +5,7 @@ import '../../auth/services/auth_repository.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/validators.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
@@ -44,7 +45,8 @@ class UsersPage extends ConsumerWidget {
             );
           }
           return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, fabClearance),
+            padding: EdgeInsets.fromLTRB(
+                16, 16, 16, fabClearance + bottomBarInset(context)),
             itemCount: users.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, index) {

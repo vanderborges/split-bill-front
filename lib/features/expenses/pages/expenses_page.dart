@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +10,7 @@ import '../../../shared/ptbr_sort.dart';
 import '../../../shared/widgets/amount_field.dart';
 import '../../../shared/widgets/keyboard_done_bar.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
@@ -163,7 +163,7 @@ class _ExpensesView extends ConsumerWidget {
               // seletor de evento) e voltam ao rolar pra cima.
               ClipRect(
                 child: AnimatedSize(
-                  duration: const Duration(milliseconds: 200),
+                  duration: const Duration(milliseconds: 120),
                   curve: Curves.easeOut,
                   alignment: Alignment.topCenter,
                   child: headerCollapsed
@@ -219,16 +219,6 @@ class _ExpensesView extends ConsumerWidget {
                                             'Mostrar só minhas despesas'),
                                       ),
                                     ),
-                                    // Mesmo "Fechar evento" do Saldo; só admin.
-                                    if (isGroupAdmin && event.isOpen)
-                                      FilledButton.tonal(
-                                        onPressed: () => confirmStartSettlement(
-                                            context,
-                                            ref,
-                                            event.groupId,
-                                            event.id),
-                                        child: const Text('Fechar evento'),
-                                      ),
                                   ],
                                 ),
                               ),
@@ -240,18 +230,22 @@ class _ExpensesView extends ConsumerWidget {
               // pagamento, compartilhar e os cards de saldo).
               if (showBalance)
                 Expanded(
-                  child: NotificationListener<UserScrollNotification>(
+                  child: NotificationListener<ScrollUpdateNotification>(
                     onNotification: (notification) =>
                         _onUserScroll(ref, notification),
                     child: ListView(
-                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      padding: EdgeInsets.fromLTRB(
+                          AppSpacing.lg,
+                          AppSpacing.lg,
+                          AppSpacing.lg,
+                          AppSpacing.lg + bottomBarInset(context)),
                       children: const [EventBalanceView()],
                     ),
                   ),
                 ),
               if (!showBalance)
                 Expanded(
-                  child: NotificationListener<UserScrollNotification>(
+                  child: NotificationListener<ScrollUpdateNotification>(
                     onNotification: (notification) =>
                         _onUserScroll(ref, notification),
                     child: expensesAsync.when(
@@ -283,8 +277,11 @@ class _ExpensesView extends ConsumerWidget {
                             return second.createdAt.compareTo(first.createdAt);
                           });
                         return ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
-                              AppSpacing.lg, AppSpacing.lg, fabClearance),
+                          padding: EdgeInsets.fromLTRB(
+                              AppSpacing.lg,
+                              AppSpacing.lg,
+                              AppSpacing.lg,
+                              fabClearance + bottomBarInset(context)),
                           itemCount: sortedExpenses.length,
                           separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (context, index) {
@@ -375,17 +372,20 @@ class _ExpensesView extends ConsumerWidget {
 }
 
 /// Rolar pra baixo esconde os controles do topo; pra cima (ou voltar ao
-/// início da lista) mostra de novo.
-bool _onUserScroll(WidgetRef ref, UserScrollNotification notification) {
-  if (notification.depth != 0) {
+/// início da lista) mostra de novo. Reage a cada movimento do dedo
+/// (ScrollUpdateNotification) em vez de esperar a troca de direção, pra
+/// os campos sumirem junto com a lista.
+bool _onUserScroll(WidgetRef ref, ScrollUpdateNotification notification) {
+  final delta = notification.scrollDelta ?? 0;
+  if (notification.depth != 0 || notification.dragDetails == null) {
     return false;
   }
   final collapsed = ref.read(expensesHeaderCollapsedProvider.notifier);
-  if (notification.direction == ScrollDirection.reverse &&
-      notification.metrics.pixels > 0) {
+  if (notification.metrics.pixels <= 0) {
+    collapsed.state = false;
+  } else if (delta > 2) {
     collapsed.state = true;
-  } else if (notification.direction == ScrollDirection.forward ||
-      notification.metrics.pixels <= 0) {
+  } else if (delta < -2) {
     collapsed.state = false;
   }
   return false;

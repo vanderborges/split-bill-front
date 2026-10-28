@@ -9,6 +9,7 @@ import '../../../shared/api_error.dart';
 import '../../../shared/session_reset.dart';
 import '../../../shared/validators.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
 import '../../../shared/widgets/person_avatar.dart';
@@ -35,7 +36,8 @@ class ProfilePage extends ConsumerWidget {
             );
           }
           return ListView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
+            padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg,
+                AppSpacing.lg, AppSpacing.lg + bottomBarInset(context)),
             children: [
               Row(
                 children: [

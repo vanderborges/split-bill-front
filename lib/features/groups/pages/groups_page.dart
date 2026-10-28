@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/environment.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
@@ -34,7 +35,8 @@ class GroupsPage extends ConsumerWidget {
         onPressed: () => _showCreateGroupDialog(context, ref),
       ),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, fabClearance),
+        padding: EdgeInsets.fromLTRB(
+            16, 16, 16, fabClearance + bottomBarInset(context)),
         children: [
           groupsAsync.when(
             data: (groups) {
