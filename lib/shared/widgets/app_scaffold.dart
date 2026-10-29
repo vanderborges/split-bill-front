@@ -25,6 +25,7 @@ class AppScaffold extends ConsumerWidget {
     this.floatingActionButton,
     this.actions,
     this.onBack,
+    this.showBottomBar = true,
   });
 
   final String title;
@@ -36,6 +37,9 @@ class AppScaffold extends ConsumerWidget {
   // menu padrão — usado por telas que precisam de um botão próprio (ex.:
   // "Limpar notificações").
   final List<Widget>? actions;
+  // false: sem a barra de menus no celular (ex.: Perfil, que tem seta de
+  // voltar).
+  final bool showBottomBar;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -64,6 +68,7 @@ class AppScaffold extends ConsumerWidget {
               floatingActionButton: fab,
               actions: actions,
               onBack: onBack,
+              showBottomBar: showBottomBar,
               child: body,
             ),
     );
@@ -110,7 +115,9 @@ class _WideScaffold extends ConsumerWidget {
       if (showUsers) '/users',
       '/profile',
     ];
-    final selectedIndex = routes.indexOf(currentPath);
+    // Participantes de um grupo (/groups/{id}) marcam Grupos.
+    final selectedIndex = routes
+        .indexOf(currentPath.startsWith('/groups/') ? '/groups' : currentPath);
 
     return Scaffold(
       appBar: glassAppBar(
@@ -196,6 +203,7 @@ class _NarrowScaffold extends ConsumerWidget {
     required this.floatingActionButton,
     required this.actions,
     required this.onBack,
+    required this.showBottomBar,
     required this.child,
   });
 
@@ -205,6 +213,7 @@ class _NarrowScaffold extends ConsumerWidget {
   final Widget? floatingActionButton;
   final List<Widget>? actions;
   final VoidCallback? onBack;
+  final bool showBottomBar;
   final Widget child;
 
   // Última aba da barra inferior que estava selecionada. Telas fora da
@@ -214,6 +223,9 @@ class _NarrowScaffold extends ConsumerWidget {
   static int _lastIndex = 0;
 
   int _selectedIndex(String path) {
+    if (path.startsWith('/groups/')) {
+      path = '/groups';
+    }
     final index = switch (path) {
       '/' => 0,
       '/groups' => 1,
@@ -275,38 +287,40 @@ class _NarrowScaffold extends ConsumerWidget {
           ...?actions,
         ],
       ),
-      bottomNavigationBar: GlassNavBar(
-        selectedIndex: _selectedIndex(currentPath),
-        onSelected: (index) {
-          const paths = ['/', '/groups', '/events', '/summary'];
-          context.go(paths[index]);
-        },
-        items: const [
-          GlassNavItem(
-            icon: Icons.home_outlined,
-            selectedIcon: Icons.home,
-            label: 'Início',
-          ),
-          GlassNavItem(
-            icon: Icons.groups_outlined,
-            selectedIcon: Icons.groups,
-            label: 'Grupos',
-          ),
-          GlassNavItem(
-            icon: Icons.event_outlined,
-            selectedIcon: Icons.event,
-            label: 'Eventos',
-          ),
-          GlassNavItem(
-            icon: Icons.list_alt_outlined,
-            selectedIcon: Icons.list_alt,
-            label: 'Extrato',
-          ),
-        ],
-      ),
+      bottomNavigationBar: !showBottomBar
+          ? null
+          : GlassNavBar(
+              selectedIndex: _selectedIndex(currentPath),
+              onSelected: (index) {
+                const paths = ['/', '/groups', '/events', '/summary'];
+                context.go(paths[index]);
+              },
+              items: const [
+                GlassNavItem(
+                  icon: Icons.home_outlined,
+                  selectedIcon: Icons.home,
+                  label: 'Início',
+                ),
+                GlassNavItem(
+                  icon: Icons.groups_outlined,
+                  selectedIcon: Icons.groups,
+                  label: 'Grupos',
+                ),
+                GlassNavItem(
+                  icon: Icons.event_outlined,
+                  selectedIcon: Icons.event,
+                  label: 'Eventos',
+                ),
+                GlassNavItem(
+                  icon: Icons.list_alt_outlined,
+                  selectedIcon: Icons.list_alt,
+                  label: 'Extrato',
+                ),
+              ],
+            ),
       // O conteúdo rola por trás da pílula do menu (vidro desfocado); as
       // listas somam bottomBarInset no fim pra o último item aparecer.
-      extendBody: true,
+      extendBody: showBottomBar,
       floatingActionButton: floatingActionButton,
       body: SafeArea(bottom: false, child: child),
     );

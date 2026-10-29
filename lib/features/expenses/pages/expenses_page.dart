@@ -25,6 +25,7 @@ import '../../events/services/new_event_intent.dart';
 import '../../events/widgets/event_picker_field.dart';
 import '../../groups/models/group_model.dart';
 import '../../groups/services/groups_repository.dart';
+import '../../groups/services/create_group_intent.dart';
 import '../../reports/pages/reports_page.dart';
 import '../../reports/services/reports_repository.dart';
 import '../../users/models/user_option_model.dart';
@@ -595,6 +596,12 @@ Future<void> openNewExpenseFlow(
     return;
   }
   final groups = await ref.read(groupsProvider.future);
+  if (groups.isEmpty) {
+    if (context.mounted) {
+      await showCreateGroupFirstDialog(context, ref);
+    }
+    return;
+  }
   final groupIds = groups.map((group) => group.id).toSet();
   final openEvents = (await ref.read(eventsRepositoryProvider).list())
       .where((item) => item.isOpen && groupIds.contains(item.groupId))
@@ -704,6 +711,7 @@ Future<({EventModel? event, bool createEvent})?> _pickExpenseDestination(
                 DropdownButtonFormField<String>(
                   dropdownColor: glassMenuColor(context),
                   borderRadius: glassMenuRadius,
+                  menuMaxHeight: glassMenuMaxHeight,
                   initialValue: groupId,
                   decoration: const InputDecoration(labelText: 'Grupo'),
                   items: groups
@@ -737,6 +745,7 @@ Future<({EventModel? event, bool createEvent})?> _pickExpenseDestination(
                   DropdownButtonFormField<String>(
                     dropdownColor: glassMenuColor(context),
                     borderRadius: glassMenuRadius,
+                    menuMaxHeight: glassMenuMaxHeight,
                     key: ValueKey('picker-event-$groupId'),
                     initialValue: eventId,
                     decoration: const InputDecoration(labelText: 'Evento'),
@@ -902,6 +911,8 @@ Future<void> _openExpenseForm(
   var installments = 1;
   var showInstallments = false;
   var isSubscription = false;
+  // "Avisar participantes" (só em despesa nova): já vem marcado.
+  var notifyParticipants = true;
   var isSaving = false;
 
   void disposeControllers() {
@@ -1110,6 +1121,7 @@ Future<void> _openExpenseForm(
                       payerAmounts: payerAmounts,
                       installments: installmentsToSave,
                       subscription: isSubscription,
+                      notifyParticipants: notifyParticipants,
                     );
               } else {
                 await ref.read(expensesRepositoryProvider).update(
@@ -1211,6 +1223,7 @@ Future<void> _openExpenseForm(
                     DropdownButtonFormField<String>(
                       dropdownColor: glassMenuColor(context),
                       borderRadius: glassMenuRadius,
+                      menuMaxHeight: glassMenuMaxHeight,
                       initialValue: selectedCategory,
                       decoration:
                           const InputDecoration(labelText: 'Tipo de despesa'),
@@ -1252,6 +1265,7 @@ Future<void> _openExpenseForm(
                       DropdownButtonFormField<String>(
                         dropdownColor: glassMenuColor(context),
                         borderRadius: glassMenuRadius,
+                        menuMaxHeight: glassMenuMaxHeight,
                         initialValue: singlePayerId,
                         // Sem label: o título "Quem pagou" logo acima já diz o que é.
                         decoration: const InputDecoration(),
@@ -1827,6 +1841,19 @@ Future<void> _openExpenseForm(
                           label: const Text('Finalizar assinatura'),
                         ),
                       ],
+                    ],
+                    if (expense == null) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      CheckboxListTile(
+                        value: notifyParticipants,
+                        onChanged: (value) =>
+                            setState(() => notifyParticipants = value ?? false),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Avisar participantes'),
+                        subtitle: const Text(
+                            'Envia uma notificação para quem participa desta despesa.'),
+                      ),
                     ],
                     if (expense != null) ...[
                       const SizedBox(height: AppSpacing.lg),

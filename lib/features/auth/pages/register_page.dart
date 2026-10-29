@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/phone_input_formatter.dart';
 import '../../../shared/validators.dart';
 import '../../users/services/users_repository.dart';
 
@@ -63,8 +64,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     maxLength: 80,
                     textInputAction: TextInputAction.next,
                     textCapitalization: TextCapitalization.words,
-                    decoration:
-                        const InputDecoration(labelText: 'Nome completo'),
+                    decoration: const InputDecoration(
+                        counterText: '', labelText: 'Nome completo'),
                     validator: _required,
                   ),
                   const SizedBox(height: 12),
@@ -73,7 +74,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     maxLength: 30,
                     textInputAction: TextInputAction.next,
                     textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(labelText: 'Apelido'),
+                    decoration: const InputDecoration(
+                        counterText: '', labelText: 'Apelido'),
                     validator: _required,
                   ),
                   const SizedBox(height: 12),
@@ -82,7 +84,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     maxLength: 120,
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(labelText: 'E-mail'),
+                    decoration: const InputDecoration(
+                        counterText: '', labelText: 'E-mail'),
                     validator: _email,
                   ),
                   const SizedBox(height: 12),
@@ -90,8 +93,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     controller: phoneController,
                     maxLength: 20,
                     keyboardType: TextInputType.phone,
+                    inputFormatters: const [PhoneInputFormatter()],
                     textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(labelText: 'Telefone'),
+                    decoration: const InputDecoration(
+                        counterText: '', labelText: 'Telefone'),
                     validator: _required,
                   ),
                   const SizedBox(height: 12),
@@ -99,7 +104,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     controller: pixKeyController,
                     maxLength: 120,
                     textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(labelText: 'Chave PIX'),
+                    decoration: const InputDecoration(
+                        counterText: '', labelText: 'Chave PIX'),
                     validator: _required,
                   ),
                   const SizedBox(height: 12),
@@ -108,7 +114,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     maxLength: 64,
                     obscureText: true,
                     textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(labelText: 'Senha'),
+                    decoration: const InputDecoration(
+                        counterText: '', labelText: 'Senha'),
                     validator: _password,
                   ),
                   const SizedBox(height: 12),
@@ -117,8 +124,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     maxLength: 64,
                     obscureText: true,
                     textInputAction: TextInputAction.done,
-                    decoration:
-                        const InputDecoration(labelText: 'Confirmar senha'),
+                    decoration: const InputDecoration(
+                        counterText: '', labelText: 'Confirmar senha'),
                     validator: (value) =>
                         _confirmPassword(value, passwordController.text),
                     onFieldSubmitted: (_) => _save(),

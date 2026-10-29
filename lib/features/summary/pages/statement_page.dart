@@ -8,18 +8,20 @@ import '../../reports/pages/reports_page.dart';
 
 /// Extrato (aba da barra): filtros Grupo + Evento e só o card de saldo de
 /// quem está logado, com as mesmas funções do card do Saldo (despesas,
-/// Pagar). "Extrato geral" abre o extrato completo por período.
+/// Pagar). "Todos os eventos" mostra um card por evento. "Extrato geral"
+/// abre o extrato completo por período.
 class StatementPage extends ConsumerWidget {
   const StatementPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final allEvents = ref.watch(statementAllEventsProvider);
     return AppScaffold(
       title: 'Extrato',
       child: ListView(
         padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomBarInset(context)),
         children: [
-          const EventFilterFields(),
+          const EventFilterFields(allowAllEvents: true),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
@@ -28,7 +30,10 @@ class StatementPage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const EventBalanceView(onlyCurrentUser: true),
+          if (allEvents)
+            const AllEventsStatementView()
+          else
+            const EventBalanceView(onlyCurrentUser: true),
         ],
       ),
     );

@@ -17,6 +17,7 @@ import '../../expenses/services/expenses_repository.dart';
 import '../../groups/models/group_model.dart';
 import '../../groups/pages/groups_page.dart' show showTemporaryGuestDialog;
 import '../../groups/services/groups_repository.dart';
+import '../../groups/services/create_group_intent.dart';
 import '../../months/services/months_repository.dart';
 import '../../reports/pages/reports_page.dart' show confirmStartSettlement;
 import '../../reports/services/reports_repository.dart';
@@ -51,7 +52,20 @@ class EventsPage extends ConsumerWidget {
       title: 'Eventos',
       floatingActionButton: AutoCollapsingFab(
         label: 'Novo evento',
-        onPressed: () => _showCreateEventDialog(context, ref),
+        onPressed: () async {
+          // Sem grupo não dá pra criar evento: leva pra criar o grupo.
+          final groups = await ref
+              .read(groupsProvider.future)
+              .catchError((_) => <GroupModel>[]);
+          if (!context.mounted) {
+            return;
+          }
+          if (groups.isEmpty) {
+            await showCreateGroupFirstDialog(context, ref);
+          } else {
+            await _showCreateEventDialog(context, ref);
+          }
+        },
       ),
       child: Column(
         children: [
@@ -68,6 +82,7 @@ class EventsPage extends ConsumerWidget {
                 return DropdownButtonFormField<String>(
                   dropdownColor: glassMenuColor(context),
                   borderRadius: glassMenuRadius,
+                  menuMaxHeight: glassMenuMaxHeight,
                   key: ValueKey(value),
                   initialValue: value,
                   decoration:
@@ -96,16 +111,18 @@ class EventsPage extends ConsumerWidget {
               ),
             ),
           ),
-          CheckboxListTile(
-            value: hideClosed,
-            onChanged: (value) => ref
-                .read(hideClosedEventsProvider.notifier)
-                .state = value ?? false,
-            controlAffinity: ListTileControlAffinity.leading,
-            dense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-            title: const Text('Ocultar fechados'),
-          ),
+          // Sem nenhum grupo não há evento pra ocultar.
+          if (groupsAsync.valueOrNull?.isNotEmpty ?? false)
+            CheckboxListTile(
+              value: hideClosed,
+              onChanged: (value) => ref
+                  .read(hideClosedEventsProvider.notifier)
+                  .state = value ?? false,
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              title: const Text('Ocultar fechados'),
+            ),
           Expanded(
             child: eventsAsync.when(
               data: (allEvents) {
@@ -438,6 +455,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                             return DropdownButtonFormField<String>(
                               dropdownColor: glassMenuColor(context),
                               borderRadius: glassMenuRadius,
+                              menuMaxHeight: glassMenuMaxHeight,
                               initialValue: selectedGroupId,
                               decoration:
                                   const InputDecoration(labelText: 'Grupo'),

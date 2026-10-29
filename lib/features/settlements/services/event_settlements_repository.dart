@@ -20,6 +20,12 @@ final selectedEventSettlementsProvider =
   return ref.watch(eventSettlementsRepositoryProvider).listByEvent(event.id);
 });
 
+/// Pagamentos de um evento qualquer (Extrato com "Todos os eventos").
+final eventSettlementsProvider =
+    FutureProvider.family<List<EventSettlementModel>, String>((ref, eventId) {
+  return ref.watch(eventSettlementsRepositoryProvider).listByEvent(eventId);
+});
+
 class EventSettlementsRepository {
   const EventSettlementsRepository(this.dio);
 

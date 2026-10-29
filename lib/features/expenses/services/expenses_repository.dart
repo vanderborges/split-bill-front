@@ -80,6 +80,8 @@ class ExpensesRepository {
     String? eventId,
     int? installments,
     bool subscription = false,
+    // "Avisar participantes": o backend notifica quem participa.
+    bool notifyParticipants = false,
     required List<String> participantIds,
     required Map<String, int> participantShareCounts,
     required Map<String, String> participantShareDescriptions,
@@ -102,7 +104,7 @@ class ExpensesRepository {
         participantShareDescriptions: participantShareDescriptions,
         participantShareAmounts: participantShareAmounts,
         payerAmounts: payerAmounts,
-      ),
+      )..['notifyParticipants'] = notifyParticipants,
     );
     return ExpenseModel.fromJson(response.data!);
   }

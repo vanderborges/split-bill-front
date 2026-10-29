@@ -18,6 +18,7 @@ import '../../../shared/widgets/person_avatar.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../dashboard/services/dashboard_repository.dart';
+import '../../events/models/event_model.dart';
 import '../../events/services/events_repository.dart';
 import '../../events/widgets/event_picker_field.dart';
 import '../../events/widgets/receiver_choice.dart';
@@ -56,8 +57,15 @@ class ReportsPage extends ConsumerWidget {
 
 /// Filtros Grupo + Evento do Relatório e do Extrato: gravam a escolha nos
 /// providers globais (grupo/evento selecionados).
+/// Extrato com "Todos os eventos" escolhido (um card por evento).
+final statementAllEventsProvider = StateProvider<bool>((ref) => false);
+
 class EventFilterFields extends ConsumerWidget {
-  const EventFilterFields({super.key});
+  const EventFilterFields({super.key, this.allowAllEvents = false});
+
+  /// Extrato: o seletor de evento ganha "Todos os eventos"
+  /// ([statementAllEventsProvider]).
+  final bool allowAllEvents;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -65,6 +73,7 @@ class EventFilterFields extends ConsumerWidget {
     final eventsAsync = ref.watch(eventsProvider);
     final groupsAsync = ref.watch(groupsProvider);
     final selectedGroupId = ref.watch(selectedGroupIdProvider);
+    final allEvents = allowAllEvents && ref.watch(statementAllEventsProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -73,6 +82,7 @@ class EventFilterFields extends ConsumerWidget {
           data: (groups) => DropdownButtonFormField<String?>(
             dropdownColor: glassMenuColor(context),
             borderRadius: glassMenuRadius,
+            menuMaxHeight: glassMenuMaxHeight,
             initialValue: selectedGroupId,
             decoration: const InputDecoration(labelText: 'Grupo'),
             items: [
@@ -98,12 +108,17 @@ class EventFilterFields extends ConsumerWidget {
             data: (events) => events.isEmpty
                 ? const Text('Nenhum evento cadastrado neste grupo.')
                 : EventPickerField(
-                    key: ValueKey(event?.id),
+                    key: ValueKey(allEvents ? null : event?.id),
                     events: events,
-                    selectedId: event?.id,
+                    selectedId: allEvents ? null : event?.id,
+                    allEventsLabel: allowAllEvents ? 'Todos os eventos' : null,
                     groupNameOf: (groupId) =>
                         _groupName(groupsAsync.valueOrNull, groupId),
                     onChanged: (value) {
+                      if (allowAllEvents) {
+                        ref.read(statementAllEventsProvider.notifier).state =
+                            value == null;
+                      }
                       final picked = events.where((item) => item.id == value);
                       if (picked.isNotEmpty) {
                         selectEvent(ref,
@@ -217,28 +232,31 @@ class EventBalanceView extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
             ],
-            Row(
-              children: [
-                Text('Total de despesas: ',
-                    style: Theme.of(context).textTheme.bodyMedium),
-                MoneyText(report.totalExpenses),
-                const Spacer(),
-                if (report.status != 'CLOSED' && !onlyCurrentUser)
-                  IconButton(
-                    tooltip: 'Compartilhar resumo',
-                    onPressed: settlementsAsync.valueOrNull == null
-                        ? null
-                        : () => _shareReport(
-                            report,
-                            settlementsAsync.valueOrNull!,
-                            // Recebedor escolhido no "Fechar evento".
-                            eventAsync.valueOrNull?.receiverNickname,
-                            eventAsync.valueOrNull?.receiverUserId),
-                    icon: const Icon(Icons.share_outlined),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
+            // Extrato não mostra o total de despesas do evento.
+            if (!onlyCurrentUser) ...[
+              Row(
+                children: [
+                  Text('Total de despesas: ',
+                      style: Theme.of(context).textTheme.bodyMedium),
+                  MoneyText(report.totalExpenses),
+                  const Spacer(),
+                  if (report.status != 'CLOSED')
+                    IconButton(
+                      tooltip: 'Compartilhar resumo',
+                      onPressed: settlementsAsync.valueOrNull == null
+                          ? null
+                          : () => _shareReport(
+                              report,
+                              settlementsAsync.valueOrNull!,
+                              // Recebedor escolhido no "Fechar evento".
+                              eventAsync.valueOrNull?.receiverNickname,
+                              eventAsync.valueOrNull?.receiverUserId),
+                      icon: const Icon(Icons.share_outlined),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
             settlementsAsync.when(
               data: (settlements) => _ReportTable(
                 key: ValueKey('${report.eventId}-${report.monthId}'),
@@ -281,7 +299,14 @@ class _ReportTable extends ConsumerStatefulWidget {
     required this.isAwaitingPayment,
     required this.isEventOpen,
     required this.eventId,
+    this.caption,
+    this.groupName,
   });
+
+  /// Extrato com "Todos os eventos": no lugar de "Você" o card mostra o
+  /// nome do evento e, discreto, o do grupo.
+  final String? caption;
+  final String? groupName;
 
   final List<MonthlyBalanceModel> balances;
   final List<EventSettlementModel> settlements;
@@ -399,12 +424,39 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                           radius: 14),
                       const SizedBox(width: AppSpacing.sm),
                       Flexible(
-                        child: Text(
-                          isCurrentUser ? 'Você' : balance.nickname,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
+                        child: widget.caption == null
+                            ? Text(
+                                isCurrentUser ? 'Você' : balance.nickname,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.caption!,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                  if (widget.groupName != null)
+                                    Text(
+                                      widget.groupName!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant),
+                                    ),
+                                ],
+                              ),
                       ),
                     ],
                   ),
@@ -523,7 +575,8 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
 
   Future<List<BalanceExpenseDetailModel>> _details(
       MonthlyBalanceModel balance) {
-    final eventId = ref.read(selectedEventProvider).valueOrNull?.id;
+    final eventId =
+        widget.eventId ?? ref.read(selectedEventProvider).valueOrNull?.id;
     if (eventId == null) {
       return Future.value([]);
     }
@@ -837,6 +890,8 @@ void _refreshEventScreens(WidgetRef ref) {
   ref.invalidate(selectedEventExpensesProvider);
   ref.invalidate(selectedEventSettlementsProvider);
   ref.invalidate(dashboardGroupBalancesProvider);
+  ref.invalidate(eventReportProvider);
+  ref.invalidate(eventSettlementsProvider);
 }
 
 /// "Fechar evento" (admin): escolhe quem recebe e abre o evento para
@@ -1114,6 +1169,7 @@ Future<void> _openPayDialog(
   try {
     await repository.informPayment(eventId);
     ref.invalidate(selectedEventSettlementsProvider);
+    ref.invalidate(eventSettlementsProvider(eventId));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text(
@@ -1125,5 +1181,100 @@ Future<void> _openPayDialog(
           content: Text(friendlyApiError(error,
               fallback: 'Não foi possível confirmar o pagamento.'))));
     }
+  }
+}
+
+/// Extrato com "Todos os eventos": um card de quem está logado por evento
+/// (do grupo filtrado, ou de todos), do mês mais recente pro mais antigo —
+/// evento avulso usa a data de criação. Cada card tem o nome do evento e,
+/// discreto, o do grupo; evento em que a pessoa não tem saldo não aparece.
+class AllEventsStatementView extends ConsumerWidget {
+  const AllEventsStatementView({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eventsAsync = ref.watch(eventsProvider);
+    final groups = ref.watch(groupsProvider).valueOrNull;
+    return eventsAsync.when(
+      data: (events) {
+        if (events.isEmpty) {
+          return const EmptyState(
+            icon: Icons.receipt_long_outlined,
+            title: 'Nenhum evento para mostrar.',
+            message: 'Crie um evento ou escolha outro grupo.',
+          );
+        }
+        final sorted = [...events]..sort((a, b) {
+            final byDate = b.sortDate.compareTo(a.sortDate);
+            if (byDate != 0) {
+              return byDate;
+            }
+            return (b.createdAt ?? DateTime(0))
+                .compareTo(a.createdAt ?? DateTime(0));
+          });
+        return Column(
+          children: [
+            for (final event in sorted)
+              _MyEventBalanceCard(
+                key: ValueKey(event.id),
+                event: event,
+                groupName: _groupName(groups, event.groupId),
+              ),
+          ],
+        );
+      },
+      loading: () => const LoadingState(),
+      error: (error, _) => ErrorState(
+        message: friendlyApiError(error,
+            fallback: 'Não foi possível carregar os eventos.'),
+        onRetry: () => ref.invalidate(eventsProvider),
+      ),
+    );
+  }
+}
+
+class _MyEventBalanceCard extends ConsumerWidget {
+  const _MyEventBalanceCard({
+    super.key,
+    required this.event,
+    required this.groupName,
+  });
+
+  final EventModel event;
+  final String groupName;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final reportAsync = ref.watch(eventReportProvider(event.id));
+    final settlementsAsync = ref.watch(eventSettlementsProvider(event.id));
+    final currentUserId = ref.watch(currentUserProvider).valueOrNull?.id;
+    final isGroupAdmin =
+        ref.watch(groupRoleProvider(event.groupId)).valueOrNull == 'ADMIN';
+    final report = reportAsync.valueOrNull;
+    final settlements = settlementsAsync.valueOrNull;
+    if (reportAsync.hasError || settlementsAsync.hasError) {
+      return const SizedBox.shrink();
+    }
+    if (report == null || settlements == null) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: AppSpacing.sm),
+        child: LinearProgressIndicator(),
+      );
+    }
+    final mine =
+        report.balances.where((b) => b.userId == currentUserId).toList();
+    if (mine.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return _ReportTable(
+      balances: mine,
+      settlements: settlements,
+      canUpdateSettlements: isGroupAdmin,
+      isAwaitingPayment: report.status == 'SETTLING',
+      isEventOpen: report.status == 'OPEN',
+      eventId: event.id,
+      caption: event.name,
+      groupName: groupName,
+    );
   }
 }

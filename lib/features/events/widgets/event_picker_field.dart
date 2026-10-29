@@ -14,6 +14,7 @@ class EventPickerField extends StatelessWidget {
     required this.selectedId,
     required this.groupNameOf,
     required this.onChanged,
+    this.allEventsLabel,
   });
 
   final List<EventModel> events;
@@ -21,46 +22,55 @@ class EventPickerField extends StatelessWidget {
   final String Function(String groupId) groupNameOf;
   final ValueChanged<String?> onChanged;
 
+  /// Com valor, a lista começa com um item "todos" (valor null) com esse
+  /// texto — usado no Extrato ("Todos os eventos").
+  final String? allEventsLabel;
+
   @override
   Widget build(BuildContext context) {
     final events = [...this.events]..sort(EventModel.compareSettlingFirst);
-    return DropdownButtonFormField<String>(
+    final allLabel = allEventsLabel;
+    return DropdownButtonFormField<String?>(
       dropdownColor: glassMenuColor(context),
       borderRadius: glassMenuRadius,
+      menuMaxHeight: glassMenuMaxHeight,
       initialValue: selectedId,
       isExpanded: true,
       decoration: const InputDecoration(labelText: 'Evento'),
       // Selecionado: "Evento | Grupo" + a pílula de status.
-      selectedItemBuilder: (context) => events
-          .map((event) => Row(
+      selectedItemBuilder: (context) => [
+        if (allLabel != null) Text(allLabel),
+        ...events.map((event) => Row(
+              children: [
+                Expanded(
+                  child: Text('${event.name} | ${groupNameOf(event.groupId)}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(width: 8),
+                EventStatusBadge(event.status),
+              ],
+            )),
+      ],
+      items: [
+        if (allLabel != null)
+          DropdownMenuItem<String?>(value: null, child: Text(allLabel)),
+        ...events.map((event) => DropdownMenuItem<String?>(
+              value: event.id,
+              child: Row(
                 children: [
                   Expanded(
-                    child: Text('${event.name} | ${groupNameOf(event.groupId)}',
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      '${event.name} | ${groupNameOf(event.groupId)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   EventStatusBadge(event.status),
                 ],
-              ))
-          .toList(),
-      items: events
-          .map((event) => DropdownMenuItem(
-                value: event.id,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${event.name} | ${groupNameOf(event.groupId)}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    EventStatusBadge(event.status),
-                  ],
-                ),
-              ))
-          .toList(),
+              ),
+            )),
+      ],
       onChanged: onChanged,
     );
   }

@@ -73,6 +73,7 @@ class _UserExpenseSummaryPageState
               return DropdownButtonFormField<String>(
                 dropdownColor: glassMenuColor(context),
                 borderRadius: glassMenuRadius,
+                menuMaxHeight: glassMenuMaxHeight,
                 initialValue: groupId,
                 decoration: const InputDecoration(labelText: 'Grupo'),
                 items: groups
@@ -117,6 +118,7 @@ class _UserExpenseSummaryPageState
                     return DropdownButtonFormField<String?>(
                       dropdownColor: glassMenuColor(context),
                       borderRadius: glassMenuRadius,
+                      menuMaxHeight: glassMenuMaxHeight,
                       initialValue: userId,
                       decoration: const InputDecoration(labelText: 'Extrato'),
                       items: [
@@ -149,6 +151,7 @@ class _UserExpenseSummaryPageState
               return DropdownButtonFormField<String?>(
                 dropdownColor: glassMenuColor(context),
                 borderRadius: glassMenuRadius,
+                menuMaxHeight: glassMenuMaxHeight,
                 key: ValueKey('summary-event-$groupId-$eventId'),
                 initialValue: eventId,
                 decoration: const InputDecoration(labelText: 'Evento'),
@@ -178,6 +181,7 @@ class _UserExpenseSummaryPageState
             data: (categories) => DropdownButtonFormField<String?>(
               dropdownColor: glassMenuColor(context),
               borderRadius: glassMenuRadius,
+              menuMaxHeight: glassMenuMaxHeight,
               initialValue: category,
               decoration: const InputDecoration(labelText: 'Tipo de despesa'),
               items: [

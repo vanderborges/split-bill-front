@@ -9,7 +9,6 @@ import '../../../shared/api_error.dart';
 import '../../../shared/session_reset.dart';
 import '../../../shared/validators.dart';
 import '../../../shared/widgets/app_scaffold.dart';
-import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
 import '../../../shared/widgets/person_avatar.dart';
@@ -26,6 +25,9 @@ class ProfilePage extends ConsumerWidget {
 
     return AppScaffold(
       title: 'Perfil',
+      // Sem a barra de menus; a seta volta pro Início.
+      showBottomBar: false,
+      onBack: () => context.go('/'),
       child: userAsync.when(
         data: (user) {
           if (user == null) {
@@ -35,8 +37,11 @@ class ProfilePage extends ConsumerWidget {
             );
           }
           return ListView(
-            padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg,
-                AppSpacing.lg, AppSpacing.lg + bottomBarInset(context)),
+            padding: EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg + MediaQuery.paddingOf(context).bottom),
             children: [
               Row(
                 children: [

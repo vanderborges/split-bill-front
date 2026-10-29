@@ -49,6 +49,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           pageBuilder: (context, state) =>
               _noTransitionPage(const GroupsPage())),
       GoRoute(
+          path: '/groups/:groupId',
+          pageBuilder: (context, state) => _noTransitionPage(
+              GroupDetailPage(groupId: state.pathParameters['groupId']!))),
+      GoRoute(
           path: '/invite/:inviteId',
           builder: (context, state) =>
               InvitePage(inviteId: state.pathParameters['inviteId']!)),

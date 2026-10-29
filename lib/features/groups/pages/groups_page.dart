@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/environment.dart';
 import '../../../shared/api_error.dart';
@@ -19,14 +20,28 @@ import '../models/group_member_model.dart';
 import '../models/group_model.dart';
 import '../services/group_invite_repository.dart';
 import '../services/groups_repository.dart';
+import '../services/create_group_intent.dart';
 
+/// Grupos (aba da barra): lista dos grupos de quem está logado, no padrão
+/// da tela Eventos. Tocar num grupo abre os participantes dele
+/// ([GroupDetailPage], `/groups/{id}`).
 class GroupsPage extends ConsumerWidget {
   const GroupsPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final groupsAsync = ref.watch(groupsProvider);
-    final selectedGroupAsync = ref.watch(selectedGroupProvider);
+
+    // Veio do aviso "crie um grupo primeiro" (Eventos/Início).
+    if (ref.read(pendingCreateGroupProvider)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted || !ref.read(pendingCreateGroupProvider)) {
+          return;
+        }
+        ref.read(pendingCreateGroupProvider.notifier).state = false;
+        _showCreateGroupDialog(context, ref);
+      });
+    }
 
     return AppScaffold(
       title: 'Grupos',
@@ -34,89 +49,114 @@ class GroupsPage extends ConsumerWidget {
         label: 'Novo grupo',
         onPressed: () => _showCreateGroupDialog(context, ref),
       ),
-      child: ListView(
-        padding: EdgeInsets.fromLTRB(
-            16, 16, 16, fabClearance + bottomBarInset(context)),
-        children: [
-          groupsAsync.when(
-            data: (groups) {
-              if (groups.isEmpty) {
-                return const EmptyState(
+      child: groupsAsync.when(
+        data: (groups) {
+          if (groups.isEmpty) {
+            return const Center(
+              child: SingleChildScrollView(
+                child: EmptyState(
                   icon: Icons.groups_outlined,
                   title: 'Nenhum grupo cadastrado.',
                   message: 'Crie um grupo para começar a dividir despesas.',
-                );
-              }
-              final selectedId =
-                  selectedGroupAsync.valueOrNull?.id ?? groups.first.id;
-              final isSelectedGroupAdmin =
-                  selectedGroupAsync.valueOrNull == null
-                      ? false
-                      : ref
-                              .watch(groupRoleProvider(
-                                  selectedGroupAsync.valueOrNull!.id))
-                              .valueOrNull ==
-                          'ADMIN';
-              return Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      dropdownColor: glassMenuColor(context),
-                      borderRadius: glassMenuRadius,
-                      initialValue: selectedId,
-                      decoration: const InputDecoration(labelText: 'Grupo'),
-                      items: groups
-                          .map((group) => DropdownMenuItem(
-                              value: group.id, child: Text(group.name)))
-                          .toList(),
-                      onChanged: (value) {
-                        ref.read(selectedGroupIdProvider.notifier).state =
-                            value;
-                        ref.invalidate(selectedGroupProvider);
-                        ref.invalidate(eventsProvider);
-                        ref.invalidate(selectedEventProvider);
-                      },
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Editar grupo',
-                    onPressed: selectedGroupAsync.valueOrNull == null ||
-                            !isSelectedGroupAdmin
-                        ? null
-                        : () => _showEditGroupDialog(
-                            context, ref, selectedGroupAsync.valueOrNull!),
-                    icon: const Icon(Icons.edit_outlined),
-                  ),
-                ],
+                ),
+              ),
+            );
+          }
+          return ListView.separated(
+            padding: EdgeInsets.fromLTRB(
+                16, 16, 16, fabClearance + bottomBarInset(context)),
+            itemCount: groups.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final group = groups[index];
+              return Card(
+                child: ListTile(
+                  leading: const Icon(Icons.groups_outlined),
+                  title: Text(group.name),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => openGroupDetail(context, ref, group.id),
+                ),
               );
             },
-            loading: () => const LinearProgressIndicator(),
-            error: (error, _) => ErrorState(
-              message: friendlyApiError(error,
-                  fallback: 'Não foi possível carregar seus grupos.'),
-              onRetry: () => ref.invalidate(groupsProvider),
-            ),
-          ),
-          const SizedBox(height: 16),
-          selectedGroupAsync.when(
-            data: (group) => group == null
-                ? const SizedBox.shrink()
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _GroupMembers(group: group),
-                      _GroupTemporaryMembers(group: group),
-                    ],
-                  ),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => ErrorState(
-              message: friendlyApiError(error,
-                  fallback: 'Não foi possível carregar o grupo.'),
-              onRetry: () => ref.invalidate(selectedGroupProvider),
-            ),
-          ),
-        ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => ErrorState(
+          message: friendlyApiError(error,
+              fallback: 'Não foi possível carregar seus grupos.'),
+          onRetry: () => ref.invalidate(groupsProvider),
+        ),
       ),
+    );
+  }
+}
+
+/// Abre os participantes do grupo; grava o grupo como selecionado (as
+/// outras telas abrem nele, como antes com o seletor de Grupos).
+void openGroupDetail(BuildContext context, WidgetRef ref, String groupId) {
+  if (ref.read(selectedGroupIdProvider) != groupId) {
+    ref.read(selectedGroupIdProvider.notifier).state = groupId;
+    ref.read(selectedEventIdProvider.notifier).state = null;
+    ref.invalidate(selectedGroupProvider);
+    ref.invalidate(eventsProvider);
+    ref.invalidate(selectedEventProvider);
+  }
+  context.go('/groups/$groupId');
+}
+
+/// Participantes de um grupo: Integrantes e Temporários com as mesmas
+/// funções de antes (convidar, perfil, remover...), editar grupo na barra
+/// e seta de voltar pra lista. Se o grupo some (excluído, saiu dele),
+/// volta pra lista.
+class GroupDetailPage extends ConsumerWidget {
+  const GroupDetailPage({super.key, required this.groupId});
+
+  final String groupId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final groupsAsync = ref.watch(groupsProvider);
+    final group = groupsAsync.valueOrNull
+        ?.where((item) => item.id == groupId)
+        .firstOrNull;
+    final isAdmin =
+        ref.watch(groupRoleProvider(groupId)).valueOrNull == 'ADMIN';
+
+    if (groupsAsync.hasValue && group == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          context.go('/groups');
+        }
+      });
+    }
+
+    return AppScaffold(
+      title: group?.name ?? 'Grupo',
+      onBack: () => context.go('/groups'),
+      actions: [
+        if (group != null && isAdmin)
+          IconButton(
+            tooltip: 'Editar grupo',
+            onPressed: () => _showEditGroupDialog(context, ref, group),
+            icon: const Icon(Icons.edit_outlined),
+          ),
+      ],
+      child: group == null
+          ? groupsAsync.hasError
+              ? ErrorState(
+                  message: friendlyApiError(groupsAsync.error!,
+                      fallback: 'Não foi possível carregar o grupo.'),
+                  onRetry: () => ref.invalidate(groupsProvider),
+                )
+              : const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding:
+                  EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomBarInset(context)),
+              children: [
+                _GroupMembers(group: group),
+                _GroupTemporaryMembers(group: group),
+              ],
+            ),
     );
   }
 }
@@ -369,6 +409,7 @@ Future<bool> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
             DropdownButtonFormField<String>(
               dropdownColor: glassMenuColor(context),
               borderRadius: glassMenuRadius,
+              menuMaxHeight: glassMenuMaxHeight,
               initialValue: role,
               decoration: const InputDecoration(labelText: 'Perfil no grupo'),
               items: [
@@ -549,6 +590,10 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
     ref.invalidate(groupsProvider);
     ref.invalidate(selectedGroupProvider);
     ref.invalidate(dashboardGroupBalancesProvider);
+    // Grupo novo abre direto nos participantes (pra convidar).
+    if (context.mounted) {
+      context.go('/groups/${group.id}');
+    }
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -822,6 +867,7 @@ Future<EventModel?> _pickOpenEvent(
         content: DropdownButtonFormField<String>(
           dropdownColor: glassMenuColor(context),
           borderRadius: glassMenuRadius,
+          menuMaxHeight: glassMenuMaxHeight,
           initialValue: selected.id,
           decoration: const InputDecoration(labelText: 'Evento'),
           items: events

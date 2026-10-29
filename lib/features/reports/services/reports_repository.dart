@@ -30,6 +30,12 @@ final selectedEventReportProvider =
   return ref.watch(reportsRepositoryProvider).getEventReport(event.id);
 });
 
+/// Relatório de um evento qualquer (Extrato com "Todos os eventos").
+final eventReportProvider =
+    FutureProvider.family<MonthlyReportModel, String>((ref, eventId) {
+  return ref.watch(reportsRepositoryProvider).getEventReport(eventId);
+});
+
 class ReportsRepository {
   const ReportsRepository(this.dio);
 

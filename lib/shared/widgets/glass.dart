@@ -10,11 +10,16 @@ class GlassSurface extends StatelessWidget {
     required this.child,
     this.borderRadius = const BorderRadius.all(Radius.circular(999)),
     this.padding,
+    this.opacity = 1,
   });
 
   final Widget child;
   final BorderRadius borderRadius;
   final EdgeInsetsGeometry? padding;
+
+  /// Multiplica a opacidade do fundo: < 1 deixa o vidro mais transparente
+  /// (barra de menus).
+  final double opacity;
 
   @override
   Widget build(BuildContext context) {
@@ -44,8 +49,10 @@ class GlassSurface extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  scheme.surface.withValues(alpha: dark ? 0.42 : 0.55),
-                  scheme.surface.withValues(alpha: dark ? 0.30 : 0.40),
+                  scheme.surface
+                      .withValues(alpha: (dark ? 0.42 : 0.55) * opacity),
+                  scheme.surface
+                      .withValues(alpha: (dark ? 0.30 : 0.40) * opacity),
                 ],
               ),
               border: Border.all(
@@ -66,6 +73,10 @@ class GlassSurface extends StatelessWidget {
 /// desfoque do que está atrás, então a transparência é leve pra o texto
 /// continuar legível.
 const BorderRadius glassMenuRadius = BorderRadius.all(Radius.circular(24));
+
+/// Altura máxima da lista aberta dos dropdowns: 6 itens e meio (o meio
+/// item cortado mostra que dá pra rolar) + o respiro de 8 do menu.
+const double glassMenuMaxHeight = 6.5 * kMinInteractiveDimension + 8;
 
 Color glassMenuColor(BuildContext context) {
   final theme = Theme.of(context);
@@ -175,7 +186,9 @@ class _GlassNavBarState extends State<GlassNavBar> {
       minimum: const EdgeInsets.only(bottom: 8),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        // Mais transparente que o vidro da barra de cima.
         child: GlassSurface(
+          opacity: 0.5,
           padding: const EdgeInsets.all(5),
           child: LayoutBuilder(
             builder: (context, constraints) {

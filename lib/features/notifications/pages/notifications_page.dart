@@ -158,7 +158,10 @@ void _open(
     _markAsRead(ref, notification);
   }
   if (notification.type == 'MEMBER_JOINED') {
-    context.go('/groups');
+    // Abre os participantes do grupo (backend antigo sem grupo: a lista).
+    context.go(notification.groupId == null
+        ? '/groups'
+        : '/groups/${notification.groupId}');
     return;
   }
   final eventId = notification.eventId;
@@ -168,7 +171,10 @@ void _open(
   }
   selectEvent(ref, groupId: groupId, eventId: eventId);
   ref.invalidate(selectedEventProvider);
-  context.go('/expenses?view=saldo');
+  // Despesa nova ("Avisar participantes") abre a lista de despesas.
+  context.go(notification.type == 'EXPENSE_CREATED'
+      ? '/expenses'
+      : '/expenses?view=saldo');
 }
 
 Future<void> _markAsRead(WidgetRef ref, NotificationModel notification) async {
