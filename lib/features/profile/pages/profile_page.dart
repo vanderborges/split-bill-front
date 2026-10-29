@@ -149,86 +149,32 @@ class _ThemeModeSelector extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleSmall),
         ),
         const SizedBox(height: AppSpacing.sm),
-        // Três cartões (Sistema | Dia | Noite): o escolhido fica preenchido,
-        // os outros só com contorno.
-        Row(
-          children: [
-            for (final option in const [
-              (ThemeMode.system, Icons.contrast, 'Sistema'),
-              (ThemeMode.light, Icons.light_mode, 'Dia'),
-              (ThemeMode.dark, Icons.dark_mode, 'Noite'),
-            ]) ...[
-              if (option.$1 != ThemeMode.system)
-                const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: _ThemeModeTile(
-                  icon: option.$2,
-                  label: option.$3,
-                  selected: mode == option.$1,
-                  onTap: () =>
-                      ref.read(themeModeProvider.notifier).set(option.$1),
-                ),
-              ),
+        // Seletor compacto (como antes), com os nomes Sistema | Dia | Noite;
+        // Sistema com a engrenagem.
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<ThemeMode>(
+            segments: const [
+              ButtonSegment(
+                  value: ThemeMode.system,
+                  icon: Icon(Icons.settings_outlined),
+                  label: Text('Sistema')),
+              ButtonSegment(
+                  value: ThemeMode.light,
+                  icon: Icon(Icons.light_mode_outlined),
+                  label: Text('Dia')),
+              ButtonSegment(
+                  value: ThemeMode.dark,
+                  icon: Icon(Icons.dark_mode_outlined),
+                  label: Text('Noite')),
             ],
-          ],
+            selected: {mode},
+            showSelectedIcon: false,
+            onSelectionChanged: (selection) =>
+                ref.read(themeModeProvider.notifier).set(selection.first),
+          ),
         ),
       ],
-    );
-  }
-}
-
-class _ThemeModeTile extends StatelessWidget {
-  const _ThemeModeTile({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final foreground = selected ? scheme.onSurface : scheme.onSurfaceVariant;
-    const radius = BorderRadius.all(Radius.circular(20));
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: label,
-      child: Column(
-        children: [
-          Material(
-            color:
-                selected ? scheme.surfaceContainerHighest : Colors.transparent,
-            shape: RoundedRectangleBorder(
-              borderRadius: radius,
-              side: selected
-                  ? BorderSide.none
-                  : BorderSide(color: scheme.outlineVariant),
-            ),
-            child: InkWell(
-              borderRadius: radius,
-              onTap: onTap,
-              child: AspectRatio(
-                aspectRatio: 1.55,
-                child: Center(child: Icon(icon, size: 30, color: foreground)),
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: foreground,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                ),
-          ),
-        ],
-      ),
     );
   }
 }

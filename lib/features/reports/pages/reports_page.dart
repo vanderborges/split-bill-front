@@ -70,9 +70,14 @@ class EventFilterFields extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final eventAsync = ref.watch(selectedEventProvider);
-    final eventsAsync = ref.watch(eventsProvider);
-    final groupsAsync = ref.watch(groupsProvider);
+    // Extrato: inclui os grupos/eventos de onde a pessoa saiu (só leitura).
+    final statement = allowAllEvents;
+    final eventAsync = ref.watch(
+        statement ? statementSelectedEventProvider : selectedEventProvider);
+    final eventsAsync =
+        ref.watch(statement ? statementEventsProvider : eventsProvider);
+    final groupsAsync =
+        ref.watch(statement ? allGroupsProvider : groupsProvider);
     final selectedGroupId = ref.watch(selectedGroupIdProvider);
     final allEvents = allowAllEvents && ref.watch(statementAllEventsProvider);
 
@@ -87,7 +92,10 @@ class EventFilterFields extends ConsumerWidget {
               const DropdownMenuItem<String?>(
                   value: null, child: Text('Todos os grupos')),
               ...groups.map((group) => DropdownMenuItem<String?>(
-                  value: group.id, child: Text(group.name))),
+                  value: group.id,
+                  child: Text(group.viewerRemoved
+                      ? '${group.name} (você saiu)'
+                      : group.name))),
             ],
             onChanged: (value) {
               ref.read(selectedGroupIdProvider.notifier).state = value;
@@ -152,9 +160,27 @@ class EventBalanceView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final eventAsync = ref.watch(selectedEventProvider);
-    final reportAsync = ref.watch(selectedEventReportProvider);
-    final settlementsAsync = ref.watch(selectedEventSettlementsProvider);
+    // Extrato: o evento vem da lista do Extrato (inclui os de grupos de
+    // onde a pessoa saiu) e o saldo/pagamentos são buscados por evento.
+    final eventAsync = ref.watch(onlyCurrentUser
+        ? statementSelectedEventProvider
+        : selectedEventProvider);
+    final statementEvent = eventAsync.valueOrNull;
+    final AsyncValue<MonthlyReportModel?> reportAsync = !onlyCurrentUser
+        ? ref.watch(selectedEventReportProvider)
+        : statementEvent == null
+            ? (eventAsync.isLoading
+                ? const AsyncLoading<MonthlyReportModel?>()
+                : const AsyncData<MonthlyReportModel?>(null))
+            : ref
+                .watch(eventReportProvider(statementEvent.id))
+                .whenData<MonthlyReportModel?>((report) => report);
+    final AsyncValue<List<EventSettlementModel>> settlementsAsync =
+        !onlyCurrentUser
+            ? ref.watch(selectedEventSettlementsProvider)
+            : statementEvent == null
+                ? const AsyncData(<EventSettlementModel>[])
+                : ref.watch(eventSettlementsProvider(statementEvent.id));
     final currentUserId = ref.watch(currentUserProvider).valueOrNull?.id;
     final isGroupAdmin = eventAsync.valueOrNull != null
         ? ref
@@ -339,8 +365,8 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
     };
     final sortedBalances = [...widget.balances]..sort((first, second) {
         // Quem está acessando vem sempre primeiro.
-        final firstIsMe = first.userId == currentUserId;
-        final secondIsMe = second.userId == currentUserId;
+        final firstIsMe = first.includes(currentUserId);
+        final secondIsMe = second.includes(currentUserId);
         if (firstIsMe != secondIsMe) {
           return firstIsMe ? -1 : 1;
         }
@@ -371,10 +397,9 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
       children: sortedBalances.map((balance) {
         final settlement = settlementsByUser[balance.userId];
         final expanded = expandedUserIds.contains(balance.userId);
-        // Extrato: quem é vinculado ao titular também vê a linha como "Você".
-        final isCurrentUser = widget.header != null
-            ? balance.includes(currentUserId)
-            : balance.userId == currentUserId;
+        // Quem é vinculado ao titular (gasto agrupado) também vê a linha
+        // como "Você".
+        final isCurrentUser = balance.includes(currentUserId);
         // Pago: fundo neutro + linha esmaecida, pra destacar visualmente
         // quem ainda está pendente.
         final isPaid = !widget.isEventOpen &&
@@ -445,7 +470,7 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                             child: Text(
                               isCurrentUser
                                   ? _youLabel(balance, currentUserId)
-                                  : balance.nickname,
+                                  : _groupedLabel(balance),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style:
@@ -573,12 +598,9 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
     });
   }
 
-  /// Extrato com gasto agrupado (cobrança vinculada): "Você + Fulano".
-  /// Fora do Extrato, ou sem mais ninguém com gasto, só "Você".
+  /// Gasto agrupado (cobrança vinculada): "Você + Fulano"; sem mais
+  /// ninguém com gasto no evento, só "Você".
   String _youLabel(MonthlyBalanceModel balance, String? currentUserId) {
-    if (widget.header == null) {
-      return 'Você';
-    }
     final others = balance.activeMembers
         .where((member) => member.userId != currentUserId)
         .map((member) => member.nickname)
@@ -586,12 +608,21 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
     return others.isEmpty ? 'Você' : 'Você + ${others.join(' + ')}';
   }
 
-  /// Despesas da linha aberta. No Extrato com gasto agrupado, separa por
-  /// pessoa: "Você" com o total só seu e a lista, depois cada vinculado
-  /// com o total e a lista dele.
+  /// Card de outra pessoa com gasto agrupado: só quem tem gasto no evento
+  /// ("Fulano + Ciclano"); backend antigo cai no nome que veio.
+  String _groupedLabel(MonthlyBalanceModel balance) {
+    final members = balance.activeMembers;
+    return members.length < 2
+        ? balance.nickname
+        : members.map((member) => member.nickname).join(' + ');
+  }
+
+  /// Despesas da linha aberta. Com gasto agrupado (Extrato, Saldo e
+  /// Relatório), separa por pessoa: quem está logado primeiro ("Você"), cada
+  /// um com o total só dele e a lista, com uma linha entre eles.
   Widget _detailsWidget(MonthlyBalanceModel balance, String? currentUserId) {
     final members = balance.activeMembers;
-    if (widget.header == null || members.length < 2) {
+    if (members.length < 2) {
       return _BalanceDetails(details: _details(balance));
     }
     final ordered = [
@@ -603,6 +634,12 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final member in ordered) ...[
+          // Linha separando um participante do outro.
+          if (member != ordered.first)
+            const Padding(
+              padding: EdgeInsets.only(top: AppSpacing.md),
+              child: Divider(height: 1),
+            ),
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.md),
             child: Row(
@@ -692,32 +729,66 @@ class _SettlementStatus extends StatelessWidget {
       return badge;
     }
 
-    return DropdownButton<String>(
-      value: status == 'PAID' || status == 'INFORMED' ? status : 'PENDING',
-      isDense: true,
-      underline: const SizedBox.shrink(),
-      selectedItemBuilder: (context) => [
-        const StatusBadge(AppStatus.pendente),
-        const StatusBadge(AppStatus.confirmado, label: 'Pago'),
-        if (status == 'INFORMED') badge,
-      ],
-      items: [
-        const DropdownMenuItem(value: 'PENDING', child: Text('Pendente')),
-        const DropdownMenuItem(
-            value: 'PAID', child: Text('Confirmar pagamento')),
-        // Só aparece como valor atual; o admin não marca "informado".
-        if (status == 'INFORMED')
-          const DropdownMenuItem(
-              value: 'INFORMED',
-              enabled: false,
-              child: Text('Pagamento informado')),
-      ],
-      onChanged: (value) {
-        if (value != null && value != status) {
-          onChanged(value);
-        }
-      },
+    // Opções do admin: pendente só vira "Pago"; informado pode ser
+    // confirmado (Pago) ou devolvido (Pendente); pago pode voltar a
+    // pendente.
+    final options = switch (status) {
+      'PAID' => const [('PENDING', 'Pendente')],
+      'INFORMED' => const [('PAID', 'Pago'), ('PENDING', 'Pendente')],
+      _ => const [('PAID', 'Pago')],
+    };
+
+    return Builder(
+      builder: (buttonContext) => InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        onTap: () => _openMenu(buttonContext, options),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            badge,
+            const Icon(Icons.arrow_drop_down, size: 20),
+          ],
+        ),
+      ),
     );
+  }
+
+  /// Mesmo padrão das listas dos campos de seleção: abre logo abaixo, no
+  /// vidro dos menus, cada opção numa linha só (sem quebrar).
+  Future<void> _openMenu(
+      BuildContext context, List<(String, String)> options) async {
+    final box = context.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (box == null || overlay == null) {
+      return;
+    }
+    final topLeft = box.localToGlobal(Offset.zero, ancestor: overlay);
+    const width = 180.0;
+    // Alinhado pela direita do status (ele fica no canto do card).
+    final left = topLeft.dx + box.size.width - width;
+    final picked = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(
+            left < 8 ? 8 : left, topLeft.dy + box.size.height + 4, width, 0),
+        Offset.zero & overlay.size,
+      ),
+      color: glassMenuColor(context),
+      shape: const RoundedRectangleBorder(borderRadius: glassMenuRadius),
+      constraints: const BoxConstraints(minWidth: width, maxWidth: width),
+      items: [
+        for (final (value, label) in options)
+          PopupMenuItem<String>(
+            value: value,
+            height: kMinInteractiveDimension,
+            child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+    );
+    if (picked != null && picked != settlement!.normalizedStatus) {
+      onChanged(picked);
+    }
   }
 }
 
@@ -960,6 +1031,7 @@ void _refreshEventScreens(WidgetRef ref) {
   ref.invalidate(dashboardGroupBalancesProvider);
   ref.invalidate(eventReportProvider);
   ref.invalidate(eventSettlementsProvider);
+  ref.invalidate(statementEventsProvider);
 }
 
 /// "Fechar evento" (admin): escolhe quem recebe e abre o evento para
@@ -1261,8 +1333,9 @@ class AllEventsStatementView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final eventsAsync = ref.watch(eventsProvider);
-    final groups = ref.watch(groupsProvider).valueOrNull;
+    // Inclui os eventos com despesa da pessoa em grupos de onde ela saiu.
+    final eventsAsync = ref.watch(statementEventsProvider);
+    final groups = ref.watch(allGroupsProvider).valueOrNull;
     return eventsAsync.when(
       data: (events) {
         if (events.isEmpty) {

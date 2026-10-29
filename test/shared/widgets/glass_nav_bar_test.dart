@@ -67,23 +67,6 @@ void main() {
     expect(labelColor(tester, 'Extrato'), isNot(const Color(0xFF0C66E4)));
   });
 
-  testWidgets('item selecionado infla ao trocar de aba', (tester) async {
-    await tester.pumpWidget(bar(0));
-    await tester.pumpAndSettle();
-    await tester.pumpWidget(const SizedBox());
-    await tester.pumpWidget(bar(2));
-    double scaleOf(String label) => tester
-        .widget<Transform>(find
-            .ancestor(of: find.text(label), matching: find.byType(Transform))
-            .first)
-        .transform
-        .getMaxScaleOnAxis();
-    expect(scaleOf('Eventos'), closeTo(1, 0.01));
-    await tester.pumpAndSettle();
-    expect(scaleOf('Eventos'), closeTo(1.08, 0.01));
-    expect(scaleOf('Início'), closeTo(1, 0.01));
-  });
-
   testWidgets('compacta: some o nome e a barra fica menor; volta ao normal',
       (tester) async {
     Widget compactBar(bool compact) => MaterialApp(

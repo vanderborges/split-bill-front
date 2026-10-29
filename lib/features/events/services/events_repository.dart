@@ -9,9 +9,33 @@ final eventsRepositoryProvider = Provider<EventsRepository>((ref) {
   return EventsRepository(ref.watch(dioProvider));
 });
 
-final eventsProvider = FutureProvider<List<EventModel>>((ref) {
-  final groupId = ref.watch(selectedGroupIdProvider);
+final eventsProvider = FutureProvider<List<EventModel>>((ref) async {
+  final selectedGroupId = ref.watch(selectedGroupIdProvider);
+  // Grupo escolhido no Extrato de onde a pessoa saiu (não está nos grupos
+  // ativos): as outras telas caem em "Todos os grupos".
+  final groups = await ref.watch(groupsProvider.future);
+  final groupId = groups.any((group) => group.id == selectedGroupId)
+      ? selectedGroupId
+      : null;
   return ref.watch(eventsRepositoryProvider).list(groupId: groupId);
+});
+
+/// Eventos do Extrato: os mesmos de [eventsProvider] + os com despesa da
+/// pessoa nos grupos de onde ela saiu (só leitura).
+final statementEventsProvider = FutureProvider<List<EventModel>>((ref) async {
+  // Recarrega junto com a lista normal de eventos.
+  ref.watch(eventsProvider);
+  final groupId = ref.watch(selectedGroupIdProvider);
+  return ref
+      .watch(eventsRepositoryProvider)
+      .list(groupId: groupId, includeRemoved: true);
+});
+
+/// Evento escolhido no Extrato: mesma regra de [selectedEventProvider],
+/// sobre [statementEventsProvider].
+final statementSelectedEventProvider = FutureProvider<EventModel?>((ref) async {
+  final events = await ref.watch(statementEventsProvider.future);
+  return pickSelectedEvent(events, ref.watch(selectedEventIdProvider));
 });
 
 final openEventsProvider = FutureProvider<List<EventModel>>((ref) async {
@@ -21,7 +45,9 @@ final openEventsProvider = FutureProvider<List<EventModel>>((ref) async {
 
 /// Filtro da tela de Eventos: quando true, esconde os eventos já
 /// fechados da lista (continuam existindo, só não aparecem ali).
-final hideClosedEventsProvider = StateProvider<bool>((ref) => false);
+// autoDispose + true: a tela Eventos sempre abre com "Ocultar fechados"
+// marcado (pedido do usuário).
+final hideClosedEventsProvider = StateProvider.autoDispose<bool>((ref) => true);
 
 final selectedEventIdProvider = StateProvider<String?>((ref) => null);
 
@@ -35,10 +61,15 @@ void selectEvent(WidgetRef ref, {required String groupId, String? eventId}) {
 
 final selectedEventProvider = FutureProvider<EventModel?>((ref) async {
   final events = await ref.watch(eventsProvider.future);
+  return pickSelectedEvent(events, ref.watch(selectedEventIdProvider));
+});
+
+/// O escolhido, se ainda está na lista; senão o padrão: o mais antigo não
+/// fechado, ou o mais recente se tudo fechou.
+EventModel? pickSelectedEvent(List<EventModel> events, String? selectedId) {
   if (events.isEmpty) {
     return null;
   }
-  final selectedId = ref.watch(selectedEventIdProvider);
   if (selectedId != null) {
     final selected = events.where((event) => event.id == selectedId);
     if (selected.isNotEmpty) {
@@ -54,19 +85,25 @@ final selectedEventProvider = FutureProvider<EventModel?>((ref) async {
       events.where((event) => event.status != 'CLOSED').toList();
   // Tudo fechado: mostra o mais recente.
   return activeEvents.isNotEmpty ? activeEvents.first : events.last;
-});
+}
 
 class EventsRepository {
   const EventsRepository(this.dio);
 
   final Dio dio;
 
-  Future<List<EventModel>> list({String? viewerUserId, String? groupId}) async {
+  /// [includeRemoved] (Extrato): também os eventos com despesa da pessoa
+  /// nos grupos de onde ela saiu.
+  Future<List<EventModel>> list(
+      {String? viewerUserId,
+      String? groupId,
+      bool includeRemoved = false}) async {
     final response = await dio.get<List<dynamic>>(
       '/events',
       queryParameters: {
         if (viewerUserId != null) 'viewerUserId': viewerUserId,
         if (groupId != null) 'groupId': groupId,
+        if (includeRemoved) 'includeRemoved': true,
       },
     );
     return response.data!

@@ -36,16 +36,33 @@ class DashboardPage extends ConsumerWidget {
                 ),
           ),
           const SizedBox(height: AppSpacing.md),
-          FilledButton.icon(
-            onPressed: () {
-              // Abre o fluxo por cima da Home — ao salvar/cancelar a pessoa
-              // continua no Início.
-              openNewExpenseFlow(context, ref);
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Nova despesa'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
+          // Mesma cor/vidro do botão "+" das outras telas.
+          GlassSurface(
+            tint: Theme.of(context).colorScheme.primary,
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                // Abre o fluxo por cima da Home — ao salvar/cancelar a
+                // pessoa continua no Início.
+                onTap: () => openNewExpenseFlow(context, ref),
+                child: SizedBox(
+                  height: 52,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add,
+                          color: Theme.of(context).colorScheme.onPrimary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Nova despesa',
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: Theme.of(context).colorScheme.onPrimary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.xl),

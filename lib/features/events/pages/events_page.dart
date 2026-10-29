@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
+import '../../../shared/ptbr_sort.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/glass_dropdown_field.dart';
@@ -89,8 +90,10 @@ class EventsPage extends ConsumerWidget {
                   items: [
                     const DropdownMenuItem<String>(
                         value: null, child: Text('Todos os grupos')),
-                    ...groups.map((group) => DropdownMenuItem(
-                        value: group.id, child: Text(group.name))),
+                    // Grupos em ordem alfabética.
+                    ...sortedByNamePtBr(groups, (group) => group.name).map(
+                        (group) => DropdownMenuItem(
+                            value: group.id, child: Text(group.name))),
                   ],
                   onChanged: (value) {
                     ref.read(selectedGroupIdProvider.notifier).state = value;
@@ -365,8 +368,13 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
               keyboard > 0 && (monthFocus.hasFocus || yearFocus.hasFocus)
                   ? 44.0
                   : 0.0;
+          // Sem teclado, os botões ficam acima da barra do celular (como no
+          // form de despesa).
+          final systemBar = MediaQuery.viewPaddingOf(context).bottom;
+          final bottom = keyboard + doneBar;
           return Padding(
-            padding: EdgeInsets.only(bottom: keyboard + doneBar),
+            padding: EdgeInsets.only(
+                bottom: bottom > systemBar ? bottom : systemBar),
             child: child,
           );
         },

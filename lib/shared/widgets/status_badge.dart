@@ -54,6 +54,10 @@ class StatusBadge extends StatelessWidget {
       ),
       child: Text(
         label ?? defaultLabel,
+        // Uma linha só (texto grande corta com "..." em vez de quebrar).
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.w600,

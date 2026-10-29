@@ -8,6 +8,7 @@ class GroupModel {
     required this.receiverUserId,
     required this.receiverNickname,
     required this.autoSettlementDay,
+    this.viewerRemoved = false,
   });
 
   final String id;
@@ -19,6 +20,10 @@ class GroupModel {
   final String? receiverNickname;
   final int? autoSettlementDay;
 
+  /// Quem está vendo saiu/foi removido do grupo (só vem no Extrato): lê
+  /// só os eventos em que tem despesa.
+  final bool viewerRemoved;
+
   factory GroupModel.fromJson(Map<String, dynamic> json) {
     return GroupModel(
       id: json['id'] as String,
@@ -29,6 +34,7 @@ class GroupModel {
       receiverUserId: json['receiverUserId'] as String?,
       receiverNickname: json['receiverNickname'] as String?,
       autoSettlementDay: json['autoSettlementDay'] as int?,
+      viewerRemoved: json['viewerRemoved'] as bool? ?? false,
     );
   }
 }

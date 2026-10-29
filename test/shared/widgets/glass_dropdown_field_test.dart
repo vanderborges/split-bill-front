@@ -50,6 +50,37 @@ void main() {
     expect(tester.getSize(menu.first).height, greaterThan(6 * 48));
   });
 
+  testWidgets('campo perto do fim: a lista não passa do limite de baixo',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Column(
+          children: [
+            const Spacer(),
+            GlassDropdownField<String>(
+              key: const ValueKey('baixo'),
+              initialValue: 'a',
+              items: [
+                for (final v in ['a', 'b', 'c', 'd', 'e'])
+                  DropdownMenuItem(value: v, child: Text('Item $v')),
+              ],
+              onChanged: (_) {},
+            ),
+            const SizedBox(height: 150),
+          ],
+        ),
+      ),
+    ));
+    final screen = tester.getSize(find.byType(Scaffold));
+    await tester.tap(find.byKey(const ValueKey('baixo')));
+    await tester.pumpAndSettle();
+    // Abre pra cima (embaixo não cabe) e nada passa do fim da tela.
+    final lastItem = tester.getRect(find.text('Item e').last);
+    final field = tester.getRect(find.byKey(const ValueKey('baixo')));
+    expect(lastItem.bottom, lessThanOrEqualTo(screen.height));
+    expect(lastItem.bottom, lessThanOrEqualTo(field.top));
+  });
+
   testWidgets('escolher troca o valor e avisa', (tester) async {
     String? picked = 'nada';
     await tester.pumpWidget(field(initial: 'g1', onChanged: (v) => picked = v));

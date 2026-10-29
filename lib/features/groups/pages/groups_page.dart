@@ -163,6 +163,23 @@ class GroupDetailPage extends ConsumerWidget {
               padding:
                   EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomBarInset(context)),
               children: [
+                // Eventos deste grupo (tela Eventos já filtrada nele).
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      ref.read(selectedGroupIdProvider.notifier).state =
+                          group.id;
+                      ref.read(selectedEventIdProvider.notifier).state = null;
+                      ref.invalidate(eventsProvider);
+                      ref.invalidate(selectedEventProvider);
+                      context.go('/events');
+                    },
+                    icon: const Icon(Icons.event_outlined),
+                    label: const Text('Ver eventos'),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 _GroupMembers(group: group),
                 _GroupTemporaryMembers(group: group),
               ],
@@ -226,6 +243,10 @@ class _GroupMembers extends ConsumerWidget {
       future: ref.watch(groupsRepositoryProvider).listMembers(group.id),
       builder: (context, snapshot) {
         final members = snapshot.data ?? <GroupMemberModel>[];
+        // Convidar: admin e integrantes fixos (temporário não convida).
+        final canInvite = isGroupAdmin ||
+            members.any((member) =>
+                member.userId == currentUser?.id && !member.temporary);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -234,7 +255,7 @@ class _GroupMembers extends ConsumerWidget {
                 Expanded(
                     child: Text('Integrantes',
                         style: Theme.of(context).textTheme.titleMedium)),
-                if (isGroupAdmin)
+                if (canInvite)
                   TextButton.icon(
                     onPressed: () => _showInviteDialog(context, ref, group),
                     icon: const Icon(Icons.person_add),
@@ -422,15 +443,25 @@ Future<bool> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
               initialValue: role,
               decoration: const InputDecoration(labelText: 'Perfil no grupo'),
               items: [
-                if (member.temporary)
-                  const DropdownMenuItem(
-                      value: temporaryRole, child: Text('Temporário')),
+                // Fixo também pode virar temporário (sai do grupo quando o
+                // último evento com despesa dele for concluído).
+                const DropdownMenuItem(
+                    value: temporaryRole, child: Text('Temporário')),
                 const DropdownMenuItem(
                     value: 'MEMBER', child: Text('Integrante (fixo)')),
                 const DropdownMenuItem(value: 'ADMIN', child: Text('Admin')),
               ],
               onChanged: (value) => setState(() => role = value ?? role),
             ),
+            if (!member.temporary && role == temporaryRole) ...[
+              const SizedBox(height: 12),
+              Text(
+                '${member.nickname} passa a ser temporário(a): continua nos '
+                'eventos em aberto e sai do grupo quando o último evento com '
+                'despesa dele(a) for concluído.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
             if (member.temporary && role != temporaryRole) ...[
               const SizedBox(height: 12),
               Text(
@@ -457,10 +488,13 @@ Future<bool> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
     final currentUser = await ref.read(currentUserProvider.future);
     if (currentUser == null) throw Exception('Sessão expirada');
     final repository = ref.read(groupsRepositoryProvider);
-    if (member.temporary) {
+    if (role == temporaryRole) {
+      // Fixo → temporário (o backend recusa se for o último admin).
+      await repository.makeTemporary(group.id, member.userId);
+    } else if (member.temporary) {
       await repository.promoteTemporary(group.id, member.userId);
     }
-    if (role == 'ADMIN' || !member.temporary) {
+    if (role == 'ADMIN' || (!member.temporary && role != temporaryRole)) {
       await repository.addMember(
         groupId: group.id,
         userId: member.userId,
@@ -471,7 +505,10 @@ Future<bool> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
     ref.invalidate(groupRoleProvider(group.id));
     ref.invalidate(groupsProvider);
     ref.invalidate(dashboardGroupBalancesProvider);
-    if (member.temporary && context.mounted) {
+    if (role == temporaryRole && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${member.nickname} agora é temporário(a).')));
+    } else if (member.temporary && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('${member.nickname} agora é integrante do grupo.')));
     }

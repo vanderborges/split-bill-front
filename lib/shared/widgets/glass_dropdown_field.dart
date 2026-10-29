@@ -61,18 +61,65 @@ class _GlassDropdownFieldState<T> extends State<GlassDropdownField<T>> {
 
   bool get _enabled => widget.onChanged != null && widget.items.isNotEmpty;
 
-  Future<void> _openMenu() async {
+  /// Altura que a lista quer: os itens (até 6 e meio) + o respiro do menu.
+  double get _desiredMenuHeight {
+    final full = widget.items.length * kMinInteractiveDimension + 16;
+    return full < glassMenuMaxHeight ? full : glassMenuMaxHeight;
+  }
+
+  /// Espaço livre abaixo do campo até logo acima da barra de menus (ou da
+  /// barra do celular) — a lista nunca passa por cima nem por trás dela.
+  ({Rect field, double below, double above})? _measure(RenderBox overlay) {
     final box = context.findRenderObject() as RenderBox?;
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (box == null || overlay == null) {
-      return;
+    if (box == null || !box.hasSize) {
+      return null;
     }
     final topLeft = box.localToGlobal(Offset.zero, ancestor: overlay);
-    final width = box.size.width;
-    // Logo abaixo do campo, alinhado à esquerda dele e com a mesma largura.
+    final field = topLeft & box.size;
+    final bottomLimit = overlay.size.height - bottomBarInset(context) - 8;
+    final topLimit = MediaQuery.paddingOf(context).top + 8;
+    return (
+      field: field,
+      below: bottomLimit - (field.bottom + 4),
+      above: (field.top - 4) - topLimit,
+    );
+  }
+
+  Future<void> _openMenu() async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) {
+      return;
+    }
+    var measured = _measure(overlay);
+    if (measured == null) {
+      return;
+    }
+    final desired = _desiredMenuHeight;
+    // Pouco espaço embaixo: rola a tela pra subir o campo e caber a lista.
+    if (measured.below < desired && Scrollable.maybeOf(context) != null) {
+      await Scrollable.ensureVisible(
+        context,
+        alignment: 0.05,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+      if (!mounted) {
+        return;
+      }
+      measured = _measure(overlay) ?? measured;
+    }
+    final field = measured.field;
+    final width = field.width;
+    // Abaixo do campo; só abre pra cima se embaixo não couber e em cima
+    // tiver mais espaço. A altura respeita o limite (rola dentro da lista).
+    final openAbove =
+        measured.below < desired && measured.above > measured.below;
+    final available = openAbove ? measured.above : measured.below;
+    final menuHeight = available < desired ? available : desired;
+    final top = openAbove ? field.top - 4 - menuHeight : field.bottom + 4;
     final position = RelativeRect.fromRect(
-      Rect.fromLTWH(topLeft.dx, topLeft.dy + box.size.height + 4, width, 0),
+      Rect.fromLTWH(field.left, top, width, 0),
       Offset.zero & overlay.size,
     );
     final selectedIndex = _selectedIndex;
@@ -86,7 +133,9 @@ class _GlassDropdownFieldState<T> extends State<GlassDropdownField<T>> {
       constraints: BoxConstraints(
         minWidth: width,
         maxWidth: width,
-        maxHeight: glassMenuMaxHeight,
+        maxHeight: menuHeight < kMinInteractiveDimension
+            ? kMinInteractiveDimension
+            : menuHeight,
       ),
       items: [
         for (var index = 0; index < widget.items.length; index++)

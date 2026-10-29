@@ -50,8 +50,8 @@ class _UserExpenseSummaryPageState
   @override
   Widget build(BuildContext context) {
     final currentUserAsync = ref.watch(currentUserProvider);
-    final groupsAsync = ref.watch(groupsProvider);
-    final eventsAsync = ref.watch(eventsProvider);
+    final groupsAsync = ref.watch(allGroupsProvider);
+    final eventsAsync = ref.watch(statementEventsProvider);
     final categoriesAsync = ref.watch(expenseCategoriesProvider);
 
     return AppScaffold(
@@ -76,7 +76,10 @@ class _UserExpenseSummaryPageState
                 decoration: const InputDecoration(labelText: 'Grupo'),
                 items: groups
                     .map((group) => DropdownMenuItem(
-                        value: group.id, child: Text(group.name)))
+                        value: group.id,
+                        child: Text(group.viewerRemoved
+                            ? '${group.name} (você saiu)'
+                            : group.name)))
                     .toList(),
                 onChanged: (value) {
                   if (value != null) {
@@ -88,7 +91,7 @@ class _UserExpenseSummaryPageState
                     });
                     ref.read(selectedGroupIdProvider.notifier).state = value;
                     ref.read(selectedEventIdProvider.notifier).state = null;
-                    ref.invalidate(eventsProvider);
+                    ref.invalidate(statementEventsProvider);
                   }
                 },
               );
@@ -110,9 +113,17 @@ class _UserExpenseSummaryPageState
                 }
                 return FutureBuilder(
                   future:
-                      ref.read(groupsRepositoryProvider).listMembers(groupId!),
+                      ref.read(groupsRepositoryProvider).listMembers(groupId!,
+                          // Quem saiu do grupo e tem despesa continua no
+                          // filtro, marcado como removido.
+                          includeRemoved: true),
                   builder: (context, snapshot) {
-                    final members = snapshot.data ?? [];
+                    // Removidos depois dos ativos.
+                    final data = snapshot.data ?? [];
+                    final members = [
+                      ...data.where((member) => member.active),
+                      ...data.where((member) => !member.active),
+                    ];
                     return GlassDropdownField<String?>(
                       initialValue: userId,
                       decoration: const InputDecoration(labelText: 'Extrato'),
@@ -121,7 +132,9 @@ class _UserExpenseSummaryPageState
                             value: null, child: Text('Consolidado do grupo')),
                         ...members.map((member) => DropdownMenuItem<String?>(
                             value: member.userId,
-                            child: Text(member.nickname))),
+                            child: Text(member.active
+                                ? member.nickname
+                                : '${member.nickname} (removido)'))),
                       ],
                       onChanged: (value) => setState(() {
                         userId = value;

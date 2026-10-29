@@ -19,6 +19,17 @@ final groupsProvider = FutureProvider<List<GroupModel>>((ref) async {
   return ref.watch(groupsRepositoryProvider).list();
 });
 
+/// Grupos do Extrato: os ativos + os de onde a pessoa saiu e em que tem
+/// despesa (`viewerRemoved`). Recarrega junto com [groupsProvider].
+final allGroupsProvider = FutureProvider<List<GroupModel>>((ref) async {
+  await ref.watch(groupsProvider.future);
+  final user = await ref.watch(currentUserProvider.future);
+  if (user == null) {
+    return [];
+  }
+  return ref.watch(groupsRepositoryProvider).list(includeRemoved: true);
+});
+
 final groupRoleProvider =
     FutureProvider.family<String?, String>((ref, groupId) async {
   final user = await ref.watch(currentUserProvider.future);
@@ -57,11 +68,15 @@ class GroupsRepository {
 
   final Dio dio;
 
-  Future<List<GroupModel>> list({String? viewerUserId}) async {
+  /// [includeRemoved]: também os grupos de onde a pessoa saiu e em que
+  /// tem despesa (Extrato), com `viewerRemoved = true`.
+  Future<List<GroupModel>> list(
+      {String? viewerUserId, bool includeRemoved = false}) async {
     final response = await dio.get<List<dynamic>>(
       '/groups',
       queryParameters: {
         if (viewerUserId != null) 'viewerUserId': viewerUserId,
+        if (includeRemoved) 'includeRemoved': true,
       },
     );
     return response.data!
@@ -101,13 +116,18 @@ class GroupsRepository {
   /// Com [eventId], só quem participa desse evento (fixos + temporários
   /// dele) — use no cadastro de despesa. Sem, fixos + temporários de
   /// eventos ainda não fechados.
+  /// [includeRemoved]: no fim, quem saiu do grupo mas tem despesa nele
+  /// (`active = false`) - pros filtros, ex.: pessoa do Extrato geral.
   Future<List<GroupMemberModel>> listMembers(String groupId,
-      {String? viewerUserId, String? eventId}) async {
+      {String? viewerUserId,
+      String? eventId,
+      bool includeRemoved = false}) async {
     final response = await dio.get<List<dynamic>>(
       '/groups/$groupId/members',
       queryParameters: {
         if (viewerUserId != null) 'viewerUserId': viewerUserId,
         if (eventId != null) 'eventId': eventId,
+        if (includeRemoved) 'includeRemoved': true,
       },
     );
     final members = response.data!
@@ -176,6 +196,14 @@ class GroupsRepository {
       String groupId, String userId) async {
     final response = await dio
         .put<Map<String, dynamic>>('/groups/$groupId/members/$userId/promote');
+    return GroupMemberModel.fromJson(response.data!);
+  }
+
+  /// Admin: integrante fixo vira temporário do grupo (sai do grupo quando o
+  /// último evento em que tem despesa for concluído).
+  Future<GroupMemberModel> makeTemporary(String groupId, String userId) async {
+    final response = await dio.put<Map<String, dynamic>>(
+        '/groups/$groupId/members/$userId/temporary');
     return GroupMemberModel.fromJson(response.data!);
   }
 

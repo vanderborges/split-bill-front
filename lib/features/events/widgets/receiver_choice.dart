@@ -28,9 +28,9 @@ class ReceiverChoice extends ConsumerStatefulWidget {
 }
 
 class _ReceiverChoiceState extends ConsumerState<ReceiverChoice> {
-  late final Future<List<GroupMemberModel>> _members = ref
-      .read(groupsRepositoryProvider)
-      .listMembers(widget.groupId, eventId: widget.eventId);
+  // Só quem participa do evento (tem despesa nele) pode receber.
+  late final Future<(List<GroupMemberModel>, MonthlyReportModel?)> _data =
+      _load();
   String? _selected;
   // A pessoa já escolheu: a sugestão inicial não sobrescreve mais.
   bool _touched = false;
@@ -41,18 +41,47 @@ class _ReceiverChoiceState extends ConsumerState<ReceiverChoice> {
     _preselectTopCreditor();
   }
 
+  /// Integrantes que podem receber: com conta e com despesa no evento
+  /// (pagaram ou consumiram). Sem o saldo (erro), cai em todos os
+  /// integrantes do evento, como antes.
+  Future<(List<GroupMemberModel>, MonthlyReportModel?)> _load() async {
+    final members = await ref
+        .read(groupsRepositoryProvider)
+        .listMembers(widget.groupId, eventId: widget.eventId);
+    MonthlyReportModel? report;
+    try {
+      report = await ref
+          .read(reportsRepositoryProvider)
+          .getEventReport(widget.eventId);
+    } catch (_) {
+      report = null;
+    }
+    if (report == null) {
+      return (_eligible(members), null);
+    }
+    final participantIds = <String>{
+      for (final balance in report.balances)
+        if (balance.members.isNotEmpty)
+          ...balance.activeMembers.map((member) => member.userId)
+        else if (balance.totalConsumed != 0 || balance.totalPaid != 0)
+          balance.userId,
+    };
+    final people = _eligible(members)
+        .where((member) => participantIds.contains(member.userId))
+        .toList();
+    return (people, report);
+  }
+
   /// Abre com o participante de maior saldo positivo já marcado (sem
   /// ninguém positivo, fica em "Sugerir pagamentos"). Só a seleção inicial
   /// muda; a escolha continua livre.
   Future<void> _preselectTopCreditor() async {
     try {
-      final results = await Future.wait([
-        _members,
-        ref.read(reportsRepositoryProvider).getEventReport(widget.eventId),
-      ]);
-      final members = results[0] as List<GroupMemberModel>;
-      final report = results[1] as MonthlyReportModel;
-      final eligible = _eligible(members).map((m) => m.userId).toSet();
+      final (people, report) = await _data;
+      if (report == null) {
+        return;
+      }
+      final eligible = people.map((m) => m.userId).toSet();
       final creditors = report.balances
           .where((b) => b.balance > 0 && eligible.contains(b.userId))
           .toList()
@@ -92,16 +121,14 @@ class _ReceiverChoiceState extends ConsumerState<ReceiverChoice> {
           subtitle: 'O app calcula e distribui quem paga quem.',
           onTap: () => _select(null),
         ),
-        FutureBuilder<List<GroupMemberModel>>(
-          future: _members,
+        FutureBuilder<(List<GroupMemberModel>, MonthlyReportModel?)>(
+          future: _data,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const LinearProgressIndicator();
             }
-            final people = _eligible(
-                snapshot.data ?? const <GroupMemberModel>[])
-              ..sort((a, b) =>
-                  a.nickname.toLowerCase().compareTo(b.nickname.toLowerCase()));
+            final people = [...?snapshot.data?.$1]..sort((a, b) =>
+                a.nickname.toLowerCase().compareTo(b.nickname.toLowerCase()));
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: people

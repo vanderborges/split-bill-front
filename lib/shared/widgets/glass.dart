@@ -252,9 +252,6 @@ class _GlassNavBarState extends State<GlassNavBar> {
     final hasSelection = selected >= 0 && selected < widget.items.length;
     final target = hasSelection ? selected.toDouble() : null;
     GlassNavBar._lastPosition = target;
-    // Aba nova (veio de outra ou de nenhuma): o item "infla" ao entrar,
-    // como nos botões do menu do Trello no iOS.
-    final inflateFrom = _from != target ? 1.0 : _navInflatedScale;
     final color = navSelectedColor(context);
     return TweenAnimationBuilder<double>(
       // 1 = normal (com nomes), 0 = compacta (só ícones).
@@ -288,10 +285,13 @@ class _GlassNavBarState extends State<GlassNavBar> {
                             child: Transform.translate(
                               key: const ValueKey('nav-pill'),
                               offset: Offset(position * itemWidth, 0),
-                              child: _Inflate(
-                                from: inflateFrom,
-                                child: _LiquidSelectedPill(
-                                    width: itemWidth, color: color),
+                              // Pílula azul lisa (como na versão 45).
+                              child: Container(
+                                width: itemWidth,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(999),
+                                  color: color.withValues(alpha: 0.14),
+                                ),
                               ),
                             ),
                           ),
@@ -306,7 +306,6 @@ class _GlassNavBarState extends State<GlassNavBar> {
                             child: _GlassNavButton(
                               item: widget.items[index],
                               selected: index == selected,
-                              inflateFrom: inflateFrom,
                               expanded: expanded,
                               color: color,
                               onTap: () => widget.onSelected(index),
@@ -325,51 +324,10 @@ class _GlassNavBarState extends State<GlassNavBar> {
   }
 }
 
-/// Pílula do item selecionado: vidro azul (liquid glass) com o mesmo
-/// brilho de borda e reflexo da barra.
-class _LiquidSelectedPill extends StatelessWidget {
-  const _LiquidSelectedPill({required this.width, required this.color});
-
-  final double width;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    const radius = BorderRadius.all(Radius.circular(999));
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      width: width,
-      decoration: BoxDecoration(
-        borderRadius: radius,
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            color.withValues(alpha: 0.30),
-            color.withValues(alpha: 0.14),
-          ],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.22),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: CustomPaint(
-        painter: LiquidHighlightPainter(
-            borderRadius: radius, strength: dark ? 0.5 : 0.9),
-      ),
-    );
-  }
-}
-
 class _GlassNavButton extends StatelessWidget {
   const _GlassNavButton({
     required this.item,
     required this.selected,
-    required this.inflateFrom,
     required this.expanded,
     required this.color,
     required this.onTap,
@@ -377,7 +335,6 @@ class _GlassNavButton extends StatelessWidget {
 
   final GlassNavItem item;
   final bool selected;
-  final double inflateFrom;
 
   /// 1 = com o nome embaixo do ícone, 0 = só o ícone.
   final double expanded;
@@ -399,37 +356,33 @@ class _GlassNavButton extends StatelessWidget {
         // itens); aqui só ícone e rótulo.
         child: Padding(
           padding: EdgeInsets.symmetric(vertical: 4 + 2 * expanded),
-          child: _Inflate(
-            from: selected ? inflateFrom : 1,
-            to: selected ? _navInflatedScale : 1,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(selected ? item.selectedIcon : item.icon,
-                    color: foreground, size: 24),
-                SizedBox(height: 2 * expanded),
-                // O nome encolhe até sumir (barra compacta).
-                ClipRect(
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    heightFactor: expanded,
-                    child: Opacity(
-                      opacity: expanded,
-                      child: Text(
-                        item.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: foreground,
-                              fontWeight:
-                                  selected ? FontWeight.w700 : FontWeight.w500,
-                            ),
-                      ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(selected ? item.selectedIcon : item.icon,
+                  color: foreground, size: 24),
+              SizedBox(height: 2 * expanded),
+              // O nome encolhe até sumir (barra compacta).
+              ClipRect(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  heightFactor: expanded,
+                  child: Opacity(
+                    opacity: expanded,
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: foreground,
+                            fontWeight:
+                                selected ? FontWeight.w700 : FontWeight.w500,
+                          ),
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -509,34 +462,6 @@ class GlassBackButton extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Quanto o item selecionado da barra de menus fica maior.
-const double _navInflatedScale = 1.08;
-
-/// Cresce de [from] até [to] com um leve "pulo" (passa um pouco e volta).
-class _Inflate extends StatelessWidget {
-  const _Inflate({
-    required this.from,
-    this.to = _navInflatedScale,
-    required this.child,
-  });
-
-  final double from;
-  final double to;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: from, end: to),
-      duration: const Duration(milliseconds: 320),
-      curve: Curves.easeOutBack,
-      builder: (context, scale, child) =>
-          Transform.scale(scale: scale, child: child),
-      child: child,
     );
   }
 }
