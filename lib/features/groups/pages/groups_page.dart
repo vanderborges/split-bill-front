@@ -8,13 +8,13 @@ import '../../../core/constants/environment.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
+import '../../../shared/widgets/glass_dropdown_field.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/person_avatar.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../auth/services/auth_repository.dart';
-import '../../events/models/event_model.dart';
 import '../../events/services/events_repository.dart';
 import '../models/group_invite_model.dart';
 import '../models/group_member_model.dart';
@@ -58,7 +58,8 @@ class GroupsPage extends ConsumerWidget {
                 child: EmptyState(
                   icon: Icons.groups_outlined,
                   title: 'Nenhum grupo cadastrado.',
-                  message: 'Crie um grupo para começar a dividir despesas.',
+                  message:
+                      'Toque em "+" para criar um grupo e começar a dividir despesas.',
                 ),
               ),
             );
@@ -417,10 +418,7 @@ Future<bool> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            DropdownButtonFormField<String>(
-              dropdownColor: glassMenuColor(context),
-              borderRadius: glassMenuRadius,
-              menuMaxHeight: glassMenuMaxHeight,
+            GlassDropdownField<String>(
               initialValue: role,
               decoration: const InputDecoration(labelText: 'Perfil no grupo'),
               items: [
@@ -673,7 +671,7 @@ Future<void> _showInviteDialog(
 /// e saem da lista quando todos os eventos com despesa deles fecham. Quem
 /// entra pelo convite escolhendo o nome continua temporário até o admin
 /// tornar integrante. Temporários antigos, presos a um evento, continuam
-/// aparecendo aqui (ocultos quando o evento fecha) para irem a outro evento.
+/// aparecendo aqui (esmaecidos quando o evento fecha).
 class _GroupTemporaryMembers extends ConsumerStatefulWidget {
   const _GroupTemporaryMembers({required this.group});
 
@@ -705,15 +703,9 @@ class _GroupTemporaryMembersState
     }
   }
 
-  String _subtitle(GroupMemberModel member) {
-    final account = member.placeholder ? 'Sem conta no app' : 'Com conta';
-    if (member.temporaryEventName == null) {
-      return account;
-    }
-    return member.temporaryEventClosed
-        ? '$account · ${member.temporaryEventName} (fechado — oculto)'
-        : '$account · ${member.temporaryEventName}';
-  }
+  // Sem o evento do temporário (ex.: "· 10/2026"): só se tem conta.
+  String _subtitle(GroupMemberModel member) =>
+      member.placeholder ? 'Sem conta no app' : 'Com conta';
 
   @override
   Widget build(BuildContext context) {
@@ -803,18 +795,6 @@ class _GroupTemporaryMembersState
                               }
                             },
                           ),
-                        if (member.temporaryEventId != null)
-                          IconButton(
-                            tooltip: 'Incluir em outro evento',
-                            icon: const Icon(Icons.event_repeat),
-                            onPressed: () async {
-                              final changed = await _assignTemporaryToEvent(
-                                  context, ref, widget.group, member);
-                              if (changed) {
-                                _reload();
-                              }
-                            },
-                          ),
                         if (member.placeholder)
                           IconButton(
                             tooltip: 'Remover',
@@ -869,69 +849,6 @@ Future<void> _shareGroupInvite(
   final url = '${Environment.webBaseUrl}/invite/${invite.id}';
   await SharePlus.instance.share(
       ShareParams(text: 'Entre no grupo ${group.name} no DividiAí: $url'));
-}
-
-/// Pergunta em qual evento (não fechado) do grupo a pessoa temporária vai
-/// entrar.
-Future<EventModel?> _pickOpenEvent(
-  BuildContext context,
-  WidgetRef ref,
-  String groupId, {
-  required String title,
-  String? excludeEventId,
-}) async {
-  final List<EventModel> events;
-  try {
-    events = (await ref.read(eventsRepositoryProvider).list(groupId: groupId))
-        .where((event) => event.status != 'CLOSED')
-        .where((event) => event.id != excludeEventId)
-        .toList();
-  } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(friendlyApiError(error,
-              fallback: 'Não foi possível carregar os eventos.'))));
-    }
-    return null;
-  }
-  if (!context.mounted) {
-    return null;
-  }
-  if (events.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Nenhum evento aberto disponível neste grupo.')));
-    return null;
-  }
-  var selected = events.first;
-  return showDialog<EventModel>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: Text(title),
-        content: DropdownButtonFormField<String>(
-          dropdownColor: glassMenuColor(context),
-          borderRadius: glassMenuRadius,
-          menuMaxHeight: glassMenuMaxHeight,
-          initialValue: selected.id,
-          decoration: const InputDecoration(labelText: 'Evento'),
-          items: events
-              .map((event) =>
-                  DropdownMenuItem(value: event.id, child: Text(event.name)))
-              .toList(),
-          onChanged: (value) => setState(
-              () => selected = events.firstWhere((event) => event.id == value)),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.of(context).pop(selected),
-              child: const Text('Continuar')),
-        ],
-      ),
-    ),
-  );
 }
 
 /// "Incluir temporário": o admin digita só o nome e a pessoa já entra no
@@ -1053,43 +970,6 @@ Future<bool> showTemporaryGuestDialog(
     ),
   );
   return true;
-}
-
-/// Reativa a pessoa temporária em outro evento. Retorna true se mudou.
-Future<bool> _assignTemporaryToEvent(BuildContext context, WidgetRef ref,
-    GroupModel group, GroupMemberModel member) async {
-  final event = await _pickOpenEvent(
-    context,
-    ref,
-    group.id,
-    title: 'Incluir ${member.nickname} em qual evento?',
-    excludeEventId:
-        member.temporaryEventClosed ? null : member.temporaryEventId,
-  );
-  if (event == null || !context.mounted) {
-    return false;
-  }
-  try {
-    await ref.read(groupsRepositoryProvider).assignTemporaryEvent(
-          groupId: group.id,
-          userId: member.userId,
-          eventId: event.id,
-        );
-    ref.invalidate(dashboardGroupBalancesProvider);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text('${member.nickname} agora participa de ${event.name}.')));
-    }
-    return true;
-  } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(friendlyApiError(error,
-              fallback: 'Não foi possível incluir no evento.'))));
-    }
-    return false;
-  }
 }
 
 Future<bool> _renamePlaceholder(BuildContext context, WidgetRef ref,

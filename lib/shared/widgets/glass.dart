@@ -2,8 +2,11 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-/// Superfície "liquid glass" (estilo WhatsApp/iOS 26): fundo translúcido
-/// com desfoque do que está atrás, borda clara fina e sombra suave.
+/// Superfície "liquid glass" (iOS 26): fundo translúcido com desfoque do
+/// que está atrás, brilho de luz na borda (forte em cima à esquerda,
+/// fraco embaixo à direita), reflexo suave no topo e sombra leve.
+///
+/// [tint]: vidro colorido (ex.: botão "+" verde) em vez do vidro neutro.
 class GlassSurface extends StatelessWidget {
   const GlassSurface({
     super.key,
@@ -11,6 +14,7 @@ class GlassSurface extends StatelessWidget {
     this.borderRadius = const BorderRadius.all(Radius.circular(999)),
     this.padding,
     this.opacity = 1,
+    this.tint,
   });
 
   final Widget child;
@@ -20,17 +24,29 @@ class GlassSurface extends StatelessWidget {
   /// Multiplica a opacidade do fundo: < 1 deixa o vidro mais transparente
   /// (barra de menus).
   final double opacity;
+  final Color? tint;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final tint = this.tint;
+    final colors = tint == null
+        ? [
+            scheme.surface.withValues(alpha: (dark ? 0.42 : 0.55) * opacity),
+            scheme.surface.withValues(alpha: (dark ? 0.30 : 0.40) * opacity),
+          ]
+        : [
+            tint.withValues(alpha: 0.82 * opacity),
+            tint.withValues(alpha: 0.66 * opacity),
+          ];
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: borderRadius,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: dark ? 0.35 : 0.10),
+            color: (tint ?? Colors.black)
+                .withValues(alpha: tint != null ? 0.30 : (dark ? 0.35 : 0.10)),
             blurRadius: 18,
             offset: const Offset(0, 6),
           ),
@@ -39,33 +55,84 @@ class GlassSurface extends StatelessWidget {
       child: ClipRRect(
         borderRadius: borderRadius,
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            padding: padding,
-            decoration: BoxDecoration(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: CustomPaint(
+            foregroundPainter: LiquidHighlightPainter(
               borderRadius: borderRadius,
-              // Leve brilho de cima pra baixo, como vidro.
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  scheme.surface
-                      .withValues(alpha: (dark ? 0.42 : 0.55) * opacity),
-                  scheme.surface
-                      .withValues(alpha: (dark ? 0.30 : 0.40) * opacity),
-                ],
-              ),
-              border: Border.all(
-                color: (dark ? Colors.white : Colors.white)
-                    .withValues(alpha: dark ? 0.14 : 0.70),
-              ),
+              strength: dark ? 0.55 : 1,
             ),
-            child: child,
+            child: Container(
+              padding: padding,
+              decoration: BoxDecoration(
+                borderRadius: borderRadius,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: colors,
+                ),
+              ),
+              child: child,
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// Brilho do "liquid glass" por cima da superfície: a borda reflete luz
+/// vinda de cima à esquerda (clara ali, quase sumindo do outro lado) e o
+/// topo tem um reflexo suave, como a curvatura de um vidro.
+class LiquidHighlightPainter extends CustomPainter {
+  const LiquidHighlightPainter({
+    required this.borderRadius,
+    this.strength = 1,
+  });
+
+  final BorderRadius borderRadius;
+  final double strength;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) {
+      return;
+    }
+    final rect = Offset.zero & size;
+    final rrect = borderRadius.toRRect(rect).deflate(0.6);
+
+    // Reflexo do topo: faixa clara que some até o meio.
+    final sheen = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.center,
+        colors: [
+          Colors.white.withValues(alpha: 0.22 * strength),
+          Colors.white.withValues(alpha: 0),
+        ],
+      ).createShader(rect);
+    canvas.drawRRect(rrect, sheen);
+
+    // Borda com luz: forte em cima/esquerda, fraca embaixo/direita.
+    final rim = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white.withValues(alpha: 0.95 * strength),
+          Colors.white.withValues(alpha: 0.25 * strength),
+          Colors.white.withValues(alpha: 0.55 * strength),
+        ],
+        stops: const [0, 0.55, 1],
+      ).createShader(rect);
+    canvas.drawRRect(rrect, rim);
+  }
+
+  @override
+  bool shouldRepaint(LiquidHighlightPainter oldDelegate) =>
+      oldDelegate.borderRadius != borderRadius ||
+      oldDelegate.strength != strength;
 }
 
 /// Listas de seleção (menu aberto dos dropdowns) no estilo vidro: fundo
@@ -149,9 +216,14 @@ class GlassNavBar extends StatefulWidget {
     required this.items,
     required this.selectedIndex,
     required this.onSelected,
+    this.compact = false,
   });
 
   final List<GlassNavItem> items;
+
+  /// Rolando a tela pra baixo: some o nome embaixo dos ícones e a barra
+  /// fica um pouco menor (iOS 26); rolar pra cima volta ao normal.
+  final bool compact;
 
   /// -1 = nenhum item marcado (ex.: Perfil, Extrato geral).
   final int selectedIndex;
@@ -184,64 +256,110 @@ class _GlassNavBarState extends State<GlassNavBar> {
     // como nos botões do menu do Trello no iOS.
     final inflateFrom = _from != target ? 1.0 : _navInflatedScale;
     final color = navSelectedColor(context);
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        // Mais transparente que o vidro da barra de cima.
-        child: GlassSurface(
-          opacity: 0.5,
-          padding: const EdgeInsets.all(5),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final itemWidth = constraints.maxWidth / widget.items.length;
-              return Stack(
-                children: [
-                  if (target != null)
-                    Positioned.fill(
-                      child: TweenAnimationBuilder<double>(
-                        tween: Tween(begin: _from ?? target, end: target),
-                        duration: const Duration(milliseconds: 260),
-                        curve: Curves.easeOutCubic,
-                        builder: (context, position, _) => Align(
-                          alignment: Alignment.centerLeft,
-                          child: Transform.translate(
-                            key: const ValueKey('nav-pill'),
-                            offset: Offset(position * itemWidth, 0),
-                            child: _Inflate(
-                              from: inflateFrom,
-                              child: Container(
-                                width: itemWidth,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(999),
-                                  color: color.withValues(alpha: 0.14),
-                                ),
+    return TweenAnimationBuilder<double>(
+      // 1 = normal (com nomes), 0 = compacta (só ícones).
+      tween: Tween(end: widget.compact ? 0 : 1),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      builder: (context, expanded, _) => SafeArea(
+        top: false,
+        minimum: const EdgeInsets.only(bottom: 8),
+        child: Padding(
+          // Compacta também fica um pouco mais estreita.
+          padding: EdgeInsets.fromLTRB(
+              16 + 24 * (1 - expanded), 4, 16 + 24 * (1 - expanded), 4),
+          // Mais transparente que o vidro da barra de cima.
+          child: GlassSurface(
+            opacity: 0.5,
+            padding: const EdgeInsets.all(5),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final itemWidth = constraints.maxWidth / widget.items.length;
+                return Stack(
+                  children: [
+                    if (target != null)
+                      Positioned.fill(
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(begin: _from ?? target, end: target),
+                          duration: const Duration(milliseconds: 260),
+                          curve: Curves.easeOutCubic,
+                          builder: (context, position, _) => Align(
+                            alignment: Alignment.centerLeft,
+                            child: Transform.translate(
+                              key: const ValueKey('nav-pill'),
+                              offset: Offset(position * itemWidth, 0),
+                              child: _Inflate(
+                                from: inflateFrom,
+                                child: _LiquidSelectedPill(
+                                    width: itemWidth, color: color),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  Row(
-                    children: [
-                      for (var index = 0; index < widget.items.length; index++)
-                        Expanded(
-                          child: _GlassNavButton(
-                            item: widget.items[index],
-                            selected: index == selected,
-                            inflateFrom: inflateFrom,
-                            color: color,
-                            onTap: () => widget.onSelected(index),
+                    Row(
+                      children: [
+                        for (var index = 0;
+                            index < widget.items.length;
+                            index++)
+                          Expanded(
+                            child: _GlassNavButton(
+                              item: widget.items[index],
+                              selected: index == selected,
+                              inflateFrom: inflateFrom,
+                              expanded: expanded,
+                              color: color,
+                              onTap: () => widget.onSelected(index),
+                            ),
                           ),
-                        ),
-                    ],
-                  ),
-                ],
-              );
-            },
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Pílula do item selecionado: vidro azul (liquid glass) com o mesmo
+/// brilho de borda e reflexo da barra.
+class _LiquidSelectedPill extends StatelessWidget {
+  const _LiquidSelectedPill({required this.width, required this.color});
+
+  final double width;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    const radius = BorderRadius.all(Radius.circular(999));
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: width,
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            color.withValues(alpha: 0.30),
+            color.withValues(alpha: 0.14),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.22),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: CustomPaint(
+        painter: LiquidHighlightPainter(
+            borderRadius: radius, strength: dark ? 0.5 : 0.9),
       ),
     );
   }
@@ -252,6 +370,7 @@ class _GlassNavButton extends StatelessWidget {
     required this.item,
     required this.selected,
     required this.inflateFrom,
+    required this.expanded,
     required this.color,
     required this.onTap,
   });
@@ -259,6 +378,9 @@ class _GlassNavButton extends StatelessWidget {
   final GlassNavItem item;
   final bool selected;
   final double inflateFrom;
+
+  /// 1 = com o nome embaixo do ícone, 0 = só o ícone.
+  final double expanded;
   final Color color;
   final VoidCallback onTap;
 
@@ -276,7 +398,7 @@ class _GlassNavButton extends StatelessWidget {
         // A pílula de destaque é desenhada pela barra (desliza entre os
         // itens); aqui só ícone e rótulo.
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: EdgeInsets.symmetric(vertical: 4 + 2 * expanded),
           child: _Inflate(
             from: selected ? inflateFrom : 1,
             to: selected ? _navInflatedScale : 1,
@@ -285,16 +407,26 @@ class _GlassNavButton extends StatelessWidget {
               children: [
                 Icon(selected ? item.selectedIcon : item.icon,
                     color: foreground, size: 24),
-                const SizedBox(height: 2),
-                Text(
-                  item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: foreground,
-                        fontWeight:
-                            selected ? FontWeight.w700 : FontWeight.w500,
+                SizedBox(height: 2 * expanded),
+                // O nome encolhe até sumir (barra compacta).
+                ClipRect(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    heightFactor: expanded,
+                    child: Opacity(
+                      opacity: expanded,
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: foreground,
+                              fontWeight:
+                                  selected ? FontWeight.w700 : FontWeight.w500,
+                            ),
                       ),
+                    ),
+                  ),
                 ),
               ],
             ),

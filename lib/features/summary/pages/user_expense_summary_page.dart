@@ -6,6 +6,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
+import '../../../shared/widgets/glass_dropdown_field.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
@@ -70,10 +71,7 @@ class _UserExpenseSummaryPageState
                 groupId = groups.first.id;
                 ref.read(selectedGroupIdProvider.notifier).state = groupId;
               }
-              return DropdownButtonFormField<String>(
-                dropdownColor: glassMenuColor(context),
-                borderRadius: glassMenuRadius,
-                menuMaxHeight: glassMenuMaxHeight,
+              return GlassDropdownField<String>(
                 initialValue: groupId,
                 decoration: const InputDecoration(labelText: 'Grupo'),
                 items: groups
@@ -115,10 +113,7 @@ class _UserExpenseSummaryPageState
                       ref.read(groupsRepositoryProvider).listMembers(groupId!),
                   builder: (context, snapshot) {
                     final members = snapshot.data ?? [];
-                    return DropdownButtonFormField<String?>(
-                      dropdownColor: glassMenuColor(context),
-                      borderRadius: glassMenuRadius,
-                      menuMaxHeight: glassMenuMaxHeight,
+                    return GlassDropdownField<String?>(
                       initialValue: userId,
                       decoration: const InputDecoration(labelText: 'Extrato'),
                       items: [
@@ -148,10 +143,7 @@ class _UserExpenseSummaryPageState
                   events.every((event) => event.id != eventId)) {
                 eventId = null;
               }
-              return DropdownButtonFormField<String?>(
-                dropdownColor: glassMenuColor(context),
-                borderRadius: glassMenuRadius,
-                menuMaxHeight: glassMenuMaxHeight,
+              return GlassDropdownField<String?>(
                 key: ValueKey('summary-event-$groupId-$eventId'),
                 initialValue: eventId,
                 decoration: const InputDecoration(labelText: 'Evento'),
@@ -178,10 +170,7 @@ class _UserExpenseSummaryPageState
           ),
           const SizedBox(height: 12),
           categoriesAsync.when(
-            data: (categories) => DropdownButtonFormField<String?>(
-              dropdownColor: glassMenuColor(context),
-              borderRadius: glassMenuRadius,
-              menuMaxHeight: glassMenuMaxHeight,
+            data: (categories) => GlassDropdownField<String?>(
               initialValue: category,
               decoration: const InputDecoration(labelText: 'Tipo de despesa'),
               items: [

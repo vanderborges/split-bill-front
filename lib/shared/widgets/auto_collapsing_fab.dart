@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'glass.dart';
+
 /// Espaço que uma lista com botão "+" precisa no fim: 56 do botão + 16 de
 /// margem de cada lado. Sem isso o último item (e os botões dele) ficava
 /// embaixo do "+", sem como rolar mais.
@@ -79,30 +81,60 @@ class _AutoCollapsingFabState extends State<AutoCollapsingFab>
       animation: _extent,
       builder: (context, _) {
         final t = _extent.value;
+        final scheme = Theme.of(context).colorScheme;
         // Com t = 0: 16 + ícone 24 + 16 = 56, o mesmo tamanho do FAB
         // normal — o fim da animação coincide com o botão "+".
-        return FloatingActionButton.extended(
-          onPressed: _handlePressed,
-          tooltip: t < 1 ? widget.label : null,
-          extendedPadding: EdgeInsetsDirectional.only(
-            start: 16,
-            end: 16 + 4 * t,
-          ),
-          extendedIconLabelSpacing: 8 * t,
-          icon: Icon(widget.icon),
-          label: t == 0
-              ? const SizedBox.shrink()
-              : ClipRect(
-                  child: Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    widthFactor: t,
-                    child: Opacity(
-                      opacity: Curves.easeIn.transform(t),
-                      child: Text(widget.label, maxLines: 1, softWrap: false),
+        // Vidro verde (liquid glass, iOS 26), como a barra de menus.
+        final button = Semantics(
+          button: true,
+          label: widget.label,
+          child: GlassSurface(
+            tint: scheme.primary,
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: _handlePressed,
+                child: SizedBox(
+                  height: 56,
+                  child: Padding(
+                    padding: EdgeInsetsDirectional.only(
+                      start: 16,
+                      end: 16 + 4 * t,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(widget.icon, color: scheme.onPrimary),
+                        SizedBox(width: 8 * t),
+                        if (t > 0)
+                          ClipRect(
+                            child: Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              widthFactor: t,
+                              child: Opacity(
+                                opacity: Curves.easeIn.transform(t),
+                                child: Text(
+                                  widget.label,
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelLarge
+                                      ?.copyWith(color: scheme.onPrimary),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
+              ),
+            ),
+          ),
         );
+        return t < 1 ? Tooltip(message: widget.label, child: button) : button;
       },
     );
   }

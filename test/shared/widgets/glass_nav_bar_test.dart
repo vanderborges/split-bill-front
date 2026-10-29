@@ -84,6 +84,41 @@ void main() {
     expect(scaleOf('Início'), closeTo(1, 0.01));
   });
 
+  testWidgets('compacta: some o nome e a barra fica menor; volta ao normal',
+      (tester) async {
+    Widget compactBar(bool compact) => MaterialApp(
+          home: Scaffold(
+            bottomNavigationBar: GlassNavBar(
+              items: items,
+              selectedIndex: 0,
+              compact: compact,
+              onSelected: (_) {},
+            ),
+          ),
+        );
+    double barHeight() => tester.getSize(find.byType(GlassSurface)).height;
+    double labelOpacity() => tester
+        .widget<Opacity>(find
+            .ancestor(of: find.text('Grupos'), matching: find.byType(Opacity))
+            .first)
+        .opacity;
+
+    await tester.pumpWidget(compactBar(false));
+    await tester.pumpAndSettle();
+    final normal = barHeight();
+    expect(labelOpacity(), 1);
+
+    await tester.pumpWidget(compactBar(true));
+    await tester.pumpAndSettle();
+    expect(barHeight(), lessThan(normal));
+    expect(labelOpacity(), 0);
+
+    await tester.pumpWidget(compactBar(false));
+    await tester.pumpAndSettle();
+    expect(barHeight(), normal);
+    expect(labelOpacity(), 1);
+  });
+
   testWidgets('toque avisa o índice da aba', (tester) async {
     int? tapped;
     await tester.pumpWidget(bar(0, onSelected: (index) => tapped = index));

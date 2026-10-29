@@ -11,6 +11,7 @@ import '../../../shared/widgets/amount_field.dart';
 import '../../../shared/widgets/keyboard_done_bar.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
+import '../../../shared/widgets/glass_dropdown_field.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
@@ -268,7 +269,10 @@ class _ExpensesView extends ConsumerWidget {
                                 : 'Nenhuma despesa cadastrada.',
                             message: showOnlyMine
                                 ? 'Desmarque o filtro para ver as despesas de todo o grupo.'
-                                : 'Toque em "+" para registrar o primeiro gasto deste evento.',
+                                : selectedEventClosedForExpenses
+                                    // Fechado não tem o "+".
+                                    ? 'Este evento não recebe mais despesas.'
+                                    : 'Toque em "+" para registrar o primeiro gasto deste evento.',
                           );
                         }
                         final sortedExpenses = [...visibleExpenses]
@@ -709,10 +713,7 @@ Future<({EventModel? event, bool createEvent})?> _pickExpenseDestination(
                 Text('Nova despesa',
                     style: Theme.of(sheetContext).textTheme.titleLarge),
                 const SizedBox(height: AppSpacing.lg),
-                DropdownButtonFormField<String>(
-                  dropdownColor: glassMenuColor(context),
-                  borderRadius: glassMenuRadius,
-                  menuMaxHeight: glassMenuMaxHeight,
+                GlassDropdownField<String>(
                   initialValue: groupId,
                   decoration: const InputDecoration(labelText: 'Grupo'),
                   items: groups
@@ -743,10 +744,7 @@ Future<({EventModel? event, bool createEvent})?> _pickExpenseDestination(
                     label: const Text('Criar evento'),
                   ),
                 ] else
-                  DropdownButtonFormField<String>(
-                    dropdownColor: glassMenuColor(context),
-                    borderRadius: glassMenuRadius,
-                    menuMaxHeight: glassMenuMaxHeight,
+                  GlassDropdownField<String>(
                     key: ValueKey('picker-event-$groupId'),
                     initialValue: eventId,
                     decoration: const InputDecoration(labelText: 'Evento'),
@@ -1229,10 +1227,7 @@ Future<void> _openExpenseForm(
                       label: Text(_formatDate(selectedExpenseDate)),
                     ),
                     const SizedBox(height: AppSpacing.md),
-                    DropdownButtonFormField<String>(
-                      dropdownColor: glassMenuColor(context),
-                      borderRadius: glassMenuRadius,
-                      menuMaxHeight: glassMenuMaxHeight,
+                    GlassDropdownField<String>(
                       initialValue: selectedCategory,
                       decoration:
                           const InputDecoration(labelText: 'Tipo de despesa'),
@@ -1271,10 +1266,7 @@ Future<void> _openExpenseForm(
                         style: Theme.of(routeContext).textTheme.titleSmall),
                     const SizedBox(height: AppSpacing.sm),
                     if (!splitPaymentByUser) ...[
-                      DropdownButtonFormField<String>(
-                        dropdownColor: glassMenuColor(context),
-                        borderRadius: glassMenuRadius,
-                        menuMaxHeight: glassMenuMaxHeight,
+                      GlassDropdownField<String>(
                         initialValue: singlePayerId,
                         // Sem label: o título "Quem pagou" logo acima já diz o que é.
                         decoration: const InputDecoration(),

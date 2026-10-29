@@ -39,10 +39,9 @@ class GroupMemberModel {
     // Desde a junção de "sem cadastro" e "temporários" (27/10/2026), o
     // rótulo segue só o flag de temporário: sem cadastro que o admin tornou
     // integrante aparece como Integrante.
+    // Sem o evento do temporário (ex.: "· 10/2026"): só "Temporário".
     if (temporary) {
-      return temporaryEventName == null
-          ? 'Temporário'
-          : 'Temporário · $temporaryEventName';
+      return 'Temporário';
     }
     return role == 'ADMIN' ? 'Admin' : 'Integrante';
   }

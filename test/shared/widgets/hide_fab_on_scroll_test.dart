@@ -17,7 +17,8 @@ void main() {
             for (var i = 0; i < 100; i++) ListTile(title: Text('Item $i')),
           ],
         ),
-        builder: (fab, body) => Scaffold(floatingActionButton: fab, body: body),
+        builder: (fab, body, _) =>
+            Scaffold(floatingActionButton: fab, body: body),
       ),
     ));
     expect(fabOffset(tester), Offset.zero);

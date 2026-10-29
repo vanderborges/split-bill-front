@@ -56,9 +56,12 @@ class ReportsRepository {
   Future<List<BalanceExpenseDetailModel>> getBalanceDetails({
     required String eventId,
     required String userId,
+    // Só as despesas da própria pessoa, sem quem é vinculado a ela.
+    bool onlyUser = false,
   }) async {
     final response = await dio.get<List<dynamic>>(
-        '/reports/events/$eventId/balances/$userId/details');
+        '/reports/events/$eventId/balances/$userId/details',
+        queryParameters: onlyUser ? {'onlyUser': true} : null);
     return response.data!
         .map((item) =>
             BalanceExpenseDetailModel.fromJson(item as Map<String, dynamic>))

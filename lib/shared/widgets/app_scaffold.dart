@@ -49,10 +49,10 @@ class AppScaffold extends ConsumerWidget {
     final isWide = MediaQuery.sizeOf(context).width >= _wideLayoutBreakpoint;
     final currentPath = GoRouterState.of(context).uri.path;
 
-    return HideFabOnScroll(
+    final scaffold = HideFabOnScroll(
       fab: floatingActionButton,
       body: child,
-      builder: (fab, body) => isWide
+      builder: (fab, body, scrolledDown) => isWide
           ? _WideScaffold(
               title: title,
               showUsers: showUsers,
@@ -70,9 +70,14 @@ class AppScaffold extends ConsumerWidget {
               actions: actions,
               onBack: onBack,
               showBottomBar: showBottomBar,
+              compactBottomBar: scrolledDown,
               child: body,
             ),
     );
+    // Com seta de voltar: arrastar da borda esquerda pra direita (iOS) e o
+    // voltar do sistema (Android) fazem o mesmo que a seta.
+    final back = onBack;
+    return back == null ? scaffold : SwipeBack(onBack: back, child: scaffold);
   }
 }
 
@@ -205,6 +210,7 @@ class _NarrowScaffold extends ConsumerWidget {
     required this.actions,
     required this.onBack,
     required this.showBottomBar,
+    required this.compactBottomBar,
     required this.child,
   });
 
@@ -215,6 +221,7 @@ class _NarrowScaffold extends ConsumerWidget {
   final List<Widget>? actions;
   final VoidCallback? onBack;
   final bool showBottomBar;
+  final bool compactBottomBar;
   final Widget child;
 
   // Última aba da barra inferior que estava selecionada. Telas fora da
@@ -256,6 +263,9 @@ class _NarrowScaffold extends ConsumerWidget {
         onBack: onBack,
         actions: [
           const _NotificationBell(),
+          // Ações da tela (ex.: limpar notificações) logo depois do sino,
+          // antes do nome de quem está logado.
+          ...?actions,
           if (currentUser != null)
             InkWell(
               borderRadius: BorderRadius.circular(999),
@@ -285,12 +295,12 @@ class _NarrowScaffold extends ConsumerWidget {
                 ),
               ),
             ),
-          ...?actions,
         ],
       ),
       bottomNavigationBar: !showBottomBar
           ? null
           : GlassNavBar(
+              compact: compactBottomBar,
               selectedIndex: _selectedIndex(currentPath),
               onSelected: (index) {
                 const paths = ['/', '/groups', '/events', '/summary'];
@@ -447,6 +457,71 @@ class _ScreenBodyState extends State<_ScreenBody> {
     return ScreenBodyScope(
       bodyKey: _bodyKey,
       child: KeyedSubtree(key: _bodyKey, child: widget.child),
+    );
+  }
+}
+
+/// Voltar arrastando: uma faixa fina na borda esquerda pega o arraste pra
+/// direita (a tela acompanha o dedo) e chama [onBack] se passar de um
+/// pedaço da tela ou for rápido. Só a borda, pra não brigar com listas e
+/// itens que deslizam (ex.: apagar notificação). Também trata o voltar do
+/// sistema (botão/gesto do Android): sem pilha de telas (as rotas usam
+/// `go`), ele fecharia o app.
+class SwipeBack extends StatefulWidget {
+  const SwipeBack({super.key, required this.onBack, required this.child});
+
+  final VoidCallback onBack;
+  final Widget child;
+
+  @override
+  State<SwipeBack> createState() => _SwipeBackState();
+}
+
+class _SwipeBackState extends State<SwipeBack> {
+  static const double _edgeWidth = 24;
+  double _dragX = 0;
+
+  void _onDragEnd(DragEndDetails details) {
+    final width = MediaQuery.sizeOf(context).width;
+    final velocity = details.primaryVelocity ?? 0;
+    final shouldGoBack = _dragX > width * 0.3 || velocity > 500;
+    setState(() => _dragX = 0);
+    if (shouldGoBack) {
+      widget.onBack();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          widget.onBack();
+        }
+      },
+      child: Stack(
+        children: [
+          Transform.translate(
+            offset: Offset(_dragX, 0),
+            child: widget.child,
+          ),
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: _edgeWidth,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragUpdate: (details) => setState(() => _dragX =
+                  (_dragX + details.delta.dx)
+                      .clamp(0, MediaQuery.sizeOf(context).width)),
+              onHorizontalDragEnd: _onDragEnd,
+              onHorizontalDragCancel: () => setState(() => _dragX = 0),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

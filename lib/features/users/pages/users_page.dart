@@ -6,6 +6,7 @@ import '../../../shared/api_error.dart';
 import '../../../shared/validators.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
+import '../../../shared/widgets/glass_dropdown_field.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
@@ -39,9 +40,13 @@ class UsersPage extends ConsumerWidget {
           if (users.isEmpty) {
             return EmptyState(
               icon: Icons.group_outlined,
-              message: isAdmin
+              title: isAdmin
                   ? 'Nenhum usuário cadastrado.'
                   : 'Nenhum usuário disponível.',
+              // Mesmo padrão de Eventos: aponta pro "+" (só admin tem).
+              message: isAdmin
+                  ? 'Toque em "+" para cadastrar o primeiro usuário.'
+                  : 'Fale com um administrador.',
             );
           }
           return ListView.separated(
@@ -230,10 +235,7 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
                       decoration: const InputDecoration(labelText: 'Chave PIX'),
                     ),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String?>(
-                      dropdownColor: glassMenuColor(context),
-                      borderRadius: glassMenuRadius,
-                      menuMaxHeight: glassMenuMaxHeight,
+                    GlassDropdownField<String?>(
                       initialValue: billingUserId,
                       decoration: const InputDecoration(
                           labelText: 'Cobrar saldo junto com'),

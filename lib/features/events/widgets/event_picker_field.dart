@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../shared/widgets/glass.dart';
+import '../../../shared/widgets/glass_dropdown_field.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../models/event_model.dart';
 
@@ -30,10 +30,7 @@ class EventPickerField extends StatelessWidget {
   Widget build(BuildContext context) {
     final events = [...this.events]..sort(EventModel.compareSettlingFirst);
     final allLabel = allEventsLabel;
-    return DropdownButtonFormField<String?>(
-      dropdownColor: glassMenuColor(context),
-      borderRadius: glassMenuRadius,
-      menuMaxHeight: glassMenuMaxHeight,
+    return GlassDropdownField<String?>(
       initialValue: selectedId,
       isExpanded: true,
       decoration: const InputDecoration(labelText: 'Evento'),

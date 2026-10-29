@@ -156,7 +156,8 @@ class _GroupCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: AppSpacing.xs),
-                _EventNameWithStatus(events.first),
+                // Evento único do grupo: sem a pílula de status.
+                _EventNameWithStatus(events.first, showStatus: false),
                 const SizedBox(height: AppSpacing.xs),
                 Text(_balanceText(events.first)),
               ],
@@ -211,9 +212,10 @@ class _GroupCard extends StatelessWidget {
 /// Nome do evento com a pílula de status ao lado (mesmas cores do seletor
 /// de evento e da tela de Eventos).
 class _EventNameWithStatus extends StatelessWidget {
-  const _EventNameWithStatus(this.event);
+  const _EventNameWithStatus(this.event, {this.showStatus = true});
 
   final DashboardEventBalanceModel event;
+  final bool showStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -223,7 +225,7 @@ class _EventNameWithStatus extends StatelessWidget {
       runSpacing: AppSpacing.xs,
       children: [
         Text(event.eventName),
-        EventStatusBadge(event.eventStatus),
+        if (showStatus) EventStatusBadge(event.eventStatus),
       ],
     );
   }

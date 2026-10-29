@@ -10,6 +10,7 @@ import '../../../shared/api_error.dart';
 import '../../../shared/ptbr_sort.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
+import '../../../shared/widgets/glass_dropdown_field.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
@@ -79,10 +80,7 @@ class EventFilterFields extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         groupsAsync.when(
-          data: (groups) => DropdownButtonFormField<String?>(
-            dropdownColor: glassMenuColor(context),
-            borderRadius: glassMenuRadius,
-            menuMaxHeight: glassMenuMaxHeight,
+          data: (groups) => GlassDropdownField<String?>(
             initialValue: selectedGroupId,
             decoration: const InputDecoration(labelText: 'Grupo'),
             items: [
@@ -182,7 +180,7 @@ class EventBalanceView extends ConsumerWidget {
             (report.status == 'OPEN' || report.status == 'SETTLING');
         final balances = onlyCurrentUser
             ? report.balances
-                .where((balance) => balance.userId == currentUserId)
+                .where((balance) => balance.includes(currentUserId))
                 .toList()
             : report.balances;
         if (onlyCurrentUser && balances.isEmpty) {
@@ -373,7 +371,10 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
       children: sortedBalances.map((balance) {
         final settlement = settlementsByUser[balance.userId];
         final expanded = expandedUserIds.contains(balance.userId);
-        final isCurrentUser = balance.userId == currentUserId;
+        // Extrato: quem é vinculado ao titular também vê a linha como "Você".
+        final isCurrentUser = widget.header != null
+            ? balance.includes(currentUserId)
+            : balance.userId == currentUserId;
         // Pago: fundo neutro + linha esmaecida, pra destacar visualmente
         // quem ainda está pendente.
         final isPaid = !widget.isEventOpen &&
@@ -442,7 +443,9 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                           const SizedBox(width: AppSpacing.sm),
                           Flexible(
                             child: Text(
-                              isCurrentUser ? 'Você' : balance.nickname,
+                              isCurrentUser
+                                  ? _youLabel(balance, currentUserId)
+                                  : balance.nickname,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style:
@@ -513,8 +516,7 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                             const SizedBox(height: 6),
                             payButton,
                           ],
-                          if (expanded)
-                            _BalanceDetails(details: _details(balance)),
+                          if (expanded) _detailsWidget(balance, currentUserId),
                         ],
                       );
                     }
@@ -549,7 +551,7 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                         if (expanded)
                           Padding(
                             padding: const EdgeInsets.only(left: 48, top: 8),
-                            child: _BalanceDetails(details: _details(balance)),
+                            child: _detailsWidget(balance, currentUserId),
                           ),
                       ],
                     );
@@ -569,6 +571,74 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
         expandedUserIds.remove(userId);
       }
     });
+  }
+
+  /// Extrato com gasto agrupado (cobrança vinculada): "Você + Fulano".
+  /// Fora do Extrato, ou sem mais ninguém com gasto, só "Você".
+  String _youLabel(MonthlyBalanceModel balance, String? currentUserId) {
+    if (widget.header == null) {
+      return 'Você';
+    }
+    final others = balance.activeMembers
+        .where((member) => member.userId != currentUserId)
+        .map((member) => member.nickname)
+        .toList();
+    return others.isEmpty ? 'Você' : 'Você + ${others.join(' + ')}';
+  }
+
+  /// Despesas da linha aberta. No Extrato com gasto agrupado, separa por
+  /// pessoa: "Você" com o total só seu e a lista, depois cada vinculado
+  /// com o total e a lista dele.
+  Widget _detailsWidget(MonthlyBalanceModel balance, String? currentUserId) {
+    final members = balance.activeMembers;
+    if (widget.header == null || members.length < 2) {
+      return _BalanceDetails(details: _details(balance));
+    }
+    final ordered = [
+      ...members.where((member) => member.userId == currentUserId),
+      ...members.where((member) => member.userId != currentUserId),
+    ];
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final member in ordered) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.md),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    member.userId == currentUserId ? 'Você' : member.nickname,
+                    style: textTheme.titleSmall,
+                  ),
+                ),
+                MoneyText(member.balance, colorBySign: true, showSign: true),
+              ],
+            ),
+          ),
+          _BalanceDetails(
+              details: _memberDetails(member.userId, singleUser: true)),
+        ],
+      ],
+    );
+  }
+
+  Future<List<BalanceExpenseDetailModel>> _memberDetails(String userId,
+      {required bool singleUser}) {
+    final eventId =
+        widget.eventId ?? ref.read(selectedEventProvider).valueOrNull?.id;
+    if (eventId == null) {
+      return Future.value([]);
+    }
+    return detailsByUser.putIfAbsent(
+      '$userId|$singleUser',
+      () => ref.read(reportsRepositoryProvider).getBalanceDetails(
+            eventId: eventId,
+            userId: userId,
+            onlyUser: singleUser,
+          ),
+    );
   }
 
   Future<List<BalanceExpenseDetailModel>> _details(
@@ -1260,7 +1330,7 @@ class _MyEventBalanceCard extends ConsumerWidget {
       );
     }
     final mine =
-        report.balances.where((b) => b.userId == currentUserId).toList();
+        report.balances.where((b) => b.includes(currentUserId)).toList();
     if (mine.isEmpty) {
       return const SizedBox.shrink();
     }

@@ -6,6 +6,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
+import '../../../shared/widgets/glass_dropdown_field.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
@@ -79,10 +80,7 @@ class EventsPage extends ConsumerWidget {
                 final value = groups.any((group) => group.id == selectedGroupId)
                     ? selectedGroupId
                     : null;
-                return DropdownButtonFormField<String>(
-                  dropdownColor: glassMenuColor(context),
-                  borderRadius: glassMenuRadius,
-                  menuMaxHeight: glassMenuMaxHeight,
+                return GlassDropdownField<String>(
                   key: ValueKey(value),
                   initialValue: value,
                   decoration:
@@ -452,10 +450,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                                     (group) => group.id != selectedGroupId)) {
                               selectedGroupId = groups.first.id;
                             }
-                            return DropdownButtonFormField<String>(
-                              dropdownColor: glassMenuColor(context),
-                              borderRadius: glassMenuRadius,
-                              menuMaxHeight: glassMenuMaxHeight,
+                            return GlassDropdownField<String>(
                               initialValue: selectedGroupId,
                               decoration:
                                   const InputDecoration(labelText: 'Grupo'),

@@ -104,14 +104,19 @@ class ProfilePage extends ConsumerWidget {
               const SizedBox(height: AppSpacing.xl),
               const Divider(),
               const SizedBox(height: AppSpacing.md),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.error,
-                  side: BorderSide(color: Theme.of(context).colorScheme.error),
+              // Só um link (vermelho, sem borda): ação rara e destrutiva,
+              // não deve competir com os botões do Perfil.
+              Center(
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                  ),
+                  onPressed: () => _showDeleteAccountDialog(context, ref, user),
+                  child: const Text(
+                    'Excluir conta',
+                    style: TextStyle(decoration: TextDecoration.underline),
+                  ),
                 ),
-                onPressed: () => _showDeleteAccountDialog(context, ref, user),
-                icon: const Icon(Icons.delete_forever_outlined),
-                label: const Text('Excluir conta'),
               ),
               const SizedBox(height: AppSpacing.lg),
               const _AppVersionText(),
@@ -144,30 +149,86 @@ class _ThemeModeSelector extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleSmall),
         ),
         const SizedBox(height: AppSpacing.sm),
-        SizedBox(
-          width: double.infinity,
-          child: SegmentedButton<ThemeMode>(
-            segments: const [
-              ButtonSegment(
-                  value: ThemeMode.light,
-                  icon: Icon(Icons.light_mode_outlined),
-                  label: Text('Claro')),
-              ButtonSegment(
-                  value: ThemeMode.dark,
-                  icon: Icon(Icons.dark_mode_outlined),
-                  label: Text('Escuro')),
-              ButtonSegment(
-                  value: ThemeMode.system,
-                  icon: Icon(Icons.brightness_auto_outlined),
-                  label: Text('Sistema')),
+        // Três cartões (Sistema | Dia | Noite): o escolhido fica preenchido,
+        // os outros só com contorno.
+        Row(
+          children: [
+            for (final option in const [
+              (ThemeMode.system, Icons.contrast, 'Sistema'),
+              (ThemeMode.light, Icons.light_mode, 'Dia'),
+              (ThemeMode.dark, Icons.dark_mode, 'Noite'),
+            ]) ...[
+              if (option.$1 != ThemeMode.system)
+                const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _ThemeModeTile(
+                  icon: option.$2,
+                  label: option.$3,
+                  selected: mode == option.$1,
+                  onTap: () =>
+                      ref.read(themeModeProvider.notifier).set(option.$1),
+                ),
+              ),
             ],
-            selected: {mode},
-            showSelectedIcon: false,
-            onSelectionChanged: (selection) =>
-                ref.read(themeModeProvider.notifier).set(selection.first),
-          ),
+          ],
         ),
       ],
+    );
+  }
+}
+
+class _ThemeModeTile extends StatelessWidget {
+  const _ThemeModeTile({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final foreground = selected ? scheme.onSurface : scheme.onSurfaceVariant;
+    const radius = BorderRadius.all(Radius.circular(20));
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: Column(
+        children: [
+          Material(
+            color:
+                selected ? scheme.surfaceContainerHighest : Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: radius,
+              side: selected
+                  ? BorderSide.none
+                  : BorderSide(color: scheme.outlineVariant),
+            ),
+            child: InkWell(
+              borderRadius: radius,
+              onTap: onTap,
+              child: AspectRatio(
+                aspectRatio: 1.55,
+                child: Center(child: Icon(icon, size: 30, color: foreground)),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: foreground,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                ),
+          ),
+        ],
+      ),
     );
   }
 }

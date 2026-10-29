@@ -15,7 +15,10 @@ class HideFabOnScroll extends StatefulWidget {
 
   final Widget? fab;
   final Widget body;
-  final Widget Function(Widget? fab, Widget body) builder;
+
+  /// [scrolledDown]: a pessoa está rolando pra baixo (o mesmo sinal que
+  /// esconde o "+"); a barra de menus usa pra ficar compacta.
+  final Widget Function(Widget? fab, Widget body, bool scrolledDown) builder;
 
   @override
   State<HideFabOnScroll> createState() => _HideFabOnScrollState();
@@ -62,6 +65,7 @@ class _HideFabOnScrollState extends State<HideFabOnScroll> {
         onNotification: _onScroll,
         child: widget.body,
       ),
+      !_visible,
     );
   }
 }
