@@ -95,6 +95,8 @@ class _ExpensesView extends ConsumerWidget {
 
     return AppScaffold(
       title: title,
+      // Despesas/Saldo de um evento: a seta volta pra lista de Eventos.
+      onBack: () => context.go('/events'),
       floatingActionButton: selectedEventClosedForExpenses || showBalance
           ? null
           : AutoCollapsingFab(

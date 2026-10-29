@@ -121,9 +121,18 @@ class GlassNavItem {
   final String label;
 }
 
-/// Barra de navegação inferior flutuante, numa pílula de vidro; o item
-/// selecionado ganha uma pílula interna destacada (padrão do WhatsApp).
-class GlassNavBar extends StatelessWidget {
+/// Azul do item selecionado na barra de menus (padrão do app Trello).
+Color navSelectedColor(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF579DFF)
+        : const Color(0xFF0C66E4);
+
+/// Barra de navegação inferior flutuante, numa pílula de vidro. Como no
+/// Trello, o item selecionado fica azul e a pílula de destaque desliza de
+/// um item pro outro ao trocar de aba. Cada tela monta a própria barra
+/// (não há shell), então a posição anterior fica em [_lastPosition] e a
+/// barra nova anima a partir dela.
+class GlassNavBar extends StatefulWidget {
   const GlassNavBar({
     super.key,
     required this.items,
@@ -132,12 +141,35 @@ class GlassNavBar extends StatelessWidget {
   });
 
   final List<GlassNavItem> items;
+
+  /// -1 = nenhum item marcado (ex.: Perfil, Extrato geral).
   final int selectedIndex;
   final ValueChanged<int> onSelected;
 
+  static double? _lastPosition;
+
+  @override
+  State<GlassNavBar> createState() => _GlassNavBarState();
+}
+
+class _GlassNavBarState extends State<GlassNavBar> {
+  // De onde a pílula parte: a posição da barra da tela anterior. Lida no
+  // initState, antes do build gravar a posição nova.
+  double? _from;
+
+  @override
+  void initState() {
+    super.initState();
+    _from = GlassNavBar._lastPosition;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final selected = widget.selectedIndex;
+    final hasSelection = selected >= 0 && selected < widget.items.length;
+    final target = hasSelection ? selected.toDouble() : null;
+    GlassNavBar._lastPosition = target;
+    final color = navSelectedColor(context);
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.only(bottom: 8),
@@ -145,18 +177,48 @@ class GlassNavBar extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
         child: GlassSurface(
           padding: const EdgeInsets.all(5),
-          child: Row(
-            children: [
-              for (var index = 0; index < items.length; index++)
-                Expanded(
-                  child: _GlassNavButton(
-                    item: items[index],
-                    selected: index == selectedIndex,
-                    color: scheme.primary,
-                    onTap: () => onSelected(index),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final itemWidth = constraints.maxWidth / widget.items.length;
+              return Stack(
+                children: [
+                  if (target != null)
+                    Positioned.fill(
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: _from ?? target, end: target),
+                        duration: const Duration(milliseconds: 260),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, position, _) => Align(
+                          alignment: Alignment.centerLeft,
+                          child: Transform.translate(
+                            offset: Offset(position * itemWidth, 0),
+                            child: Container(
+                              width: itemWidth,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(999),
+                                color: color.withValues(alpha: 0.14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  Row(
+                    children: [
+                      for (var index = 0; index < widget.items.length; index++)
+                        Expanded(
+                          child: _GlassNavButton(
+                            item: widget.items[index],
+                            selected: index == selected,
+                            color: color,
+                            onTap: () => widget.onSelected(index),
+                          ),
+                        ),
+                    ],
                   ),
-                ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -188,14 +250,10 @@ class _GlassNavButton extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
+        // A pílula de destaque é desenhada pela barra (desliza entre os
+        // itens); aqui só ícone e rótulo.
+        child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            color: selected ? color.withValues(alpha: 0.14) : null,
-          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -221,28 +279,43 @@ class _GlassNavButton extends StatelessWidget {
 
 /// Barra superior "liquid glass": título à esquerda e as ações agrupadas
 /// numa pílula de vidro à direita (como no WhatsApp).
+///
+/// [onBack]: seta de voltar colada à esquerda do título (como no WhatsApp).
 PreferredSizeWidget glassAppBar(
   BuildContext context, {
   required String title,
   required List<Widget> actions,
   bool showDrawerButton = false,
+  VoidCallback? onBack,
 }) {
+  final titleText = Text(
+    title,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: Theme.of(context)
+        .textTheme
+        .titleLarge
+        ?.copyWith(fontWeight: FontWeight.w700),
+  );
   return AppBar(
     backgroundColor: Colors.transparent,
     surfaceTintColor: Colors.transparent,
     elevation: 0,
     scrolledUnderElevation: 0,
     automaticallyImplyLeading: showDrawerButton,
-    titleSpacing: showDrawerButton ? 0 : 16,
-    title: Text(
-      title,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context)
-          .textTheme
-          .titleLarge
-          ?.copyWith(fontWeight: FontWeight.w700),
-    ),
+    titleSpacing: showDrawerButton || onBack != null ? 0 : 16,
+    title: onBack == null
+        ? titleText
+        : Row(
+            children: [
+              IconButton(
+                tooltip: 'Voltar',
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back),
+              ),
+              Flexible(child: titleText),
+            ],
+          ),
     actions: [
       if (actions.isNotEmpty)
         Padding(

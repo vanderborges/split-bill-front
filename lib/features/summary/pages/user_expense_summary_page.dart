@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
@@ -53,7 +54,9 @@ class _UserExpenseSummaryPageState
     final categoriesAsync = ref.watch(expenseCategoriesProvider);
 
     return AppScaffold(
-      title: 'Extrato',
+      title: 'Extrato Geral',
+      // Volta pro Extrato (saldo por evento).
+      onBack: () => context.go('/summary'),
       child: ListView(
         padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomBarInset(context)),
         children: [

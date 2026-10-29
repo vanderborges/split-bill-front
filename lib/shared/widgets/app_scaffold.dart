@@ -24,11 +24,14 @@ class AppScaffold extends ConsumerWidget {
     required this.child,
     this.floatingActionButton,
     this.actions,
+    this.onBack,
   });
 
   final String title;
   final Widget child;
   final Widget? floatingActionButton;
+  // Seta de voltar à esquerda do título (telas abertas a partir de outra).
+  final VoidCallback? onBack;
   // Ações extras no fim da AppBar, depois do sino de notificações e do
   // menu padrão — usado por telas que precisam de um botão próprio (ex.:
   // "Limpar notificações").
@@ -51,6 +54,7 @@ class AppScaffold extends ConsumerWidget {
               currentPath: currentPath,
               floatingActionButton: fab,
               actions: actions,
+              onBack: onBack,
               child: body,
             )
           : _NarrowScaffold(
@@ -59,6 +63,7 @@ class AppScaffold extends ConsumerWidget {
               currentPath: currentPath,
               floatingActionButton: fab,
               actions: actions,
+              onBack: onBack,
               child: body,
             ),
     );
@@ -82,6 +87,7 @@ class _WideScaffold extends ConsumerWidget {
     required this.currentPath,
     required this.floatingActionButton,
     required this.actions,
+    required this.onBack,
     required this.child,
   });
 
@@ -90,6 +96,7 @@ class _WideScaffold extends ConsumerWidget {
   final String currentPath;
   final Widget? floatingActionButton;
   final List<Widget>? actions;
+  final VoidCallback? onBack;
   final Widget child;
 
   @override
@@ -110,6 +117,7 @@ class _WideScaffold extends ConsumerWidget {
         context,
         title: title,
         showDrawerButton: true,
+        onBack: onBack,
         actions: [const _NotificationBell(), ...?actions],
       ),
       drawer: NavigationDrawer(
@@ -174,7 +182,7 @@ class _WideScaffold extends ConsumerWidget {
 }
 
 /// Layout para celular: barra inferior com os 4 destinos mais usados
-/// (Início, Eventos, Grupos, Extrato; o Relatório saiu da barra e o saldo
+/// (Início, Grupos, Eventos, Extrato; o Relatório saiu da barra e o saldo
 /// fica em Despesas > Saldo). Nova despesa já tem seu
 /// próprio botão (+) nas telas de Eventos/Despesas, então não duplicamos
 /// aqui. O nome da pessoa logada aparece na AppBar e abre o Perfil ao
@@ -187,6 +195,7 @@ class _NarrowScaffold extends ConsumerWidget {
     required this.currentPath,
     required this.floatingActionButton,
     required this.actions,
+    required this.onBack,
     required this.child,
   });
 
@@ -195,6 +204,7 @@ class _NarrowScaffold extends ConsumerWidget {
   final String currentPath;
   final Widget? floatingActionButton;
   final List<Widget>? actions;
+  final VoidCallback? onBack;
   final Widget child;
 
   // Última aba da barra inferior que estava selecionada. Telas fora da
@@ -206,11 +216,11 @@ class _NarrowScaffold extends ConsumerWidget {
   int _selectedIndex(String path) {
     final index = switch (path) {
       '/' => 0,
-      '/events' || '/expenses' => 1,
-      '/groups' => 2,
+      '/groups' => 1,
+      '/events' || '/expenses' => 2,
       '/summary' => 3,
-      // Perfil não é aba da barra: nenhuma fica marcada.
-      '/profile' => -1,
+      // Perfil e Extrato geral não são abas da barra: nenhuma fica marcada.
+      '/profile' || '/summary/general' => -1,
       _ => null,
     };
     if (index == null) {
@@ -230,6 +240,7 @@ class _NarrowScaffold extends ConsumerWidget {
       appBar: glassAppBar(
         context,
         title: title,
+        onBack: onBack,
         actions: [
           const _NotificationBell(),
           if (currentUser != null)
@@ -267,7 +278,7 @@ class _NarrowScaffold extends ConsumerWidget {
       bottomNavigationBar: GlassNavBar(
         selectedIndex: _selectedIndex(currentPath),
         onSelected: (index) {
-          const paths = ['/', '/events', '/groups', '/summary'];
+          const paths = ['/', '/groups', '/events', '/summary'];
           context.go(paths[index]);
         },
         items: const [
@@ -277,14 +288,14 @@ class _NarrowScaffold extends ConsumerWidget {
             label: 'Início',
           ),
           GlassNavItem(
-            icon: Icons.event_outlined,
-            selectedIcon: Icons.event,
-            label: 'Eventos',
-          ),
-          GlassNavItem(
             icon: Icons.groups_outlined,
             selectedIcon: Icons.groups,
             label: 'Grupos',
+          ),
+          GlassNavItem(
+            icon: Icons.event_outlined,
+            selectedIcon: Icons.event,
+            label: 'Eventos',
           ),
           GlassNavItem(
             icon: Icons.list_alt_outlined,

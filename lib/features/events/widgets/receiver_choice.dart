@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/widgets/person_avatar.dart';
 import '../../groups/models/group_member_model.dart';
 import '../../groups/services/groups_repository.dart';
+import '../../reports/models/monthly_report_model.dart';
+import '../../reports/services/reports_repository.dart';
 
 /// "Fechar evento": quem vai receber os pagamentos deste evento. Uma pessoa
 /// do evento (todo devedor paga pra ela) ou "Sugerir pagamentos" (o app
@@ -30,8 +32,47 @@ class _ReceiverChoiceState extends ConsumerState<ReceiverChoice> {
       .read(groupsRepositoryProvider)
       .listMembers(widget.groupId, eventId: widget.eventId);
   String? _selected;
+  // A pessoa já escolheu: a sugestão inicial não sobrescreve mais.
+  bool _touched = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _preselectTopCreditor();
+  }
+
+  /// Abre com o participante de maior saldo positivo já marcado (sem
+  /// ninguém positivo, fica em "Sugerir pagamentos"). Só a seleção inicial
+  /// muda; a escolha continua livre.
+  Future<void> _preselectTopCreditor() async {
+    try {
+      final results = await Future.wait([
+        _members,
+        ref.read(reportsRepositoryProvider).getEventReport(widget.eventId),
+      ]);
+      final members = results[0] as List<GroupMemberModel>;
+      final report = results[1] as MonthlyReportModel;
+      final eligible = _eligible(members).map((m) => m.userId).toSet();
+      final creditors = report.balances
+          .where((b) => b.balance > 0 && eligible.contains(b.userId))
+          .toList()
+        ..sort((a, b) => b.balance.compareTo(a.balance));
+      if (creditors.isEmpty || !mounted || _touched) {
+        return;
+      }
+      setState(() => _selected = creditors.first.userId);
+      widget.onChanged(creditors.first.userId);
+    } catch (_) {
+      // Sem saldo, fica em "Sugerir pagamentos" como antes.
+    }
+  }
+
+  // Pessoa sem cadastro não tem PIX nem abre o app.
+  List<GroupMemberModel> _eligible(List<GroupMemberModel> members) =>
+      members.where((member) => member.active && !member.placeholder).toList();
 
   void _select(String? userId) {
+    _touched = true;
     setState(() => _selected = userId);
     widget.onChanged(userId);
   }
@@ -57,10 +98,8 @@ class _ReceiverChoiceState extends ConsumerState<ReceiverChoice> {
             if (snapshot.connectionState != ConnectionState.done) {
               return const LinearProgressIndicator();
             }
-            // Pessoa sem cadastro não tem PIX nem abre o app.
-            final people = (snapshot.data ?? const <GroupMemberModel>[])
-                .where((member) => member.active && !member.placeholder)
-                .toList()
+            final people = _eligible(
+                snapshot.data ?? const <GroupMemberModel>[])
               ..sort((a, b) =>
                   a.nickname.toLowerCase().compareTo(b.nickname.toLowerCase()));
             return Column(

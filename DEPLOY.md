@@ -94,3 +94,20 @@ Gerar o `.ipa` exige Xcode, ou seja, um Mac (não dá para compilar iOS no Windo
 - Usar um serviço de CI com Mac na nuvem (ex: Codemagic, tem plano free para Flutter) configurado para buildar o `.ipa` e enviar automaticamente para o Firebase App Distribution a cada push.
 
 Além disso, testar/distribuir no iOS via TestFlight/App Distribution exige uma conta Apple Developer Program (paga, ~US$99/ano) para gerar o certificado e o provisioning profile — diferente do Android, que não precisa de conta paga para instalar fora da loja.
+
+### Problemas conhecidos no iOS (Codemagic)
+
+**403 "PLA Update available" ao buscar os arquivos de assinatura**
+
+```text
+GET https://api.appstoreconnect.apple.com/v1/bundleIds?... returned 403: Unable to process request - PLA Update available - You currently don't have access to this membership resource. To resolve this issue, your team's Account Holder, ..., must agree to the latest Program License Agreement.
+Failed to fetch iOS signing files using App Store Connect API
+```
+
+A Apple publicou uma nova versão do Program License Agreement e bloqueia a API do App Store Connect até o Account Holder aceitar. Não é problema de código nem de configuração do Codemagic.
+
+1. Entrar em https://developer.apple.com/account com o Apple ID do Account Holder e aceitar o contrato no banner "Review Agreement" (se o banner não aparecer, sair e entrar de novo, usar janela anônima ou abrir "Membership details").
+2. Conferir em https://appstoreconnect.apple.com → Business se há outro contrato pendente e aceitar.
+3. Esperar alguns minutos (pode levar até ~1 hora para propagar) e rodar o build iOS de novo.
+
+Só o Account Holder consegue aceitar (usuário Admin não tem a opção). Não é preciso trocar a API key do App Store Connect nem os certificados.

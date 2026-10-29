@@ -36,11 +36,6 @@ class ReportsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final eventAsync = ref.watch(selectedEventProvider);
-    final eventsAsync = ref.watch(eventsProvider);
-    final groupsAsync = ref.watch(groupsProvider);
-    final selectedGroupId = ref.watch(selectedGroupIdProvider);
-
     return AppScaffold(
       title: 'Relatórios',
       // Os seletores de grupo/evento ficam sempre visíveis, mesmo sem
@@ -49,63 +44,84 @@ class ReportsPage extends ConsumerWidget {
       // grupos pra navegar.
       child: ListView(
         padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomBarInset(context)),
-        children: [
-          groupsAsync.when(
-            data: (groups) => DropdownButtonFormField<String?>(
-              dropdownColor: glassMenuColor(context),
-              borderRadius: glassMenuRadius,
-              initialValue: selectedGroupId,
-              decoration: const InputDecoration(labelText: 'Grupo'),
-              items: [
-                const DropdownMenuItem<String?>(
-                    value: null, child: Text('Todos os grupos')),
-                ...groups.map((group) => DropdownMenuItem<String?>(
-                    value: group.id, child: Text(group.name))),
-              ],
-              onChanged: (value) {
-                ref.read(selectedGroupIdProvider.notifier).state = value;
-                ref.read(selectedEventIdProvider.notifier).state = null;
-                ref.invalidate(selectedEventProvider);
-                ref.invalidate(selectedEventReportProvider);
-                ref.invalidate(selectedEventSettlementsProvider);
-              },
-            ),
-            loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('Erro ao carregar grupos: $error'),
+        children: const [
+          EventFilterFields(),
+          SizedBox(height: 16),
+          EventBalanceView(),
+        ],
+      ),
+    );
+  }
+}
+
+/// Filtros Grupo + Evento do Relatório e do Extrato: gravam a escolha nos
+/// providers globais (grupo/evento selecionados).
+class EventFilterFields extends ConsumerWidget {
+  const EventFilterFields({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eventAsync = ref.watch(selectedEventProvider);
+    final eventsAsync = ref.watch(eventsProvider);
+    final groupsAsync = ref.watch(groupsProvider);
+    final selectedGroupId = ref.watch(selectedGroupIdProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        groupsAsync.when(
+          data: (groups) => DropdownButtonFormField<String?>(
+            dropdownColor: glassMenuColor(context),
+            borderRadius: glassMenuRadius,
+            initialValue: selectedGroupId,
+            decoration: const InputDecoration(labelText: 'Grupo'),
+            items: [
+              const DropdownMenuItem<String?>(
+                  value: null, child: Text('Todos os grupos')),
+              ...groups.map((group) => DropdownMenuItem<String?>(
+                  value: group.id, child: Text(group.name))),
+            ],
+            onChanged: (value) {
+              ref.read(selectedGroupIdProvider.notifier).state = value;
+              ref.read(selectedEventIdProvider.notifier).state = null;
+              ref.invalidate(selectedEventProvider);
+              ref.invalidate(selectedEventReportProvider);
+              ref.invalidate(selectedEventSettlementsProvider);
+            },
           ),
-          const SizedBox(height: 12),
-          eventAsync.when(
-            data: (event) => eventsAsync.when(
-              data: (events) => events.isEmpty
-                  ? const Text('Nenhum evento cadastrado neste grupo.')
-                  : EventPickerField(
-                      key: ValueKey(event?.id),
-                      events: events,
-                      selectedId: event?.id,
-                      groupNameOf: (groupId) =>
-                          _groupName(groupsAsync.valueOrNull, groupId),
-                      onChanged: (value) {
-                        final picked = events.where((item) => item.id == value);
-                        if (picked.isNotEmpty) {
-                          selectEvent(ref,
-                              groupId: picked.first.groupId, eventId: value);
-                        }
-                        ref.invalidate(selectedEventProvider);
-                        ref.invalidate(selectedEventReportProvider);
-                        ref.invalidate(selectedEventSettlementsProvider);
-                        ref.invalidate(selectedEventExpensesProvider);
-                      },
-                    ),
-              loading: () => const LinearProgressIndicator(),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
+          loading: () => const LinearProgressIndicator(),
+          error: (error, _) => Text('Erro ao carregar grupos: $error'),
+        ),
+        const SizedBox(height: 12),
+        eventAsync.when(
+          data: (event) => eventsAsync.when(
+            data: (events) => events.isEmpty
+                ? const Text('Nenhum evento cadastrado neste grupo.')
+                : EventPickerField(
+                    key: ValueKey(event?.id),
+                    events: events,
+                    selectedId: event?.id,
+                    groupNameOf: (groupId) =>
+                        _groupName(groupsAsync.valueOrNull, groupId),
+                    onChanged: (value) {
+                      final picked = events.where((item) => item.id == value);
+                      if (picked.isNotEmpty) {
+                        selectEvent(ref,
+                            groupId: picked.first.groupId, eventId: value);
+                      }
+                      ref.invalidate(selectedEventProvider);
+                      ref.invalidate(selectedEventReportProvider);
+                      ref.invalidate(selectedEventSettlementsProvider);
+                      ref.invalidate(selectedEventExpensesProvider);
+                    },
+                  ),
             loading: () => const LinearProgressIndicator(),
             error: (_, __) => const SizedBox.shrink(),
           ),
-          const SizedBox(height: 16),
-          const EventBalanceView(),
-        ],
-      ),
+          loading: () => const LinearProgressIndicator(),
+          error: (_, __) => const SizedBox.shrink(),
+        ),
+      ],
     );
   }
 }
@@ -113,14 +129,20 @@ class ReportsPage extends ConsumerWidget {
 /// Saldo do evento selecionado: status, ações do evento (Fechar, cobrança,
 /// Concluir), compartilhar, total e os cards de saldo com pagamento. Usado
 /// no Relatório e na visão "Saldo" da tela de Despesas.
+///
+/// [onlyCurrentUser] (tela Extrato): só o card de quem está logado, sem as
+/// ações do evento nem o compartilhar.
 class EventBalanceView extends ConsumerWidget {
-  const EventBalanceView({super.key});
+  const EventBalanceView({super.key, this.onlyCurrentUser = false});
+
+  final bool onlyCurrentUser;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final eventAsync = ref.watch(selectedEventProvider);
     final reportAsync = ref.watch(selectedEventReportProvider);
     final settlementsAsync = ref.watch(selectedEventSettlementsProvider);
+    final currentUserId = ref.watch(currentUserProvider).valueOrNull?.id;
     final isGroupAdmin = eventAsync.valueOrNull != null
         ? ref
                 .watch(groupRoleProvider(eventAsync.valueOrNull!.groupId))
@@ -140,8 +162,21 @@ class EventBalanceView extends ConsumerWidget {
         // Sem título/status aqui: o status fica na lista do seletor de
         // evento. Sem nenhum botão de ação, os cards sobem; com o evento
         // fechado não tem compartilhar.
-        final hasActions = isGroupAdmin &&
+        final hasActions = !onlyCurrentUser &&
+            isGroupAdmin &&
             (report.status == 'OPEN' || report.status == 'SETTLING');
+        final balances = onlyCurrentUser
+            ? report.balances
+                .where((balance) => balance.userId == currentUserId)
+                .toList()
+            : report.balances;
+        if (onlyCurrentUser && balances.isEmpty) {
+          return const EmptyState(
+            icon: Icons.receipt_long_outlined,
+            title: 'Você não tem saldo neste evento.',
+            message: 'Escolha outro evento ou veja o Extrato geral.',
+          );
+        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -168,19 +203,15 @@ class EventBalanceView extends ConsumerWidget {
                       icon: const Icon(Icons.campaign_outlined),
                       label: const Text('Enviar alerta de cobrança'),
                     ),
+                  // Habilitado com o evento aguardando pagamentos, mesmo com
+                  // pagamento em aberto: confirmar marca todos como pagos.
                   if (report.status == 'SETTLING' && isGroupAdmin)
-                    Tooltip(
-                      message: _hasPendingSettlement(settlementsAsync)
-                          ? 'Confirme todos os pagamentos antes de concluir o evento.'
-                          : '',
-                      child: FilledButton(
-                        onPressed: report.eventId == null ||
-                                _hasPendingSettlement(settlementsAsync)
-                            ? null
-                            : () => _confirmCloseEvent(
-                                context, ref, report.eventId!),
-                        child: const Text('Concluir evento'),
-                      ),
+                    FilledButton(
+                      onPressed: report.eventId == null
+                          ? null
+                          : () =>
+                              _confirmCloseEvent(context, ref, report.eventId!),
+                      child: const Text('Concluir evento'),
                     ),
                 ],
               ),
@@ -192,7 +223,7 @@ class EventBalanceView extends ConsumerWidget {
                     style: Theme.of(context).textTheme.bodyMedium),
                 MoneyText(report.totalExpenses),
                 const Spacer(),
-                if (report.status != 'CLOSED')
+                if (report.status != 'CLOSED' && !onlyCurrentUser)
                   IconButton(
                     tooltip: 'Compartilhar resumo',
                     onPressed: settlementsAsync.valueOrNull == null
@@ -211,7 +242,7 @@ class EventBalanceView extends ConsumerWidget {
             settlementsAsync.when(
               data: (settlements) => _ReportTable(
                 key: ValueKey('${report.eventId}-${report.monthId}'),
-                balances: report.balances,
+                balances: balances,
                 settlements: settlements,
                 canUpdateSettlements: isGroupAdmin,
                 isAwaitingPayment: report.status == 'SETTLING',
@@ -685,8 +716,8 @@ int _statusOrder(EventSettlementModel? settlement) {
 
 /// Compartilha um resumo em texto do relatório (Etapa 11 do roteiro de
 /// UX) pelo share sheet nativo — WhatsApp é uma das opções, não a única.
-/// Separa "A pagar" e "A receber", com os pendentes primeiro (mesma ordem
-/// da tela). Quando o grupo tem recebedor eleito, o texto diz pra quem
+/// Separa "A pagar" e "A receber", em ordem alfabética e sem status de
+/// pagamento. Quando o grupo tem recebedor eleito, o texto diz pra quem
 /// pagar e o PIX dele. A lista de pessoas não leva chave PIX.
 void _shareReport(
   MonthlyReportModel report,
@@ -694,22 +725,13 @@ void _shareReport(
   String? receiverNickname,
   String? receiverUserId,
 ) {
-  final settlementsByUser = {
-    for (final settlement in settlements) settlement.userId: settlement,
-  };
-  int pendingFirst(MonthlyBalanceModel first, MonthlyBalanceModel second) {
-    final statusComparison = _statusOrder(settlementsByUser[first.userId])
-        .compareTo(_statusOrder(settlementsByUser[second.userId]));
-    if (statusComparison != 0) {
-      return statusComparison;
-    }
-    return compareNamesPtBr(first.nickname, second.nickname);
-  }
+  int byName(MonthlyBalanceModel first, MonthlyBalanceModel second) =>
+      compareNamesPtBr(first.nickname, second.nickname);
 
   final debtors = report.balances.where((b) => b.balance < 0).toList()
-    ..sort(pendingFirst);
+    ..sort(byName);
   final creditors = report.balances.where((b) => b.balance > 0).toList()
-    ..sort(pendingFirst);
+    ..sort(byName);
   final title = report.eventName ??
       '${report.month.toString().padLeft(2, '0')}/${report.year}';
 
@@ -725,19 +747,10 @@ void _shareReport(
     buffer
       ..writeln()
       ..writeln(header);
+    // Só nome e valor, sem status de pagamento.
     for (final balance in balances) {
-      final settlement = settlementsByUser[balance.userId];
-      final isPending = settlement != null &&
-          settlement.amount != 0 &&
-          settlement.normalizedStatus != 'PAID';
-      // Evento aberto ainda não tem pagamento: sai só o valor.
-      final statusSuffix = report.status == 'OPEN'
-          ? ''
-          : isPending
-              ? ' (pendente)'
-              : ' (pago)';
       buffer.writeln(
-          '• ${balance.nickname}: ${formatCurrencyBRL(balance.balance.abs())}$statusSuffix');
+          '• ${balance.nickname}: ${formatCurrencyBRL(balance.balance.abs())}');
     }
   }
 
@@ -775,9 +788,9 @@ Future<void> _updateSettlement(
           settlementId: settlement.id,
           status: status,
         );
-    ref.invalidate(selectedEventSettlementsProvider);
-    ref.invalidate(selectedEventReportProvider);
-    ref.invalidate(dashboardGroupBalancesProvider);
+    // O último pagamento confirmado conclui o evento no backend: recarrega
+    // também o evento, pra o status mudar na tela sem precisar atualizar.
+    _refreshEventScreens(ref);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -805,18 +818,25 @@ String _errorMessage(Object error) {
   return error.toString();
 }
 
-/// Enquanto não sabemos o status dos acertos (carregando/erro) trata como
-/// pendente — só libera o "Concluir evento" quando confirma que está tudo
-/// pago, em vez de deixar tentar e falhar depois.
-bool _hasPendingSettlement(
-    AsyncValue<List<EventSettlementModel>> settlementsAsync) {
-  final settlements = settlementsAsync.valueOrNull;
-  if (settlements == null) {
-    return true;
+/// Recarrega o evento selecionado (status no seletor, saldo, pagamentos,
+/// despesas) e a Home depois de uma mudança que pode mexer no status do
+/// evento. Sem evento escolhido explicitamente, fixa o que está na tela —
+/// senão, ao concluir, o padrão pulava pra outro evento ainda aberto.
+void _refreshEventScreens(WidgetRef ref) {
+  final current = ref.read(selectedEventProvider).valueOrNull;
+  if (current != null && ref.read(selectedEventIdProvider) == null) {
+    ref.read(selectedEventIdProvider.notifier).state = current.id;
   }
-  return settlements.any((settlement) =>
-      settlement.normalizedStatus == 'PENDING' ||
-      settlement.normalizedStatus == 'INFORMED');
+  ref.invalidate(monthsProvider);
+  ref.invalidate(currentMonthProvider);
+  ref.invalidate(currentMonthReportProvider);
+  ref.invalidate(currentMonthExpensesProvider);
+  ref.invalidate(eventsProvider);
+  ref.invalidate(selectedEventProvider);
+  ref.invalidate(selectedEventReportProvider);
+  ref.invalidate(selectedEventExpensesProvider);
+  ref.invalidate(selectedEventSettlementsProvider);
+  ref.invalidate(dashboardGroupBalancesProvider);
 }
 
 /// "Fechar evento" (admin): escolhe quem recebe e abre o evento para
@@ -837,7 +857,7 @@ Future<void> confirmStartSettlement(
             children: [
               const Text(
                   'A partir de agora não é mais possível adicionar ou editar despesas neste evento. '
-                  'Ele fica aguardando pagamento e é concluído sozinho quando todos pagarem.'),
+                  'Ele fica aguardando pagamentos e é concluído sozinho quando todos pagarem.'),
               const SizedBox(height: 12),
               ReceiverChoice(
                 groupId: groupId,
@@ -949,6 +969,7 @@ Future<void> _confirmCloseEvent(
       return AlertDialog(
         title: const Text('Concluir evento'),
         content: const Text(
+            'Todos os pagamentos deste evento serão marcados como pagos e o evento será fechado. '
             'Depois de concluído, o evento não permite novas alterações. Deseja continuar?'),
         actions: [
           TextButton(
@@ -967,17 +988,8 @@ Future<void> _confirmCloseEvent(
   }
 
   try {
-    await ref.read(eventsRepositoryProvider).close(eventId);
-    ref.invalidate(monthsProvider);
-    ref.invalidate(currentMonthProvider);
-    ref.invalidate(currentMonthReportProvider);
-    ref.invalidate(currentMonthExpensesProvider);
-    ref.invalidate(eventsProvider);
-    ref.invalidate(selectedEventProvider);
-    ref.invalidate(selectedEventReportProvider);
-    ref.invalidate(selectedEventExpensesProvider);
-    ref.invalidate(selectedEventSettlementsProvider);
-    ref.invalidate(dashboardGroupBalancesProvider);
+    await ref.read(eventsRepositoryProvider).close(eventId, markAllPaid: true);
+    _refreshEventScreens(ref);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Evento concluído com sucesso.')),

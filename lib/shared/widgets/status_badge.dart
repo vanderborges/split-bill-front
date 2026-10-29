@@ -34,7 +34,7 @@ class StatusBadge extends StatelessWidget {
       AppStatus.aberto => (scheme.primary, 'Aberto'),
       AppStatus.aguardandoPagamento => (
           semantic.warning,
-          'Aguardando pagamento'
+          'Aguardando pagamentos'
         ),
       AppStatus.fechado => (semantic.neutral, 'Fechado'),
       AppStatus.pendente => (semantic.warning, 'Pendente'),

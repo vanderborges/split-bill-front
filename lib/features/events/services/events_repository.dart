@@ -117,8 +117,11 @@ class EventsRepository {
 
   /// Fechamento definitivo: só funciona depois de [startSettlement] e com
   /// todos os pagamentos confirmados.
-  Future<EventModel> close(String id) async {
-    final response = await dio.put<Map<String, dynamic>>('/events/$id/close');
+  /// [markAllPaid]: "Concluir evento" do Saldo — o backend marca como pagos
+  /// os pagamentos que faltavam antes de fechar.
+  Future<EventModel> close(String id, {bool markAllPaid = false}) async {
+    final response = await dio.put<Map<String, dynamic>>('/events/$id/close',
+        queryParameters: markAllPaid ? {'markAllPaid': true} : null);
     return EventModel.fromJson(response.data!);
   }
 

@@ -12,6 +12,7 @@ import '../../features/groups/pages/invite_page.dart';
 import '../../features/notifications/pages/notifications_page.dart';
 import '../../features/profile/pages/profile_page.dart';
 import '../../features/reports/pages/reports_page.dart';
+import '../../features/summary/pages/statement_page.dart';
 import '../../features/summary/pages/user_expense_summary_page.dart';
 import '../../features/users/pages/users_page.dart';
 
@@ -63,8 +64,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path: '/reports',
           pageBuilder: (context, state) =>
               _noTransitionPage(const ReportsPage())),
+      // Extrato (aba): saldo de quem está logado por evento. O extrato
+      // completo por período virou "Extrato geral".
       GoRoute(
           path: '/summary',
+          pageBuilder: (context, state) =>
+              _noTransitionPage(const StatementPage())),
+      GoRoute(
+          path: '/summary/general',
           pageBuilder: (context, state) =>
               _noTransitionPage(const UserExpenseSummaryPage())),
       GoRoute(

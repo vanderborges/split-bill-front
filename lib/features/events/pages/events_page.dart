@@ -228,7 +228,7 @@ class EventsPage extends ConsumerWidget {
                             if (isEventAdmin && !event.isClosed)
                               const PopupMenuItem(
                                   value: 'add-temporary',
-                                  child: Text('Convidar temporário')),
+                                  child: Text('Incluir temporário')),
                             if (isEventAdmin)
                               const PopupMenuItem(
                                   value: 'delete', child: Text('Deletar')),
@@ -333,159 +333,197 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
     return;
   }
 
+  // Mês/Ano usam o teclado numérico com a barra "OK" por cima dele: os
+  // botões sobem também a altura dessa barra.
+  final monthFocus = FocusNode();
+  final yearFocus = FocusNode();
   final saved = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     builder: (context) {
-      return Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
+      return ListenableBuilder(
+        listenable: Listenable.merge([monthFocus, yearFocus]),
+        builder: (context, child) {
+          final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+          final doneBar =
+              keyboard > 0 && (monthFocus.hasFocus || yearFocus.hasFocus)
+                  ? 44.0
+                  : 0.0;
+          return Padding(
+            padding: EdgeInsets.only(bottom: keyboard + doneBar),
+            child: child,
+          );
+        },
         child: StatefulBuilder(
           builder: (context, setState) {
-            return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.md,
-                AppSpacing.lg,
-                AppSpacing.xl,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.outline,
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
-                      ),
+            // Só os campos rolam; Cancelar/Salvar ficam presos embaixo,
+            // logo acima do teclado (antes rolavam junto e ficavam atrás
+            // dele).
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      AppSpacing.md,
+                      AppSpacing.lg,
+                      AppSpacing.md,
                     ),
-                  ),
-                  Text('Novo evento',
-                      style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: AppSpacing.lg),
-                  Text('O que você está criando?',
-                      style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: AppSpacing.sm),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
-                        value: 'MONTHLY',
-                        label: Text('Mês do grupo'),
-                        icon: Icon(Icons.calendar_month_outlined),
-                      ),
-                      ButtonSegment(
-                        value: 'SPORADIC',
-                        label: Text('Evento avulso'),
-                        icon: Icon(Icons.celebration_outlined),
-                      ),
-                    ],
-                    selected: {type},
-                    onSelectionChanged: (selection) => setState(() {
-                      type = selection.first;
-                      typeTouched = true;
-                    }),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    type == 'MONTHLY'
-                        ? 'Reúne as despesas mês a mês do grupo e permite parcelamentos automáticos.'
-                        : 'Uma ocasião pontual (viagem, festa, jantar). Sem parcelamento.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  FutureBuilder(
-                    future: ref.read(groupsProvider.future),
-                    builder: (context, snapshot) {
-                      final groups = snapshot.data ?? [];
-                      if (groups.isEmpty) {
-                        return const Text(
-                            'Cadastre um grupo antes de criar eventos.');
-                      }
-                      if (selectedGroupId == null ||
-                          groups
-                              .every((group) => group.id != selectedGroupId)) {
-                        selectedGroupId = groups.first.id;
-                      }
-                      return DropdownButtonFormField<String>(
-                        dropdownColor: glassMenuColor(context),
-                        borderRadius: glassMenuRadius,
-                        initialValue: selectedGroupId,
-                        decoration: const InputDecoration(labelText: 'Grupo'),
-                        items: groups
-                            .map((group) => DropdownMenuItem(
-                                value: group.id, child: Text(group.name)))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => selectedGroupId = value);
-                            suggestNextMonth(value).then((_) {
-                              if (context.mounted) setState(() {});
-                            });
-                          }
-                        },
-                      );
-                    },
-                  ),
-                  // Evento mensal se chama sempre pelo mês (MM/AAAA), então
-                  // só o avulso pede nome.
-                  if (type != 'MONTHLY') ...[
-                    const SizedBox(height: AppSpacing.md),
-                    TextField(
-                      controller: nameController,
-                      maxLength: 50,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: InputDecoration(
-                        labelText: 'Nome',
-                        hintText: 'Ex.: Viagem para a praia',
-                        errorText: nameError,
-                      ),
-                      onChanged: (_) {
-                        if (nameError != null) {
-                          setState(() => nameError = null);
-                        }
-                      },
-                      autofocus: true,
-                    ),
-                  ],
-                  if (type == 'MONTHLY' && monthLocked) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      'Já existe um mês aberto, então o próximo segue a ordem dos meses e já nasce com as parcelas e assinaturas do mês anterior.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                  if (type == 'MONTHLY' && !monthLocked) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                          child: KeyboardDoneBar(
-                              child: TextField(
-                            controller: monthController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Mês'),
-                          )),
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            margin:
+                                const EdgeInsets.only(bottom: AppSpacing.lg),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.outline,
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.pill),
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: KeyboardDoneBar(
-                              child: TextField(
-                            controller: yearController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Ano'),
-                          )),
+                        Text('Novo evento',
+                            style: Theme.of(context).textTheme.titleLarge),
+                        const SizedBox(height: AppSpacing.lg),
+                        Text('O que você está criando?',
+                            style: Theme.of(context).textTheme.titleSmall),
+                        const SizedBox(height: AppSpacing.sm),
+                        SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(
+                              value: 'MONTHLY',
+                              label: Text('Mês do grupo'),
+                              icon: Icon(Icons.calendar_month_outlined),
+                            ),
+                            ButtonSegment(
+                              value: 'SPORADIC',
+                              label: Text('Evento avulso'),
+                              icon: Icon(Icons.celebration_outlined),
+                            ),
+                          ],
+                          selected: {type},
+                          onSelectionChanged: (selection) => setState(() {
+                            type = selection.first;
+                            typeTouched = true;
+                          }),
                         ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          type == 'MONTHLY'
+                              ? 'Reúne as despesas mês a mês do grupo e permite parcelamentos automáticos.'
+                              : 'Uma ocasião pontual (viagem, festa, jantar). Sem parcelamento.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        FutureBuilder(
+                          future: ref.read(groupsProvider.future),
+                          builder: (context, snapshot) {
+                            final groups = snapshot.data ?? [];
+                            if (groups.isEmpty) {
+                              return const Text(
+                                  'Cadastre um grupo antes de criar eventos.');
+                            }
+                            if (selectedGroupId == null ||
+                                groups.every(
+                                    (group) => group.id != selectedGroupId)) {
+                              selectedGroupId = groups.first.id;
+                            }
+                            return DropdownButtonFormField<String>(
+                              dropdownColor: glassMenuColor(context),
+                              borderRadius: glassMenuRadius,
+                              initialValue: selectedGroupId,
+                              decoration:
+                                  const InputDecoration(labelText: 'Grupo'),
+                              items: groups
+                                  .map((group) => DropdownMenuItem(
+                                      value: group.id, child: Text(group.name)))
+                                  .toList(),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => selectedGroupId = value);
+                                  suggestNextMonth(value).then((_) {
+                                    if (context.mounted) setState(() {});
+                                  });
+                                }
+                              },
+                            );
+                          },
+                        ),
+                        // Evento mensal se chama sempre pelo mês (MM/AAAA), então
+                        // só o avulso pede nome.
+                        if (type != 'MONTHLY') ...[
+                          const SizedBox(height: AppSpacing.md),
+                          TextField(
+                            controller: nameController,
+                            maxLength: 50,
+                            textCapitalization: TextCapitalization.sentences,
+                            decoration: InputDecoration(
+                              labelText: 'Nome',
+                              hintText: 'Ex.: Viagem para a praia',
+                              errorText: nameError,
+                            ),
+                            onChanged: (_) {
+                              if (nameError != null) {
+                                setState(() => nameError = null);
+                              }
+                            },
+                            autofocus: true,
+                          ),
+                        ],
+                        if (type == 'MONTHLY' && monthLocked) ...[
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            'Já existe um mês aberto, então o próximo segue a ordem dos meses e já nasce com as parcelas e assinaturas do mês anterior.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                        if (type == 'MONTHLY' && !monthLocked) ...[
+                          const SizedBox(height: AppSpacing.md),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: KeyboardDoneBar(
+                                    child: TextField(
+                                  controller: monthController,
+                                  focusNode: monthFocus,
+                                  keyboardType: TextInputType.number,
+                                  decoration:
+                                      const InputDecoration(labelText: 'Mês'),
+                                )),
+                              ),
+                              const SizedBox(width: AppSpacing.md),
+                              Expanded(
+                                child: KeyboardDoneBar(
+                                    child: TextField(
+                                  controller: yearController,
+                                  focusNode: yearFocus,
+                                  keyboardType: TextInputType.number,
+                                  decoration:
+                                      const InputDecoration(labelText: 'Ano'),
+                                )),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
-                  ],
-                  const SizedBox(height: AppSpacing.xl),
-                  Row(
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.sm,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                  ),
+                  child: Row(
                     children: [
                       Expanded(
                         child: OutlinedButton(
@@ -512,14 +550,20 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                       ),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             );
           },
         ),
       );
     },
   );
+  // Depois da animação de saída: os campos ainda usam os FocusNodes
+  // enquanto o sheet desce.
+  Future.delayed(const Duration(milliseconds: 600), () {
+    monthFocus.dispose();
+    yearFocus.dispose();
+  });
 
   if (saved != true || !context.mounted) {
     nameController.dispose();
@@ -567,6 +611,10 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
       selectEvent(ref, groupId: event.groupId, eventId: event.id);
     }
     _invalidateEventState(ref);
+    // Evento novo abre direto nas despesas dele.
+    if (context.mounted) {
+      context.go('/expenses');
+    }
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

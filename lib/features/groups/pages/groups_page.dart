@@ -613,7 +613,7 @@ Future<void> _showInviteDialog(
 
 /// Admin-only: temporários do grupo ("Pessoas sem cadastro" e "Pessoas
 /// temporárias" viraram uma lista só, 27/10/2026). Cadastrados pelo
-/// "Convidar temporário" (só o nome), entram nas despesas de qualquer evento
+/// "Incluir temporário" (só o nome), entram nas despesas de qualquer evento
 /// e saem da lista quando todos os eventos com despesa deles fecham. Quem
 /// entra pelo convite escolhendo o nome continua temporário até o admin
 /// tornar integrante. Temporários antigos, presos a um evento, continuam
@@ -691,7 +691,7 @@ class _GroupTemporaryMembersState
                       }
                     },
                     icon: const Icon(Icons.person_add_alt),
-                    label: const Text('Convidar temporário'),
+                    label: const Text('Incluir temporário'),
                   ),
                 ],
               ),
@@ -844,7 +844,7 @@ Future<EventModel?> _pickOpenEvent(
   );
 }
 
-/// "Convidar temporário": o admin digita só o nome e a pessoa já entra no
+/// "Incluir temporário": o admin digita só o nome e a pessoa já entra no
 /// grupo como temporária (sem conta) — dá pra lançar despesas dela em
 /// qualquer evento aberto. Depois aparece o link do convite do grupo: quem
 /// criar conta por ele e escolher o nome em "Quem é você?" fica com as
@@ -855,7 +855,7 @@ Future<bool> showTemporaryGuestDialog(
   final result = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Convidar temporário'),
+      title: const Text('Incluir temporário'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
