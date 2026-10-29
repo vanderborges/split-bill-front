@@ -47,6 +47,22 @@ class EventModel {
     return createdAt ?? DateTime(0);
   }
 
+  /// Ordem da Home e do seletor de evento: aguardando pagamento primeiro,
+  /// depois abertos, depois fechados; dentro de cada um, do mais recente
+  /// pro mais antigo.
+  static int compareSettlingFirst(EventModel a, EventModel b) {
+    int rank(EventModel event) => event.isSettling ? 0 : (event.isOpen ? 1 : 2);
+    final byStatus = rank(a).compareTo(rank(b));
+    if (byStatus != 0) {
+      return byStatus;
+    }
+    final byDate = b.sortDate.compareTo(a.sortDate);
+    if (byDate != 0) {
+      return byDate;
+    }
+    return (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0));
+  }
+
   String get typeLabel {
     return switch (type) {
       'MONTHLY' => 'Mensal',

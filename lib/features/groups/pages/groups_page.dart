@@ -61,6 +61,8 @@ class GroupsPage extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      dropdownColor: glassMenuColor(context),
+                      borderRadius: glassMenuRadius,
                       initialValue: selectedId,
                       decoration: const InputDecoration(labelText: 'Grupo'),
                       items: groups
@@ -234,15 +236,9 @@ class _GroupMembers extends ConsumerWidget {
                                   }
                                 },
                               ),
-                            // Tornar integrante: só quem já criou conta.
-                            if (member.temporary && !member.placeholder)
-                              IconButton(
-                                tooltip: 'Tornar integrante',
-                                icon: const Icon(Icons.how_to_reg_outlined),
-                                onPressed: () => _promoteTemporary(
-                                    context, ref, group, member),
-                              )
-                            else if (!member.temporary && !member.placeholder)
+                            // Perfil (inclui tornar temporário em fixo): só
+                            // quem já criou conta.
+                            if (!member.placeholder)
                               IconButton(
                                 tooltip: 'Alterar perfil no grupo',
                                 icon:
@@ -353,22 +349,47 @@ Future<void> _confirmLeaveGroup(
   }
 }
 
-Future<void> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
+/// Perfil no grupo: Integrante/Admin e, para temporário com conta, também
+/// "Temporário" — escolher Integrante ou Admin torna a pessoa fixa no grupo
+/// (participa de todos os eventos). Retorna true se mudou algo.
+Future<bool> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
     GroupModel group, GroupMemberModel member) async {
-  var role = member.role;
+  const temporaryRole = 'TEMPORARY';
+  final initialRole = member.temporary ? temporaryRole : member.role;
+  var role = initialRole;
   final saved = await showDialog<bool>(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
         title: Text('Perfil de ${member.nickname}'),
-        content: DropdownButtonFormField<String>(
-          initialValue: role,
-          decoration: const InputDecoration(labelText: 'Perfil no grupo'),
-          items: const [
-            DropdownMenuItem(value: 'MEMBER', child: Text('Integrante')),
-            DropdownMenuItem(value: 'ADMIN', child: Text('Admin')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<String>(
+              dropdownColor: glassMenuColor(context),
+              borderRadius: glassMenuRadius,
+              initialValue: role,
+              decoration: const InputDecoration(labelText: 'Perfil no grupo'),
+              items: [
+                if (member.temporary)
+                  const DropdownMenuItem(
+                      value: temporaryRole, child: Text('Temporário')),
+                const DropdownMenuItem(
+                    value: 'MEMBER', child: Text('Integrante (fixo)')),
+                const DropdownMenuItem(value: 'ADMIN', child: Text('Admin')),
+              ],
+              onChanged: (value) => setState(() => role = value ?? role),
+            ),
+            if (member.temporary && role != temporaryRole) ...[
+              const SizedBox(height: 12),
+              Text(
+                '${member.nickname} deixa de ser temporário(a) e passa a '
+                'participar de todos os eventos do grupo.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ],
-          onChanged: (value) => setState(() => role = value ?? role),
         ),
         actions: [
           TextButton(
@@ -381,25 +402,37 @@ Future<void> _showEditMemberRoleDialog(BuildContext context, WidgetRef ref,
       ),
     ),
   );
-  if (saved != true || !context.mounted) return;
+  if (saved != true || role == initialRole || !context.mounted) return false;
   try {
     final currentUser = await ref.read(currentUserProvider.future);
     if (currentUser == null) throw Exception('Sessão expirada');
-    await ref.read(groupsRepositoryProvider).addMember(
-          groupId: group.id,
-          userId: member.userId,
-          role: role,
-        );
+    final repository = ref.read(groupsRepositoryProvider);
+    if (member.temporary) {
+      await repository.promoteTemporary(group.id, member.userId);
+    }
+    if (role == 'ADMIN' || !member.temporary) {
+      await repository.addMember(
+        groupId: group.id,
+        userId: member.userId,
+        role: role,
+      );
+    }
     ref.invalidate(selectedGroupProvider);
     ref.invalidate(groupRoleProvider(group.id));
     ref.invalidate(groupsProvider);
     ref.invalidate(dashboardGroupBalancesProvider);
+    if (member.temporary && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${member.nickname} agora é integrante do grupo.')));
+    }
+    return true;
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(friendlyApiError(error,
               fallback: 'Não foi possível alterar o perfil.'))));
     }
+    return false;
   }
 }
 
@@ -705,10 +738,10 @@ class _GroupTemporaryMembersState
                           ),
                         if (!member.placeholder)
                           IconButton(
-                            tooltip: 'Tornar integrante',
-                            icon: const Icon(Icons.how_to_reg_outlined),
+                            tooltip: 'Alterar perfil no grupo',
+                            icon: const Icon(Icons.manage_accounts_outlined),
                             onPressed: () async {
-                              if (await _promoteTemporary(
+                              if (await _showEditMemberRoleDialog(
                                   context, ref, widget.group, member)) {
                                 _reload();
                               }
@@ -746,50 +779,6 @@ class _GroupTemporaryMembersState
         },
       ),
     );
-  }
-}
-
-/// "Tornar integrante": o temporário passa a participar do grupo como
-/// integrante fixo. Retorna true se mudou.
-Future<bool> _promoteTemporary(BuildContext context, WidgetRef ref,
-    GroupModel group, GroupMemberModel member) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Tornar integrante'),
-      content: Text('${member.nickname} deixa de ser temporário(a) e passa a '
-          'ser integrante do grupo, participando de todos os eventos.'),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar')),
-        FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Tornar integrante')),
-      ],
-    ),
-  );
-  if (confirmed != true || !context.mounted) {
-    return false;
-  }
-  try {
-    await ref
-        .read(groupsRepositoryProvider)
-        .promoteTemporary(group.id, member.userId);
-    ref.invalidate(selectedGroupProvider);
-    ref.invalidate(dashboardGroupBalancesProvider);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${member.nickname} agora é integrante do grupo.')));
-    }
-    return true;
-  } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(friendlyApiError(error,
-              fallback: 'Não foi possível tornar integrante.'))));
-    }
-    return false;
   }
 }
 
@@ -831,6 +820,8 @@ Future<EventModel?> _pickOpenEvent(
       builder: (context, setState) => AlertDialog(
         title: Text(title),
         content: DropdownButtonFormField<String>(
+          dropdownColor: glassMenuColor(context),
+          borderRadius: glassMenuRadius,
           initialValue: selected.id,
           decoration: const InputDecoration(labelText: 'Evento'),
           items: events

@@ -375,6 +375,9 @@ class _ExpensesView extends ConsumerWidget {
 /// início da lista) mostra de novo. Reage a cada movimento do dedo
 /// (ScrollUpdateNotification) em vez de esperar a troca de direção, pra
 /// os campos sumirem junto com a lista.
+/// Altura aproximada do que some (Despesas/Saldo + filtro), com folga.
+const double _collapsibleHeaderHeight = 140;
+
 bool _onUserScroll(WidgetRef ref, ScrollUpdateNotification notification) {
   final delta = notification.scrollDelta ?? 0;
   if (notification.depth != 0 || notification.dragDetails == null) {
@@ -383,7 +386,11 @@ bool _onUserScroll(WidgetRef ref, ScrollUpdateNotification notification) {
   final collapsed = ref.read(expensesHeaderCollapsedProvider.notifier);
   if (notification.metrics.pixels <= 0) {
     collapsed.state = false;
-  } else if (delta > 2) {
+  } else if (delta > 2 &&
+      notification.metrics.maxScrollExtent > _collapsibleHeaderHeight) {
+    // Só esconde se a lista continuar rolável sem o topo. Lista curta (comum
+    // em Despesas com "só minhas despesas") passava a caber na tela ao
+    // esconder, voltava pro início e o topo reaparecia — ficava piscando.
     collapsed.state = true;
   } else if (delta < -2) {
     collapsed.state = false;
@@ -693,6 +700,8 @@ Future<({EventModel? event, bool createEvent})?> _pickExpenseDestination(
                     style: Theme.of(sheetContext).textTheme.titleLarge),
                 const SizedBox(height: AppSpacing.lg),
                 DropdownButtonFormField<String>(
+                  dropdownColor: glassMenuColor(context),
+                  borderRadius: glassMenuRadius,
                   initialValue: groupId,
                   decoration: const InputDecoration(labelText: 'Grupo'),
                   items: groups
@@ -724,6 +733,8 @@ Future<({EventModel? event, bool createEvent})?> _pickExpenseDestination(
                   ),
                 ] else
                   DropdownButtonFormField<String>(
+                    dropdownColor: glassMenuColor(context),
+                    borderRadius: glassMenuRadius,
                     key: ValueKey('picker-event-$groupId'),
                     initialValue: eventId,
                     decoration: const InputDecoration(labelText: 'Evento'),
@@ -1196,6 +1207,8 @@ Future<void> _openExpenseForm(
                     ),
                     const SizedBox(height: AppSpacing.md),
                     DropdownButtonFormField<String>(
+                      dropdownColor: glassMenuColor(context),
+                      borderRadius: glassMenuRadius,
                       initialValue: selectedCategory,
                       decoration:
                           const InputDecoration(labelText: 'Tipo de despesa'),
@@ -1235,6 +1248,8 @@ Future<void> _openExpenseForm(
                     const SizedBox(height: AppSpacing.sm),
                     if (!splitPaymentByUser) ...[
                       DropdownButtonFormField<String>(
+                        dropdownColor: glassMenuColor(context),
+                        borderRadius: glassMenuRadius,
                         initialValue: singlePayerId,
                         // Sem label: o título "Quem pagou" logo acima já diz o que é.
                         decoration: const InputDecoration(),

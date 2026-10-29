@@ -10,6 +10,7 @@ import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
 import '../../../shared/widgets/money_text.dart';
 import '../../events/services/events_repository.dart';
+import '../../events/widgets/event_picker_field.dart' show EventStatusBadge;
 import '../../expenses/services/expenses_repository.dart';
 import '../../expenses/pages/expenses_page.dart';
 import '../models/dashboard_group_balance_model.dart';
@@ -151,7 +152,15 @@ class _GroupCard extends StatelessWidget {
           builder: (context, ref, _) => ListTile(
             leading: const Icon(Icons.groups_outlined),
             title: Text(groupBalance.groupName),
-            subtitle: Text(_eventSubtitle(events.first)),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: AppSpacing.xs),
+                _EventNameWithStatus(events.first),
+                const SizedBox(height: AppSpacing.xs),
+                Text(_balanceText(events.first)),
+              ],
+            ),
             trailing: MoneyText(
               events.first.balance,
               colorBySign: true,
@@ -186,8 +195,8 @@ class _GroupCard extends StatelessWidget {
         children: events
             .map((event) => Consumer(
                   builder: (context, ref, _) => ListTile(
-                    title: Text(event.eventName),
-                    subtitle: Text(_eventSubtitle(event)),
+                    title: _EventNameWithStatus(event),
+                    subtitle: Text(_balanceText(event)),
                     trailing: MoneyText(event.balance, colorBySign: true),
                     onTap: () => _openEventExpenses(
                         context, ref, groupBalance.groupId, event.eventId),
@@ -199,15 +208,31 @@ class _GroupCard extends StatelessWidget {
   }
 }
 
-String _eventSubtitle(DashboardEventBalanceModel event) {
-  final status = switch (event.eventStatus) {
-    'SETTLING' => 'Aguardando pagamento — ',
-    _ => '',
-  };
-  final balance = event.balance < 0
+/// Nome do evento com a pílula de status ao lado (mesmas cores do seletor
+/// de evento e da tela de Eventos).
+class _EventNameWithStatus extends StatelessWidget {
+  const _EventNameWithStatus(this.event);
+
+  final DashboardEventBalanceModel event;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.xs,
+      children: [
+        Text(event.eventName),
+        EventStatusBadge(event.eventStatus),
+      ],
+    );
+  }
+}
+
+String _balanceText(DashboardEventBalanceModel event) {
+  return event.balance < 0
       ? 'Você tem a pagar'
       : event.balance > 0
           ? 'Você tem a receber'
           : 'Sem saldo em aberto';
-  return '$status$balance';
 }

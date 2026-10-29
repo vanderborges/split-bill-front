@@ -52,6 +52,8 @@ class ReportsPage extends ConsumerWidget {
         children: [
           groupsAsync.when(
             data: (groups) => DropdownButtonFormField<String?>(
+              dropdownColor: glassMenuColor(context),
+              borderRadius: glassMenuRadius,
               initialValue: selectedGroupId,
               decoration: const InputDecoration(labelText: 'Grupo'),
               items: [
@@ -818,7 +820,7 @@ bool _hasPendingSettlement(
 }
 
 /// "Fechar evento" (admin): escolhe quem recebe e abre o evento para
-/// pagamento. Usado no Saldo/Relatório e na lista de Despesas.
+/// pagamento. Usado no Saldo/Relatório e no menu do evento em Eventos.
 Future<void> confirmStartSettlement(
     BuildContext context, WidgetRef ref, String groupId, String eventId) async {
   String? receiverUserId;
@@ -835,8 +837,7 @@ Future<void> confirmStartSettlement(
             children: [
               const Text(
                   'A partir de agora não é mais possível adicionar ou editar despesas neste evento. '
-                  'Ele fica aguardando pagamento e é concluído sozinho quando todos pagarem. '
-                  'Use a tela de Eventos se quiser consolidar o saldo em outro evento antes disso.'),
+                  'Ele fica aguardando pagamento e é concluído sozinho quando todos pagarem.'),
               const SizedBox(height: 12),
               ReceiverChoice(
                 groupId: groupId,

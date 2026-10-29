@@ -68,6 +68,8 @@ class _UserExpenseSummaryPageState
                 ref.read(selectedGroupIdProvider.notifier).state = groupId;
               }
               return DropdownButtonFormField<String>(
+                dropdownColor: glassMenuColor(context),
+                borderRadius: glassMenuRadius,
                 initialValue: groupId,
                 decoration: const InputDecoration(labelText: 'Grupo'),
                 items: groups
@@ -110,6 +112,8 @@ class _UserExpenseSummaryPageState
                   builder: (context, snapshot) {
                     final members = snapshot.data ?? [];
                     return DropdownButtonFormField<String?>(
+                      dropdownColor: glassMenuColor(context),
+                      borderRadius: glassMenuRadius,
                       initialValue: userId,
                       decoration: const InputDecoration(labelText: 'Extrato'),
                       items: [
@@ -140,6 +144,8 @@ class _UserExpenseSummaryPageState
                 eventId = null;
               }
               return DropdownButtonFormField<String?>(
+                dropdownColor: glassMenuColor(context),
+                borderRadius: glassMenuRadius,
                 key: ValueKey('summary-event-$groupId-$eventId'),
                 initialValue: eventId,
                 decoration: const InputDecoration(labelText: 'Evento'),
@@ -167,6 +173,8 @@ class _UserExpenseSummaryPageState
           const SizedBox(height: 12),
           categoriesAsync.when(
             data: (categories) => DropdownButtonFormField<String?>(
+              dropdownColor: glassMenuColor(context),
+              borderRadius: glassMenuRadius,
               initialValue: category,
               decoration: const InputDecoration(labelText: 'Tipo de despesa'),
               items: [

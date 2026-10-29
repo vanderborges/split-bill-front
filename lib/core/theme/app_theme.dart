@@ -175,6 +175,18 @@ class AppTheme {
           ),
         ),
       ),
+      // Menus "três pontos" no mesmo estilo das listas de seleção
+      // (glassMenuColor/glassMenuRadius em shared/widgets/glass.dart).
+      popupMenuTheme: PopupMenuThemeData(
+        color: (brightness == Brightness.dark
+                ? scheme.surfaceContainerHigh
+                : scheme.surfaceContainerLowest)
+            .withValues(alpha: brightness == Brightness.dark ? 0.90 : 0.86),
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(24)),
+        ),
+      ),
       navigationDrawerTheme: NavigationDrawerThemeData(
         backgroundColor: scheme.surface,
       ),

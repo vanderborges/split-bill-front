@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_provider.dart';
 import '../../auth/services/auth_repository.dart';
+import '../../events/models/event_model.dart';
 import '../../events/services/events_repository.dart';
 import '../../groups/services/groups_repository.dart';
 import '../../reports/services/reports_repository.dart';
@@ -55,8 +56,10 @@ Future<List<DashboardGroupBalanceModel>> _fallbackGroupBalances(
       final events = await eventsRepository.list(groupId: group.id);
       // Inclui SETTLING junto com OPEN: saldo ainda pendente de pagamento
       // ate o evento fechar de fato.
-      final activeEvents =
-          events.where((event) => event.status != 'CLOSED');
+      final activeEvents = events
+          .where((event) => event.status != 'CLOSED')
+          .toList()
+        ..sort(EventModel.compareSettlingFirst);
 
       for (final event in activeEvents) {
         try {

@@ -61,11 +61,52 @@ class GlassSurface extends StatelessWidget {
   }
 }
 
+/// Listas de seleção (menu aberto dos dropdowns) no estilo vidro: fundo
+/// translúcido e cantos bem arredondados. O menu do dropdown não aceita
+/// desfoque do que está atrás, então a transparência é leve pra o texto
+/// continuar legível.
+const BorderRadius glassMenuRadius = BorderRadius.all(Radius.circular(24));
+
+Color glassMenuColor(BuildContext context) {
+  final theme = Theme.of(context);
+  final dark = theme.brightness == Brightness.dark;
+  final base = dark
+      ? theme.colorScheme.surfaceContainerHigh
+      : theme.colorScheme.surfaceContainerLowest;
+  return base.withValues(alpha: dark ? 0.90 : 0.86);
+}
+
 /// Espaço extra no fim das listas pra o último item não ficar escondido
 /// atrás da pílula do menu inferior (o conteúdo rola por trás dela).
-/// No layout largo, sem barra inferior, é 0.
-double bottomBarInset(BuildContext context) =>
-    MediaQuery.paddingOf(context).bottom;
+///
+/// As telas chamam isso com o context da PÁGINA, que fica acima do
+/// Scaffold: ali o MediaQuery só tem a margem do aparelho, sem a pílula —
+/// o fim da lista ficava escondido atrás do menu. Por isso, fora do
+/// Scaffold, soma a altura da [GlassNavBar] calculada pelos mesmos
+/// tamanhos que ela usa. Dentro do Scaffold (extendBody) o padding já
+/// inclui a barra.
+double bottomBarInset(BuildContext context) {
+  final devicePadding = MediaQuery.paddingOf(context).bottom;
+  if (MediaQuery.sizeOf(context).width >= 600 ||
+      Scaffold.maybeOf(context) != null) {
+    return devicePadding;
+  }
+  final labelStyle = Theme.of(context).textTheme.labelSmall;
+  final labelHeight =
+      MediaQuery.textScalerOf(context).scale(labelStyle?.fontSize ?? 11) *
+          (labelStyle?.height ?? 1.45);
+  // SafeArea (mínimo 8) + Padding 4+4 + borda 1+1 + padding 5+5 +
+  // botão (6+6 + ícone 24 + 2 + rótulo) + folga de 8.
+  return (devicePadding < 8 ? 8 : devicePadding) +
+      8 +
+      2 +
+      10 +
+      12 +
+      24 +
+      2 +
+      labelHeight +
+      8;
+}
 
 /// Item da barra de navegação em pílula.
 class GlassNavItem {

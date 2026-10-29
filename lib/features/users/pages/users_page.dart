@@ -231,6 +231,8 @@ Future<void> _showUserDialog(BuildContext context, WidgetRef ref,
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String?>(
+                      dropdownColor: glassMenuColor(context),
+                      borderRadius: glassMenuRadius,
                       initialValue: billingUserId,
                       decoration: const InputDecoration(
                           labelText: 'Cobrar saldo junto com'),

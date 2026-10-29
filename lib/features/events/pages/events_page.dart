@@ -18,11 +18,11 @@ import '../../groups/models/group_model.dart';
 import '../../groups/pages/groups_page.dart' show showTemporaryGuestDialog;
 import '../../groups/services/groups_repository.dart';
 import '../../months/services/months_repository.dart';
+import '../../reports/pages/reports_page.dart' show confirmStartSettlement;
 import '../../reports/services/reports_repository.dart';
 import '../models/event_model.dart';
 import '../services/events_repository.dart';
 import '../services/new_event_intent.dart';
-import '../widgets/receiver_choice.dart';
 
 class EventsPage extends ConsumerWidget {
   const EventsPage({super.key});
@@ -66,6 +66,8 @@ class EventsPage extends ConsumerWidget {
                     ? selectedGroupId
                     : null;
                 return DropdownButtonFormField<String>(
+                  dropdownColor: glassMenuColor(context),
+                  borderRadius: glassMenuRadius,
                   key: ValueKey(value),
                   initialValue: value,
                   decoration:
@@ -194,8 +196,8 @@ class EventsPage extends ConsumerWidget {
                                   groupId: event.groupId, eventId: event.id);
                               context.go('/expenses?view=saldo');
                             } else if (value == 'start-settlement') {
-                              await _startSettlement(
-                                  context, ref, event, events);
+                              await confirmStartSettlement(
+                                  context, ref, event.groupId, event.id);
                             } else if (value == 'close') {
                               await _closeEvent(context, ref, event);
                             } else if (value == 'reopen') {
@@ -411,6 +413,8 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
                         selectedGroupId = groups.first.id;
                       }
                       return DropdownButtonFormField<String>(
+                        dropdownColor: glassMenuColor(context),
+                        borderRadius: glassMenuRadius,
                         initialValue: selectedGroupId,
                         decoration: const InputDecoration(labelText: 'Grupo'),
                         items: groups
@@ -575,91 +579,6 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
     nameController.dispose();
     monthController.dispose();
     yearController.dispose();
-  }
-}
-
-/// Primeira etapa: congela o evento pra novas despesas e abre a janela de
-/// pagamento (status SETTLING). Opcionalmente consolida o saldo como
-/// despesa em outro evento ainda aberto.
-Future<void> _startSettlement(
-  BuildContext context,
-  WidgetRef ref,
-  EventModel event,
-  List<EventModel> events,
-) async {
-  String? targetId;
-  String? receiverUserId;
-  final targets = events
-      .where((item) => item.id != event.id && item.status == 'OPEN')
-      .toList();
-  final confirmed = await showDialog<bool>(
-    barrierDismissible: false,
-    context: context,
-    builder: (context) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: Text('Fechar ${event.name}'),
-            content: SingleChildScrollView(
-                child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                    'Depois desta etapa não é mais possível adicionar ou editar despesas neste evento. '
-                    'Você pode só fechar o evento ou consolidar o saldo como despesa em outro evento.'),
-                const SizedBox(height: 12),
-                ReceiverChoice(
-                  groupId: event.groupId,
-                  eventId: event.id,
-                  onChanged: (value) => receiverUserId = value,
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String?>(
-                  initialValue: targetId,
-                  decoration: const InputDecoration(labelText: 'Consolidar em'),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                        value: null, child: Text('Não consolidar')),
-                    ...targets.map((target) => DropdownMenuItem<String?>(
-                        value: target.id, child: Text(target.name))),
-                  ],
-                  onChanged: (value) => setState(() => targetId = value),
-                ),
-              ],
-            )),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancelar')),
-              FilledButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Fechar evento')),
-            ],
-          );
-        },
-      );
-    },
-  );
-  if (confirmed != true || !context.mounted) {
-    return;
-  }
-  try {
-    await ref.read(eventsRepositoryProvider).startSettlement(event.id,
-        consolidateToEventId: targetId, receiverUserId: receiverUserId);
-    _invalidateEventState(ref);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Evento fechado, aguardando pagamentos. '
-                'Despesas novas ficam bloqueadas a partir de agora.')),
-      );
-    }
-  } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(friendlyApiError(error,
-              fallback: 'Não foi possível fechar o evento.'))));
-    }
   }
 }
 
