@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/environment.dart';
 import '../../../shared/api_error.dart';
@@ -69,10 +70,18 @@ class GroupsPage extends ConsumerWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final group = groups[index];
+              // Card mais alto que o de Eventos: o grupo é o destaque.
               return Card(
                 child: ListTile(
-                  leading: const Icon(Icons.groups_outlined),
-                  title: Text(group.name),
+                  minVerticalPadding: 20,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  leading: const Icon(Icons.groups_outlined, size: 32),
+                  title: Text(group.name,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600)),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => openGroupDetail(context, ref, group.id),
                 ),
@@ -250,6 +259,8 @@ class _GroupMembers extends ConsumerWidget {
                 snapshot.connectionState == ConnectionState.done)
               const EmptyState(
                 icon: Icons.person_add_alt_outlined,
+                // Mensagem da seção Integrantes, não da tela.
+                centerOnScreen: false,
                 message: 'Nenhum integrante cadastrado.',
               )
             else
@@ -819,12 +830,45 @@ class _GroupTemporaryMembersState
                     ),
                   ),
                 ),
+              // Com algum temporário: link pra mandar o convite do grupo
+              // (é por ele que o temporário cria conta e fica com as
+              // despesas).
+              if (snapshot.connectionState == ConnectionState.done &&
+                  !snapshot.hasError &&
+                  temporaries.isNotEmpty)
+                TextButton.icon(
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                  onPressed: () =>
+                      _shareGroupInvite(context, ref, widget.group),
+                  icon: const Icon(Icons.share_outlined),
+                  label: const Text('Compartilhar convite do grupo'),
+                ),
             ],
           );
         },
       ),
     );
   }
+}
+
+/// Abre o compartilhar do sistema com o link de convite do grupo.
+Future<void> _shareGroupInvite(
+    BuildContext context, WidgetRef ref, GroupModel group) async {
+  final GroupInviteModel invite;
+  try {
+    invite =
+        await ref.read(groupInviteRepositoryProvider).getOrCreate(group.id);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível gerar o convite.'))));
+    }
+    return;
+  }
+  final url = '${Environment.webBaseUrl}/invite/${invite.id}';
+  await SharePlus.instance.share(
+      ShareParams(text: 'Entre no grupo ${group.name} no DividiAí: $url'));
 }
 
 /// Pergunta em qual evento (não fechado) do grupo a pessoa temporária vai

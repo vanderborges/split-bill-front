@@ -312,6 +312,8 @@ class _SummaryContent extends StatelessWidget {
           const EmptyState(
             icon: Icons.receipt_long_outlined,
             message: 'Nenhuma despesa encontrada com esses filtros.',
+            // Fica abaixo dos totais (Consumiu/Pagou/Saldo).
+            centerOnScreen: false,
           )
         else
           ...summary.expenses.map(

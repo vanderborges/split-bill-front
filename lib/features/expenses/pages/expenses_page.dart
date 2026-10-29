@@ -98,7 +98,8 @@ class _ExpensesView extends ConsumerWidget {
       title: title,
       // Despesas/Saldo de um evento: a seta volta pra lista de Eventos.
       onBack: () => context.go('/events'),
-      floatingActionButton: selectedEventClosedForExpenses || showBalance
+      // "+" também no Saldo (evento aberto).
+      floatingActionButton: selectedEventClosedForExpenses
           ? null
           : AutoCollapsingFab(
               label: 'Nova despesa',
@@ -241,7 +242,7 @@ class _ExpensesView extends ConsumerWidget {
                           AppSpacing.lg,
                           AppSpacing.lg,
                           AppSpacing.lg,
-                          AppSpacing.lg + bottomBarInset(context)),
+                          fabClearance + bottomBarInset(context)),
                       children: const [EventBalanceView()],
                     ),
                   ),
@@ -832,6 +833,11 @@ Future<void> _openExpenseForm(
   // da despesa sendo editada) — o form só mostra onde vai lançar.
   final groups = await ref.read(groupsProvider.future);
   final groupName = _groupName(groups, event.groupId);
+  // Só admin cria temporário (regra do backend): só ele vê o botão.
+  final isGroupAdmin = await ref
+          .read(groupRoleProvider(event.groupId).future)
+          .catchError((_) => null) ==
+      'ADMIN';
   var currentUsers = users;
 
   late Set<String> selectedParticipants;
@@ -1162,6 +1168,9 @@ Future<void> _openExpenseForm(
 
           return Scaffold(
             appBar: AppBar(
+              // Voltar numa pílula, como no resto do app.
+              leading: const GlassBackButton(),
+              leadingWidth: 56,
               title: Text(expense == null ? 'Nova despesa' : 'Editar despesa'),
             ),
             body: SafeArea(
@@ -1461,6 +1470,41 @@ Future<void> _openExpenseForm(
                         );
                       }).toList(),
                     ),
+                    // Pessoa sem cadastro na hora: entra no grupo como
+                    // temporária e já volta marcada nesta despesa.
+                    if (isGroupAdmin) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () async {
+                            final added = await _addTemporaryParticipant(
+                                routeContext, ref, event.groupId);
+                            if (added == null || !routeContext.mounted) {
+                              return;
+                            }
+                            setState(() {
+                              currentUsers = [...currentUsers, added];
+                              shareCountControllers[added.id] =
+                                  TextEditingController(text: '1');
+                              shareDescriptionControllers[added.id] =
+                                  TextEditingController();
+                              shareAmountControllers[added.id] =
+                                  TextEditingController();
+                              payerControllers[added.id] =
+                                  TextEditingController();
+                              selectedParticipants.add(added.id);
+                              if (splitByValue) {
+                                redistributeShareAmounts();
+                              }
+                            });
+                          },
+                          icon: const Icon(Icons.person_add_alt_outlined),
+                          label:
+                              const Text('Adicionar participante temporário'),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.md),
                     Container(
                       width: double.infinity,
@@ -1951,7 +1995,11 @@ Future<bool> _openExpenseDetails(
         final muted = theme.textTheme.bodyMedium
             ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
         return Scaffold(
-          appBar: AppBar(title: const Text('Despesa')),
+          appBar: AppBar(
+            leading: const GlassBackButton(),
+            leadingWidth: 56,
+            title: const Text('Despesa'),
+          ),
           body: SafeArea(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(
@@ -2126,6 +2174,74 @@ Future<String?> _showCreateCategoryDialog(
 /// temporárias daquele evento. Quem foi removido do grupo mas está na
 /// despesa sendo editada ([keepUserIds]) continua na lista — senão sairia
 /// da divisão ao salvar.
+/// Pop-up do form de despesa: cria uma pessoa temporária no grupo só com o
+/// nome (como "Incluir temporário" em Grupos) e devolve ela pra entrar na
+/// lista de participantes. null = cancelou ou falhou.
+Future<UserOptionModel?> _addTemporaryParticipant(
+    BuildContext context, WidgetRef ref, String groupId) async {
+  final nameController = TextEditingController();
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Adicionar participante temporário'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: nameController,
+            maxLength: 40,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(labelText: 'Nome'),
+            onSubmitted: (_) => Navigator.of(dialogContext).pop(true),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Entra no grupo como temporário, sem precisar de conta, e já fica '
+            'marcado nesta despesa.',
+            style: Theme.of(dialogContext).textTheme.bodySmall,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Adicionar')),
+      ],
+    ),
+  );
+  final nickname = nameController.text.trim();
+  nameController.dispose();
+  if (confirmed != true || !context.mounted) {
+    return null;
+  }
+  if (nickname.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Informe o nome da pessoa.')));
+    return null;
+  }
+  try {
+    final member = await ref
+        .read(groupsRepositoryProvider)
+        .createPlaceholder(groupId, nickname: nickname, temporary: true);
+    ref.invalidate(selectedGroupProvider);
+    ref.invalidate(dashboardGroupBalancesProvider);
+    return UserOptionModel(
+        id: member.userId, nickname: member.nickname, active: true);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível adicionar a pessoa.'))));
+    }
+    return null;
+  }
+}
+
 Future<List<UserOptionModel>> _loadEventUsers(WidgetRef ref, String groupId,
     {String? eventId, Set<String> keepUserIds = const {}}) async {
   final members = await ref

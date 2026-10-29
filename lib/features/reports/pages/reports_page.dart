@@ -266,6 +266,10 @@ class EventBalanceView extends ConsumerWidget {
                 isAwaitingPayment: report.status == 'SETTLING',
                 isEventOpen: report.status == 'OPEN',
                 eventId: report.eventId,
+                // Extrato: "Grupo | Evento" acima do nome.
+                header: onlyCurrentUser
+                    ? '${report.groupName} | ${report.eventName ?? '${report.month.toString().padLeft(2, '0')}/${report.year}'}'
+                    : null,
               ),
               loading: () => const Padding(
                 padding: EdgeInsets.all(AppSpacing.xl),
@@ -299,14 +303,12 @@ class _ReportTable extends ConsumerStatefulWidget {
     required this.isAwaitingPayment,
     required this.isEventOpen,
     required this.eventId,
-    this.caption,
-    this.groupName,
+    this.header,
   });
 
-  /// Extrato com "Todos os eventos": no lugar de "Você" o card mostra o
-  /// nome do evento e, discreto, o do grupo.
-  final String? caption;
-  final String? groupName;
+  /// Extrato: linha pequena "Grupo | Evento" no topo do card, acima do
+  /// nome.
+  final String? header;
 
   final List<MonthlyBalanceModel> balances;
   final List<EventSettlementModel> settlements;
@@ -403,161 +405,157 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                 width: isCurrentUser ? 1.5 : 1,
               ),
             ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final compact = constraints.maxWidth < 430;
-                final toggle = IconButton(
-                  tooltip: expanded ? 'Ocultar despesas' : 'Ver despesas',
-                  onPressed: () => _toggle(balance.userId),
-                  icon: Icon(expanded
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down),
-                );
-                final name = InkWell(
-                  onTap: () => _toggle(balance.userId),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      PersonAvatar(
-                          name: balance.nickname,
-                          seed: balance.userId,
-                          radius: 14),
-                      const SizedBox(width: AppSpacing.sm),
-                      Flexible(
-                        child: widget.caption == null
-                            ? Text(
-                                isCurrentUser ? 'Você' : balance.nickname,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600),
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    widget.caption!,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                  if (widget.groupName != null)
-                                    Text(
-                                      widget.groupName!,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurfaceVariant),
-                                    ),
-                                ],
-                              ),
-                      ),
-                    ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (widget.header != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                    child: Text(
+                      widget.header!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
                   ),
-                );
-                final amount = MoneyText(
-                  balance.balance,
-                  colorBySign: true,
-                  showSign: true,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                  ),
-                );
-                final Widget status = widget.isEventOpen
-                    ? const SizedBox.shrink()
-                    : _SettlementStatus(
-                        settlement: settlement,
-                        canUpdate: widget.canUpdateSettlements &&
-                            widget.isAwaitingPayment,
-                        onChanged: (value) =>
-                            _updateSettlement(context, ref, settlement!, value),
-                      );
-                // "Pagar" só na linha de quem está logado, com o evento
-                // aguardando pagamento e ainda devendo.
-                final payButton = widget.isAwaitingPayment &&
-                        isCurrentUser &&
-                        settlement != null &&
-                        settlement.role == 'DEBTOR' &&
-                        settlement.amount != 0 &&
-                        settlement.normalizedStatus == 'PENDING' &&
-                        widget.eventId != null
-                    ? Align(
-                        alignment: Alignment.centerRight,
-                        child: FilledButton.icon(
-                          onPressed: () =>
-                              _openPayDialog(context, ref, widget.eventId!),
-                          icon: const Icon(Icons.payments_outlined, size: 18),
-                          label: const Text('Pagar'),
-                        ),
-                      )
-                    : null;
-
-                // Nome e valor na mesma linha; o status de pagamento vai
-                // embaixo, alinhado à direita (evento aberto não tem status).
-                if (compact) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact = constraints.maxWidth < 430;
+                    final toggle = IconButton(
+                      tooltip: expanded ? 'Ocultar despesas' : 'Ver despesas',
+                      onPressed: () => _toggle(balance.userId),
+                      icon: Icon(expanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down),
+                    );
+                    final name = InkWell(
+                      onTap: () => _toggle(balance.userId),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Expanded(child: name),
+                          PersonAvatar(
+                              name: balance.nickname,
+                              seed: balance.userId,
+                              radius: 14),
                           const SizedBox(width: AppSpacing.sm),
-                          amount,
-                          toggle,
+                          Flexible(
+                            child: Text(
+                              isCurrentUser ? 'Você' : balance.nickname,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
                         ],
                       ),
-                      if (!widget.isEventOpen)
-                        Align(alignment: Alignment.centerRight, child: status),
-                      if (payButton != null) ...[
-                        const SizedBox(height: 6),
-                        payButton,
-                      ],
-                      if (expanded) _BalanceDetails(details: _details(balance)),
-                    ],
-                  );
-                }
-
-                return Column(
-                  children: [
-                    Row(
-                      children: [
-                        toggle,
-                        Expanded(child: name),
-                        SizedBox(
-                          width: 110,
-                          child: Align(
-                              alignment: Alignment.centerRight, child: amount),
-                        ),
-                        const SizedBox(width: 16),
-                        SizedBox(
-                          width: 130,
-                          child: Align(
+                    );
+                    final amount = MoneyText(
+                      balance.balance,
+                      colorBySign: true,
+                      showSign: true,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                      ),
+                    );
+                    final Widget status = widget.isEventOpen
+                        ? const SizedBox.shrink()
+                        : _SettlementStatus(
+                            settlement: settlement,
+                            canUpdate: widget.canUpdateSettlements &&
+                                widget.isAwaitingPayment,
+                            onChanged: (value) => _updateSettlement(
+                                context, ref, settlement!, value),
+                          );
+                    // "Pagar" só na linha de quem está logado, com o evento
+                    // aguardando pagamento e ainda devendo.
+                    final payButton = widget.isAwaitingPayment &&
+                            isCurrentUser &&
+                            settlement != null &&
+                            settlement.role == 'DEBTOR' &&
+                            settlement.amount != 0 &&
+                            settlement.normalizedStatus == 'PENDING' &&
+                            widget.eventId != null
+                        ? Align(
                             alignment: Alignment.centerRight,
-                            child: status,
+                            child: FilledButton.icon(
+                              onPressed: () =>
+                                  _openPayDialog(context, ref, widget.eventId!),
+                              icon:
+                                  const Icon(Icons.payments_outlined, size: 18),
+                              label: const Text('Pagar'),
+                            ),
+                          )
+                        : null;
+
+                    // Nome e valor na mesma linha; o status de pagamento vai
+                    // embaixo, alinhado à direita (evento aberto não tem status).
+                    if (compact) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(child: name),
+                              const SizedBox(width: AppSpacing.sm),
+                              amount,
+                              toggle,
+                            ],
                           ),
+                          if (!widget.isEventOpen)
+                            Align(
+                                alignment: Alignment.centerRight,
+                                child: status),
+                          if (payButton != null) ...[
+                            const SizedBox(height: 6),
+                            payButton,
+                          ],
+                          if (expanded)
+                            _BalanceDetails(details: _details(balance)),
+                        ],
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            toggle,
+                            Expanded(child: name),
+                            SizedBox(
+                              width: 110,
+                              child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: amount),
+                            ),
+                            const SizedBox(width: 16),
+                            SizedBox(
+                              width: 130,
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: status,
+                              ),
+                            ),
+                          ],
                         ),
+                        if (payButton != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: payButton,
+                          ),
+                        if (expanded)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 48, top: 8),
+                            child: _BalanceDetails(details: _details(balance)),
+                          ),
                       ],
-                    ),
-                    if (payButton != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: payButton,
-                      ),
-                    if (expanded)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 48, top: 8),
-                        child: _BalanceDetails(details: _details(balance)),
-                      ),
-                  ],
-                );
-              },
+                    );
+                  },
+                ),
+              ],
             ),
           ),
         );
@@ -1273,8 +1271,7 @@ class _MyEventBalanceCard extends ConsumerWidget {
       isAwaitingPayment: report.status == 'SETTLING',
       isEventOpen: report.status == 'OPEN',
       eventId: event.id,
-      caption: event.name,
-      groupName: groupName,
+      header: '$groupName | ${event.name}',
     );
   }
 }

@@ -25,6 +25,9 @@ class NotificationsPage extends ConsumerWidget {
 
     return AppScaffold(
       title: 'Notificações',
+      // Sem a barra de menus; a seta volta pra tela de onde veio.
+      showBottomBar: false,
+      onBack: () => context.go(ref.read(notificationsReturnPathProvider)),
       actions: [
         if (hasNotifications)
           IconButton(

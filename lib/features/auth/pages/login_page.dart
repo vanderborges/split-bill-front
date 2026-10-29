@@ -132,7 +132,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   controller: emailController,
                   maxLength: 120,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'E-mail'),
+                  decoration: const InputDecoration(
+                      counterText: '', labelText: 'E-mail'),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -140,6 +141,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   maxLength: 64,
                   obscureText: !showPassword,
                   decoration: InputDecoration(
+                    counterText: '',
                     labelText: 'Senha',
                     suffixIcon: IconButton(
                       tooltip: showPassword ? 'Ocultar senha' : 'Mostrar senha',

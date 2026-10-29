@@ -8,6 +8,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../features/auth/services/auth_repository.dart';
 import '../../features/notifications/services/notifications_repository.dart';
 import '../session_reset.dart';
+import 'empty_state.dart';
 import 'glass.dart';
 import 'hide_fab_on_scroll.dart';
 import 'person_avatar.dart';
@@ -183,7 +184,7 @@ class _WideScaffold extends ConsumerWidget {
         ],
       ),
       floatingActionButton: floatingActionButton,
-      body: SafeArea(child: child),
+      body: _ScreenBody(child: SafeArea(child: child)),
     );
   }
 }
@@ -322,10 +323,13 @@ class _NarrowScaffold extends ConsumerWidget {
       // listas somam bottomBarInset no fim pra o último item aparecer.
       extendBody: showBottomBar,
       floatingActionButton: floatingActionButton,
-      body: SafeArea(bottom: false, child: child),
+      body: _ScreenBody(child: SafeArea(bottom: false, child: child)),
     );
   }
 }
+
+/// Tela de onde o sino foi tocado: a seta de Notificações volta pra ela.
+final notificationsReturnPathProvider = StateProvider<String>((ref) => '/');
 
 /// Sino de notificações com badge de não lidas, usado nas duas variantes
 /// de AppBar (larga e estreita). Sempre leva pra /notifications.
@@ -372,7 +376,14 @@ class _NotificationBellState extends ConsumerState<_NotificationBell> {
     final unreadCount = ref.watch(unreadNotificationsCountProvider);
     return IconButton(
       tooltip: 'Notificações',
-      onPressed: () => context.go('/notifications'),
+      onPressed: () {
+        // Notificações tem seta de voltar: guarda de onde veio.
+        final from = GoRouterState.of(context).uri.toString();
+        if (!from.startsWith('/notifications')) {
+          ref.read(notificationsReturnPathProvider.notifier).state = from;
+        }
+        context.go('/notifications');
+      },
       icon: Badge(
         label: Text('$unreadCount'),
         isLabelVisible: unreadCount > 0,
@@ -414,6 +425,28 @@ class _DrawerBrandHeader extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Corpo da tela: marca a área pra o [EmptyState] se centralizar nela.
+class _ScreenBody extends StatefulWidget {
+  const _ScreenBody({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_ScreenBody> createState() => _ScreenBodyState();
+}
+
+class _ScreenBodyState extends State<_ScreenBody> {
+  final _bodyKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenBodyScope(
+      bodyKey: _bodyKey,
+      child: KeyedSubtree(key: _bodyKey, child: widget.child),
     );
   }
 }

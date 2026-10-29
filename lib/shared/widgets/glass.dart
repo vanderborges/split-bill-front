@@ -180,6 +180,9 @@ class _GlassNavBarState extends State<GlassNavBar> {
     final hasSelection = selected >= 0 && selected < widget.items.length;
     final target = hasSelection ? selected.toDouble() : null;
     GlassNavBar._lastPosition = target;
+    // Aba nova (veio de outra ou de nenhuma): o item "infla" ao entrar,
+    // como nos botões do menu do Trello no iOS.
+    final inflateFrom = _from != target ? 1.0 : _navInflatedScale;
     final color = navSelectedColor(context);
     return SafeArea(
       top: false,
@@ -204,12 +207,16 @@ class _GlassNavBarState extends State<GlassNavBar> {
                         builder: (context, position, _) => Align(
                           alignment: Alignment.centerLeft,
                           child: Transform.translate(
+                            key: const ValueKey('nav-pill'),
                             offset: Offset(position * itemWidth, 0),
-                            child: Container(
-                              width: itemWidth,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(999),
-                                color: color.withValues(alpha: 0.14),
+                            child: _Inflate(
+                              from: inflateFrom,
+                              child: Container(
+                                width: itemWidth,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(999),
+                                  color: color.withValues(alpha: 0.14),
+                                ),
                               ),
                             ),
                           ),
@@ -223,6 +230,7 @@ class _GlassNavBarState extends State<GlassNavBar> {
                           child: _GlassNavButton(
                             item: widget.items[index],
                             selected: index == selected,
+                            inflateFrom: inflateFrom,
                             color: color,
                             onTap: () => widget.onSelected(index),
                           ),
@@ -243,12 +251,14 @@ class _GlassNavButton extends StatelessWidget {
   const _GlassNavButton({
     required this.item,
     required this.selected,
+    required this.inflateFrom,
     required this.color,
     required this.onTap,
   });
 
   final GlassNavItem item;
   final bool selected;
+  final double inflateFrom;
   final Color color;
   final VoidCallback onTap;
 
@@ -267,22 +277,27 @@ class _GlassNavButton extends StatelessWidget {
         // itens); aqui só ícone e rótulo.
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(selected ? item.selectedIcon : item.icon,
-                  color: foreground, size: 24),
-              const SizedBox(height: 2),
-              Text(
-                item.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: foreground,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    ),
-              ),
-            ],
+          child: _Inflate(
+            from: selected ? inflateFrom : 1,
+            to: selected ? _navInflatedScale : 1,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(selected ? item.selectedIcon : item.icon,
+                    color: foreground, size: 24),
+                const SizedBox(height: 2),
+                Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: foreground,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -321,11 +336,8 @@ PreferredSizeWidget glassAppBar(
         ? titleText
         : Row(
             children: [
-              IconButton(
-                tooltip: 'Voltar',
-                onPressed: onBack,
-                icon: const Icon(Icons.arrow_back),
-              ),
+              GlassBackButton(onPressed: onBack),
+              const SizedBox(width: 8),
               Flexible(child: titleText),
             ],
           ),
@@ -340,4 +352,59 @@ PreferredSizeWidget glassAppBar(
         ),
     ],
   );
+}
+
+/// Botão voltar dentro de uma pílula de vidro (como no iOS). Sem
+/// [onPressed], volta a tela anterior da pilha (Navigator.maybePop).
+class GlassBackButton extends StatelessWidget {
+  const GlassBackButton({super.key, this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: GlassSurface(
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: IconButton(
+            tooltip: 'Voltar',
+            padding: EdgeInsets.zero,
+            onPressed: onPressed ?? () => Navigator.of(context).maybePop(),
+            icon: const Icon(Icons.arrow_back, size: 22),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Quanto o item selecionado da barra de menus fica maior.
+const double _navInflatedScale = 1.08;
+
+/// Cresce de [from] até [to] com um leve "pulo" (passa um pouco e volta).
+class _Inflate extends StatelessWidget {
+  const _Inflate({
+    required this.from,
+    this.to = _navInflatedScale,
+    required this.child,
+  });
+
+  final double from;
+  final double to;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: from, end: to),
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutBack,
+      builder: (context, scale, child) =>
+          Transform.scale(scale: scale, child: child),
+      child: child,
+    );
+  }
 }

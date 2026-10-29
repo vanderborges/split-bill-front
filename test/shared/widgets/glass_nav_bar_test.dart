@@ -47,8 +47,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(bar(3));
     double offset() => tester
-        .widget<Transform>(find.descendant(
-            of: find.byType(GlassNavBar), matching: find.byType(Transform)))
+        .widget<Transform>(find.byKey(const ValueKey('nav-pill')))
         .transform
         .getTranslation()
         .x;
@@ -64,11 +63,25 @@ void main() {
 
   testWidgets('sem aba selecionada não mostra a pílula', (tester) async {
     await tester.pumpWidget(bar(-1));
-    expect(
-        find.descendant(
-            of: find.byType(GlassNavBar), matching: find.byType(Transform)),
-        findsNothing);
+    expect(find.byKey(const ValueKey('nav-pill')), findsNothing);
     expect(labelColor(tester, 'Extrato'), isNot(const Color(0xFF0C66E4)));
+  });
+
+  testWidgets('item selecionado infla ao trocar de aba', (tester) async {
+    await tester.pumpWidget(bar(0));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(bar(2));
+    double scaleOf(String label) => tester
+        .widget<Transform>(find
+            .ancestor(of: find.text(label), matching: find.byType(Transform))
+            .first)
+        .transform
+        .getMaxScaleOnAxis();
+    expect(scaleOf('Eventos'), closeTo(1, 0.01));
+    await tester.pumpAndSettle();
+    expect(scaleOf('Eventos'), closeTo(1.08, 0.01));
+    expect(scaleOf('Início'), closeTo(1, 0.01));
   });
 
   testWidgets('toque avisa o índice da aba', (tester) async {
