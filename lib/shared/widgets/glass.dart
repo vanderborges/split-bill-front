@@ -3,8 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
-/// Superfície de vidro no padrão do Threads: modo dia branco translúcido
-/// (~70%) com contorno cinza fino; modo noite cinza-escuro (~65%). O que
+/// Superfície de vidro no padrão do Threads: 40% de cor (branco no dia,
+/// cinza-escuro à noite) com contorno fino. O que
 /// passa por trás continua legível, só levemente desfocado (como entre os
 /// botões da barra do Threads), com brilho suave na borda e sem sombra.
 ///
@@ -20,7 +20,7 @@ class GlassSurface extends StatelessWidget {
     this.padding,
     this.opacity = 1,
     this.tint,
-    this.blurSigma = 8,
+    this.blurSigma = 5,
   });
 
   final Widget child;
@@ -43,9 +43,9 @@ class GlassSurface extends StatelessWidget {
     final colors = tint == null
         ? [
             (dark ? _darkGlass : Colors.white)
-                .withValues(alpha: (dark ? 0.68 : 0.72) * opacity),
+                .withValues(alpha: 0.40 * opacity),
             (dark ? _darkGlass : Colors.white)
-                .withValues(alpha: (dark ? 0.62 : 0.66) * opacity),
+                .withValues(alpha: 0.34 * opacity),
           ]
         : [
             tint.withValues(alpha: 0.82 * opacity),
