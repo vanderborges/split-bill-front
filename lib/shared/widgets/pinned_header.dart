@@ -108,8 +108,8 @@ class _PinnedBackdrop extends StatelessWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      background.withValues(alpha: 0.88),
-                      background.withValues(alpha: 0.82),
+                      background.withValues(alpha: 0.50),
+                      background.withValues(alpha: 0.46),
                       background.withValues(alpha: 0),
                     ],
                     stops: [0, height <= 0 ? 0 : solid / height, 1],
@@ -124,9 +124,11 @@ class _PinnedBackdrop extends StatelessWidget {
   }
 }
 
-/// Respiro entre o painel fixo e o começo da lista.
+/// Respiro entre os campos fixos e o começo da lista: passa do degradê do
+/// fundo (28) - senão o rótulo do primeiro campo da lista (ex.: "Extrato"
+/// no Extrato geral) ficava apagado atrás dele.
 abstract final class AppPinnedGap {
-  static const double below = 12;
+  static const double below = 32;
 }
 
 /// Avisa o tamanho do filho depois de cada layout (a altura dos campos

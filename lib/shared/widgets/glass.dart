@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
-/// Superfície de vidro no padrão do Threads: 40% de cor (branco no dia,
+/// Superfície de vidro no padrão do Threads: 25% de cor (branco no dia,
 /// cinza-escuro à noite) com contorno fino. O que
 /// passa por trás continua legível, só levemente desfocado (como entre os
 /// botões da barra do Threads), com brilho suave na borda e sem sombra.
@@ -20,7 +20,7 @@ class GlassSurface extends StatelessWidget {
     this.padding,
     this.opacity = 1,
     this.tint,
-    this.blurSigma = 5,
+    this.blurSigma = 3,
   });
 
   final Widget child;
@@ -43,9 +43,9 @@ class GlassSurface extends StatelessWidget {
     final colors = tint == null
         ? [
             (dark ? _darkGlass : Colors.white)
-                .withValues(alpha: 0.40 * opacity),
+                .withValues(alpha: 0.25 * opacity),
             (dark ? _darkGlass : Colors.white)
-                .withValues(alpha: 0.34 * opacity),
+                .withValues(alpha: 0.20 * opacity),
           ]
         : [
             tint.withValues(alpha: 0.82 * opacity),
@@ -704,8 +704,8 @@ class TopEdgeBlur extends StatelessWidget {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        background.withValues(alpha: 0.85),
-                        background.withValues(alpha: 0.55),
+                        background.withValues(alpha: 0.50),
+                        background.withValues(alpha: 0.32),
                         background.withValues(alpha: 0),
                       ],
                       stops: const [0, 0.55, 1],

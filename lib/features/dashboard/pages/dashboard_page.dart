@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_spacing.dart';
+import '../../../shared/ptbr_sort.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/empty_state.dart';
@@ -121,9 +122,10 @@ class _BalancesContent extends ConsumerWidget {
       );
     }
 
+    // Grupos em ordem alfabética.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: balances
+      children: sortedByNamePtBr(balances, (balance) => balance.groupName)
           .map((groupBalance) => Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: _GroupCard(groupBalance: groupBalance),
