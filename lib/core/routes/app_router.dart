@@ -2,6 +2,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'navigation_history.dart';
+
 import '../../features/auth/pages/login_page.dart';
 import '../../features/auth/pages/register_page.dart';
 import '../../features/dashboard/pages/dashboard_page.dart';
@@ -34,7 +36,7 @@ CustomTransitionPage<void> _noTransitionPage(Widget child) {
 }
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  return GoRouter(
+  final router = GoRouter(
     initialLocation: '/login',
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
@@ -94,4 +96,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               _noTransitionPage(const ProfilePage())),
     ],
   );
+  // Guarda o caminho de telas pro "voltar" (ver [goBack]).
+  router.routerDelegate.addListener(() => navigationHistory
+      .record(router.routerDelegate.currentConfiguration.uri.toString()));
+  return router;
 });

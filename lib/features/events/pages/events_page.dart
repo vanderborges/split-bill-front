@@ -8,6 +8,7 @@ import '../../../shared/ptbr_sort.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/glass_dropdown_field.dart';
+import '../../../shared/widgets/pinned_header.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
@@ -52,7 +53,7 @@ class EventsPage extends ConsumerWidget {
 
     return AppScaffold(
       title: 'Eventos',
-      // Filtros rolam junto com a lista, por trás da barra superior.
+      // A lista rola por trás da barra superior e do filtro fixo.
       scrollsBehindTopBar: true,
       floatingActionButton: AutoCollapsingFab(
         label: 'Novo evento',
@@ -71,210 +72,212 @@ class EventsPage extends ConsumerWidget {
           }
         },
       ),
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-              child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 16 + topBarInset(context), 16, 8),
-            child: groupsAsync.when(
-              data: (groups) {
-                if (groups.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                final value = groups.any((group) => group.id == selectedGroupId)
-                    ? selectedGroupId
-                    : null;
-                return GlassDropdownField<String>(
-                  key: ValueKey(value),
-                  initialValue: value,
-                  decoration:
-                      const InputDecoration(labelText: 'Filtrar por grupo'),
-                  hint: const Text('Todos os grupos'),
-                  items: [
-                    const DropdownMenuItem<String>(
-                        value: null, child: Text('Todos os grupos')),
-                    // Grupos em ordem alfabética.
-                    ...sortedByNamePtBr(groups, (group) => group.name).map(
-                        (group) => DropdownMenuItem(
-                            value: group.id, child: Text(group.name))),
-                  ],
-                  onChanged: (value) {
-                    ref.read(selectedGroupIdProvider.notifier).state = value;
-                    ref.read(selectedEventIdProvider.notifier).state = null;
-                    ref.invalidate(selectedEventProvider);
-                    ref.invalidate(selectedEventExpensesProvider);
-                    ref.invalidate(selectedEventReportProvider);
-                  },
-                );
+      child: PinnedHeaderLayout(
+        // "Filtrar por grupo" fica fixo no topo, num painel de vidro.
+        header: groupsAsync.when<Widget?>(
+          data: (groups) {
+            if (groups.isEmpty) {
+              return null;
+            }
+            final value = groups.any((group) => group.id == selectedGroupId)
+                ? selectedGroupId
+                : null;
+            return GlassDropdownField<String>(
+              key: ValueKey(value),
+              initialValue: value,
+              decoration: const InputDecoration(labelText: 'Filtrar por grupo'),
+              hint: const Text('Todos os grupos'),
+              items: [
+                const DropdownMenuItem<String>(
+                    value: null, child: Text('Todos os grupos')),
+                // Grupos em ordem alfabética.
+                ...sortedByNamePtBr(groups, (group) => group.name).map(
+                    (group) => DropdownMenuItem(
+                        value: group.id, child: Text(group.name))),
+              ],
+              onChanged: (value) {
+                ref.read(selectedGroupIdProvider.notifier).state = value;
+                ref.read(selectedEventIdProvider.notifier).state = null;
+                ref.invalidate(selectedEventProvider);
+                ref.invalidate(selectedEventExpensesProvider);
+                ref.invalidate(selectedEventReportProvider);
               },
-              loading: () => const LinearProgressIndicator(),
-              error: (error, _) => Text(
-                friendlyApiError(error,
-                    fallback: 'Não foi possível carregar os grupos.'),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          )),
-          // Sem nenhum grupo não há evento pra ocultar.
-          if (groupsAsync.valueOrNull?.isNotEmpty ?? false)
-            SliverToBoxAdapter(
-                child: CheckboxListTile(
-              value: hideClosed,
-              onChanged: (value) => ref
-                  .read(hideClosedEventsProvider.notifier)
-                  .state = value ?? false,
-              controlAffinity: ListTileControlAffinity.leading,
-              dense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              title: const Text('Ocultar fechados'),
-            )),
-          eventsAsync.when(
-            data: (allEvents) {
-              // Abertos primeiro, depois aguardando pagamento, depois
-              // fechados; dentro de cada um, do mais recente pro mais
-              // antigo.
-              int statusRank(EventModel event) =>
-                  event.isOpen ? 0 : (event.isSettling ? 1 : 2);
-              final events = (hideClosed
-                  ? allEvents.where((event) => !event.isClosed).toList()
-                  : [...allEvents])
-                ..sort((a, b) {
-                  final byStatus = statusRank(a).compareTo(statusRank(b));
-                  if (byStatus != 0) {
-                    return byStatus;
-                  }
-                  final byDate = b.sortDate.compareTo(a.sortDate);
-                  if (byDate != 0) {
-                    return byDate;
-                  }
-                  return (b.createdAt ?? DateTime(0))
-                      .compareTo(a.createdAt ?? DateTime(0));
-                });
-              if (events.isEmpty) {
-                return SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: EmptyState(
-                      icon: Icons.event_outlined,
-                      title: allEvents.isEmpty
-                          ? 'Nenhum evento cadastrado.'
-                          : 'Nenhum evento aberto.',
-                      message: allEvents.isEmpty
-                          ? 'Toque em "+" para criar um mês ou evento avulso.'
-                          : 'Desmarque "Ocultar fechados" para ver todos.',
-                    ));
-              }
-              final groupsById = {
-                for (final group in groupsAsync.valueOrNull ?? [])
-                  group.id: group,
-              };
-              return SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                      16, 8, 16, fabClearance + bottomBarInset(context)),
-                  sliver: SliverList.separated(
-                    itemCount: events.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final event = events[index];
-                      final groupName =
-                          groupsById[event.groupId]?.name ?? 'Grupo';
-                      final isEventAdmin = ref
-                              .watch(groupRoleProvider(event.groupId))
-                              .valueOrNull ==
-                          'ADMIN';
-                      return Card(
-                        child: ListTile(
-                          title: Text(event.name),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: AppSpacing.xs),
-                            child: Wrap(
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              spacing: AppSpacing.xs,
-                              children: [
-                                Text('$groupName | ${event.typeLabel}'),
-                                StatusBadge(event.isClosed
-                                    ? AppStatus.fechado
-                                    : event.isSettling
-                                        ? AppStatus.aguardandoPagamento
-                                        : AppStatus.aberto),
+            );
+          },
+          loading: () => const LinearProgressIndicator(),
+          error: (error, _) => Text(
+            friendlyApiError(error,
+                fallback: 'Não foi possível carregar os grupos.'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        builder: (context, top) => CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(child: SizedBox(height: top - 8)),
+            // Sem nenhum grupo não há evento pra ocultar.
+            if (groupsAsync.valueOrNull?.isNotEmpty ?? false)
+              SliverToBoxAdapter(
+                  child: CheckboxListTile(
+                value: hideClosed,
+                onChanged: (value) => ref
+                    .read(hideClosedEventsProvider.notifier)
+                    .state = value ?? false,
+                controlAffinity: ListTileControlAffinity.leading,
+                dense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                title: const Text('Ocultar fechados'),
+              )),
+            eventsAsync.when(
+              data: (allEvents) {
+                // Abertos primeiro, depois aguardando pagamento, depois
+                // fechados; dentro de cada um, do mais recente pro mais
+                // antigo.
+                int statusRank(EventModel event) =>
+                    event.isOpen ? 0 : (event.isSettling ? 1 : 2);
+                final events = (hideClosed
+                    ? allEvents.where((event) => !event.isClosed).toList()
+                    : [...allEvents])
+                  ..sort((a, b) {
+                    final byStatus = statusRank(a).compareTo(statusRank(b));
+                    if (byStatus != 0) {
+                      return byStatus;
+                    }
+                    final byDate = b.sortDate.compareTo(a.sortDate);
+                    if (byDate != 0) {
+                      return byDate;
+                    }
+                    return (b.createdAt ?? DateTime(0))
+                        .compareTo(a.createdAt ?? DateTime(0));
+                  });
+                if (events.isEmpty) {
+                  return SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: EmptyState(
+                        icon: Icons.event_outlined,
+                        title: allEvents.isEmpty
+                            ? 'Nenhum evento cadastrado.'
+                            : 'Nenhum evento aberto.',
+                        message: allEvents.isEmpty
+                            ? 'Toque em "+" para criar um mês ou evento avulso.'
+                            : 'Desmarque "Ocultar fechados" para ver todos.',
+                      ));
+                }
+                final groupsById = {
+                  for (final group in groupsAsync.valueOrNull ?? [])
+                    group.id: group,
+                };
+                return SliverPadding(
+                    padding: EdgeInsets.fromLTRB(
+                        16, 8, 16, fabClearance + bottomBarInset(context)),
+                    sliver: SliverList.separated(
+                      itemCount: events.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final event = events[index];
+                        final groupName =
+                            groupsById[event.groupId]?.name ?? 'Grupo';
+                        final isEventAdmin = ref
+                                .watch(groupRoleProvider(event.groupId))
+                                .valueOrNull ==
+                            'ADMIN';
+                        return Card(
+                          child: ListTile(
+                            title: Text(event.name),
+                            subtitle: Padding(
+                              padding:
+                                  const EdgeInsets.only(top: AppSpacing.xs),
+                              child: Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: AppSpacing.xs,
+                                children: [
+                                  Text('$groupName | ${event.typeLabel}'),
+                                  StatusBadge(event.isClosed
+                                      ? AppStatus.fechado
+                                      : event.isSettling
+                                          ? AppStatus.aguardandoPagamento
+                                          : AppStatus.aberto),
+                                ],
+                              ),
+                            ),
+                            leading: Icon(event.isClosed
+                                ? Icons.lock_outline
+                                : event.isSettling
+                                    ? Icons.hourglass_top_outlined
+                                    : Icons.event_available),
+                            onTap: () {
+                              selectEvent(ref,
+                                  groupId: event.groupId, eventId: event.id);
+                              context.go('/expenses');
+                            },
+                            trailing: PopupMenuButton<String>(
+                              onSelected: (value) async {
+                                if (value == 'expenses') {
+                                  selectEvent(ref,
+                                      groupId: event.groupId,
+                                      eventId: event.id);
+                                  context.go('/expenses');
+                                } else if (value == 'report') {
+                                  selectEvent(ref,
+                                      groupId: event.groupId,
+                                      eventId: event.id);
+                                  context.go('/expenses?view=saldo');
+                                } else if (value == 'start-settlement') {
+                                  await confirmStartSettlement(
+                                      context, ref, event.groupId, event.id);
+                                } else if (value == 'close') {
+                                  await _closeEvent(context, ref, event);
+                                } else if (value == 'reopen') {
+                                  await _reopenEvent(context, ref, event);
+                                } else if (value == 'add-temporary') {
+                                  await showTemporaryGuestDialog(
+                                      context, ref, event.groupId);
+                                } else if (value == 'delete') {
+                                  await _deleteEvent(context, ref, event);
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                const PopupMenuItem(
+                                    value: 'expenses',
+                                    child: Text('Ver despesas')),
+                                const PopupMenuItem(
+                                    value: 'report', child: Text('Ver saldo')),
+                                if (isEventAdmin && event.isOpen)
+                                  const PopupMenuItem(
+                                      value: 'start-settlement',
+                                      child: Text('Fechar evento')),
+                                if (isEventAdmin && event.isSettling)
+                                  const PopupMenuItem(
+                                      value: 'close',
+                                      child: Text('Concluir evento')),
+                                if (isEventAdmin && !event.isOpen)
+                                  const PopupMenuItem(
+                                      value: 'reopen', child: Text('Reabrir')),
+                                if (isEventAdmin && !event.isClosed)
+                                  const PopupMenuItem(
+                                      value: 'add-temporary',
+                                      child: Text('Incluir temporário')),
+                                if (isEventAdmin)
+                                  const PopupMenuItem(
+                                      value: 'delete', child: Text('Deletar')),
                               ],
                             ),
                           ),
-                          leading: Icon(event.isClosed
-                              ? Icons.lock_outline
-                              : event.isSettling
-                                  ? Icons.hourglass_top_outlined
-                                  : Icons.event_available),
-                          onTap: () {
-                            selectEvent(ref,
-                                groupId: event.groupId, eventId: event.id);
-                            context.go('/expenses');
-                          },
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (value) async {
-                              if (value == 'expenses') {
-                                selectEvent(ref,
-                                    groupId: event.groupId, eventId: event.id);
-                                context.go('/expenses');
-                              } else if (value == 'report') {
-                                selectEvent(ref,
-                                    groupId: event.groupId, eventId: event.id);
-                                context.go('/expenses?view=saldo');
-                              } else if (value == 'start-settlement') {
-                                await confirmStartSettlement(
-                                    context, ref, event.groupId, event.id);
-                              } else if (value == 'close') {
-                                await _closeEvent(context, ref, event);
-                              } else if (value == 'reopen') {
-                                await _reopenEvent(context, ref, event);
-                              } else if (value == 'add-temporary') {
-                                await showTemporaryGuestDialog(
-                                    context, ref, event.groupId);
-                              } else if (value == 'delete') {
-                                await _deleteEvent(context, ref, event);
-                              }
-                            },
-                            itemBuilder: (_) => [
-                              const PopupMenuItem(
-                                  value: 'expenses',
-                                  child: Text('Ver despesas')),
-                              const PopupMenuItem(
-                                  value: 'report', child: Text('Ver saldo')),
-                              if (isEventAdmin && event.isOpen)
-                                const PopupMenuItem(
-                                    value: 'start-settlement',
-                                    child: Text('Fechar evento')),
-                              if (isEventAdmin && event.isSettling)
-                                const PopupMenuItem(
-                                    value: 'close',
-                                    child: Text('Concluir evento')),
-                              if (isEventAdmin && !event.isOpen)
-                                const PopupMenuItem(
-                                    value: 'reopen', child: Text('Reabrir')),
-                              if (isEventAdmin && !event.isClosed)
-                                const PopupMenuItem(
-                                    value: 'add-temporary',
-                                    child: Text('Incluir temporário')),
-                              if (isEventAdmin)
-                                const PopupMenuItem(
-                                    value: 'delete', child: Text('Deletar')),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ));
-            },
-            loading: () => const SliverFillRemaining(
-                hasScrollBody: false, child: LoadingState()),
-            error: (error, _) => SliverFillRemaining(
-                hasScrollBody: false,
-                child: ErrorState(
-                  message: friendlyApiError(error,
-                      fallback: 'Não foi possível carregar os eventos.'),
-                  onRetry: () => ref.invalidate(eventsProvider),
-                )),
-          ),
-        ],
+                        );
+                      },
+                    ));
+              },
+              loading: () => const SliverFillRemaining(
+                  hasScrollBody: false, child: LoadingState()),
+              error: (error, _) => SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: ErrorState(
+                    message: friendlyApiError(error,
+                        fallback: 'Não foi possível carregar os eventos.'),
+                    onRetry: () => ref.invalidate(eventsProvider),
+                  )),
+            ),
+          ],
+        ),
       ),
     );
   }

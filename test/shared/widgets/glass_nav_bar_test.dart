@@ -33,11 +33,14 @@ void main() {
   Color? labelColor(WidgetTester tester, String label) =>
       tester.widget<Text>(find.text(label)).style?.color;
 
-  testWidgets('selecionado fica azul (Trello) e os outros não', (tester) async {
+  testWidgets('monocromático (Threads): selecionado com ícone preenchido',
+      (tester) async {
     await tester.pumpWidget(bar(1));
-    expect(labelColor(tester, 'Grupos'), const Color(0xFF0C66E4));
-    expect(labelColor(tester, 'Início'), isNot(const Color(0xFF0C66E4)));
+    // Modo dia: tudo preto; o selecionado se distingue pelo ícone cheio.
+    expect(labelColor(tester, 'Grupos'), Colors.black);
+    expect(labelColor(tester, 'Início'), Colors.black);
     expect(find.byIcon(Icons.groups), findsOneWidget);
+    expect(find.byIcon(Icons.home_outlined), findsOneWidget);
   });
 
   testWidgets('a pílula desliza da aba anterior até a nova', (tester) async {
@@ -64,7 +67,7 @@ void main() {
   testWidgets('sem aba selecionada não mostra a pílula', (tester) async {
     await tester.pumpWidget(bar(-1));
     expect(find.byKey(const ValueKey('nav-pill')), findsNothing);
-    expect(labelColor(tester, 'Extrato'), isNot(const Color(0xFF0C66E4)));
+    expect(find.byIcon(Icons.list_alt_outlined), findsOneWidget);
   });
 
   testWidgets('compacta: some o nome e a barra fica menor; volta ao normal',

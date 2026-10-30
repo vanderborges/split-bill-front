@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/routes/navigation_history.dart';
 import '../../../core/theme/app_semantic_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
@@ -97,7 +98,7 @@ class _ExpensesView extends ConsumerWidget {
     return AppScaffold(
       title: title,
       // Despesas/Saldo de um evento: a seta volta pra lista de Eventos.
-      onBack: () => context.go('/events'),
+      onBack: () => goBack(context, fallback: '/events'),
       // Seletor e filtros rolam junto com a lista, por trás da barra.
       scrollsBehindTopBar: true,
       // "+" também no Saldo (evento aberto).

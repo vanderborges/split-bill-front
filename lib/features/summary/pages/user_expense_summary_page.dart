@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
+import '../../../core/routes/navigation_history.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
+import '../../../shared/widgets/pinned_header.dart';
 import '../../../shared/widgets/glass_dropdown_field.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
@@ -58,194 +59,205 @@ class _UserExpenseSummaryPageState
       scrollsBehindTopBar: true,
       title: 'Extrato Geral',
       // Volta pro Extrato (saldo por evento).
-      onBack: () => context.go('/summary'),
-      child: ListView(
-        padding: EdgeInsets.fromLTRB(
-            16, 16 + topBarInset(context), 16, 16 + bottomBarInset(context)),
-        children: [
-          groupsAsync.when(
-            data: (groups) {
-              if (groups.isEmpty) {
-                return const Text('Você não participa de nenhum grupo.');
-              }
-              if (groupId == null ||
-                  groups.every((group) => group.id != groupId)) {
-                groupId = groups.first.id;
-                ref.read(selectedGroupIdProvider.notifier).state = groupId;
-              }
-              return GlassDropdownField<String>(
-                initialValue: groupId,
-                decoration: const InputDecoration(labelText: 'Grupo'),
-                items: groups
-                    .map((group) => DropdownMenuItem(
-                        value: group.id,
-                        child: Text(group.viewerRemoved
-                            ? '${group.name} (você saiu)'
-                            : group.name)))
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      groupId = value;
-                      userId = null;
-                      eventId = null;
-                      summaryFuture = null;
-                    });
-                    ref.read(selectedGroupIdProvider.notifier).state = value;
-                    ref.read(selectedEventIdProvider.notifier).state = null;
-                    ref.invalidate(statementEventsProvider);
-                  }
-                },
-              );
-            },
-            loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('Erro ao carregar grupos: $error'),
-          ),
-          const SizedBox(height: 12),
-          if (groupId != null)
-            currentUserAsync.when(
-              data: (currentUser) {
-                if (currentUser == null) {
-                  return const SizedBox.shrink();
+      onBack: () => goBack(context, fallback: '/summary'),
+      // Grupo e Evento fixos no topo (painel de vidro); pessoa, tipo,
+      // datas e o extrato rolam por trás.
+      child: PinnedHeaderLayout(
+        header: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            groupsAsync.when(
+              data: (groups) {
+                if (groups.isEmpty) {
+                  return const Text('Você não participa de nenhum grupo.');
                 }
-                final role = ref.watch(groupRoleProvider(groupId!)).valueOrNull;
-                if (role != 'ADMIN') {
-                  userId = currentUser.id;
-                  return Text('Extrato: ${currentUser.nickname}');
+                if (groupId == null ||
+                    groups.every((group) => group.id != groupId)) {
+                  groupId = groups.first.id;
+                  ref.read(selectedGroupIdProvider.notifier).state = groupId;
                 }
-                return FutureBuilder(
-                  future:
-                      ref.read(groupsRepositoryProvider).listMembers(groupId!,
-                          // Quem saiu do grupo e tem despesa continua no
-                          // filtro, marcado como removido.
-                          includeRemoved: true),
-                  builder: (context, snapshot) {
-                    // Removidos depois dos ativos.
-                    final data = snapshot.data ?? [];
-                    final members = [
-                      ...data.where((member) => member.active),
-                      ...data.where((member) => !member.active),
-                    ];
-                    return GlassDropdownField<String?>(
-                      initialValue: userId,
-                      decoration: const InputDecoration(labelText: 'Extrato'),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                            value: null, child: Text('Consolidado do grupo')),
-                        ...members.map((member) => DropdownMenuItem<String?>(
-                            value: member.userId,
-                            child: Text(member.active
-                                ? member.nickname
-                                : '${member.nickname} (removido)'))),
-                      ],
-                      onChanged: (value) => setState(() {
-                        userId = value;
+                return GlassDropdownField<String>(
+                  initialValue: groupId,
+                  decoration: const InputDecoration(labelText: 'Grupo'),
+                  items: groups
+                      .map((group) => DropdownMenuItem(
+                          value: group.id,
+                          child: Text(group.viewerRemoved
+                              ? '${group.name} (você saiu)'
+                              : group.name)))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        groupId = value;
+                        userId = null;
+                        eventId = null;
                         summaryFuture = null;
-                      }),
-                    );
+                      });
+                      ref.read(selectedGroupIdProvider.notifier).state = value;
+                      ref.read(selectedEventIdProvider.notifier).state = null;
+                      ref.invalidate(statementEventsProvider);
+                    }
                   },
                 );
               },
               loading: () => const LinearProgressIndicator(),
-              error: (error, _) => const SizedBox.shrink(),
+              error: (error, _) => Text('Erro ao carregar grupos: $error'),
             ),
-          const SizedBox(height: 12),
-          eventsAsync.when(
-            data: (events) {
-              // Evento vindo de outra tela que não é deste grupo: volta
-              // pra "Todos" (senão o dropdown quebra com valor inexistente).
-              if (eventId != null &&
-                  events.every((event) => event.id != eventId)) {
-                eventId = null;
-              }
-              return GlassDropdownField<String?>(
-                key: ValueKey('summary-event-$groupId-$eventId'),
-                initialValue: eventId,
-                decoration: const InputDecoration(labelText: 'Evento'),
+            const SizedBox(height: 10),
+            eventsAsync.when(
+              data: (events) {
+                // Evento vindo de outra tela que não é deste grupo: volta
+                // pra "Todos" (senão o dropdown quebra com valor inexistente).
+                if (eventId != null &&
+                    events.every((event) => event.id != eventId)) {
+                  eventId = null;
+                }
+                return GlassDropdownField<String?>(
+                  key: ValueKey('summary-event-$groupId-$eventId'),
+                  initialValue: eventId,
+                  decoration: const InputDecoration(labelText: 'Evento'),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                        value: null, child: Text('Todos')),
+                    ...events.map((event) => DropdownMenuItem<String?>(
+                        value: event.id, child: Text(event.name))),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      eventId = value;
+                      summaryFuture = null;
+                    });
+                    // Escolher um evento aqui também vale pras outras telas.
+                    if (value != null && groupId != null) {
+                      selectEvent(ref, groupId: groupId!, eventId: value);
+                    }
+                  },
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) => Text('Erro ao carregar eventos: $error'),
+            ),
+          ],
+        ),
+        builder: (context, top) => ListView(
+          padding:
+              EdgeInsets.fromLTRB(16, top, 16, 16 + bottomBarInset(context)),
+          children: [
+            if (groupId != null)
+              currentUserAsync.when(
+                data: (currentUser) {
+                  if (currentUser == null) {
+                    return const SizedBox.shrink();
+                  }
+                  final role =
+                      ref.watch(groupRoleProvider(groupId!)).valueOrNull;
+                  if (role != 'ADMIN') {
+                    userId = currentUser.id;
+                    return Text('Extrato: ${currentUser.nickname}');
+                  }
+                  return FutureBuilder(
+                    future:
+                        ref.read(groupsRepositoryProvider).listMembers(groupId!,
+                            // Quem saiu do grupo e tem despesa continua no
+                            // filtro, marcado como removido.
+                            includeRemoved: true),
+                    builder: (context, snapshot) {
+                      // Removidos depois dos ativos.
+                      final data = snapshot.data ?? [];
+                      final members = [
+                        ...data.where((member) => member.active),
+                        ...data.where((member) => !member.active),
+                      ];
+                      return GlassDropdownField<String?>(
+                        initialValue: userId,
+                        decoration: const InputDecoration(labelText: 'Extrato'),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                              value: null, child: Text('Consolidado do grupo')),
+                          ...members.map((member) => DropdownMenuItem<String?>(
+                              value: member.userId,
+                              child: Text(member.active
+                                  ? member.nickname
+                                  : '${member.nickname} (removido)'))),
+                        ],
+                        onChanged: (value) => setState(() {
+                          userId = value;
+                          summaryFuture = null;
+                        }),
+                      );
+                    },
+                  );
+                },
+                loading: () => const LinearProgressIndicator(),
+                error: (error, _) => const SizedBox.shrink(),
+              ),
+            const SizedBox(height: 12),
+            categoriesAsync.when(
+              data: (categories) => GlassDropdownField<String?>(
+                initialValue: category,
+                decoration: const InputDecoration(labelText: 'Tipo de despesa'),
                 items: [
                   const DropdownMenuItem<String?>(
                       value: null, child: Text('Todos')),
-                  ...events.map((event) => DropdownMenuItem<String?>(
-                      value: event.id, child: Text(event.name))),
+                  ...categories.map((item) => DropdownMenuItem<String?>(
+                      value: item.name, child: Text(item.name))),
                 ],
-                onChanged: (value) {
-                  setState(() {
-                    eventId = value;
-                    summaryFuture = null;
-                  });
-                  // Escolher um evento aqui também vale pras outras telas.
-                  if (value != null && groupId != null) {
-                    selectEvent(ref, groupId: groupId!, eventId: value);
-                  }
-                },
-              );
-            },
-            loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('Erro ao carregar eventos: $error'),
-          ),
-          const SizedBox(height: 12),
-          categoriesAsync.when(
-            data: (categories) => GlassDropdownField<String?>(
-              initialValue: category,
-              decoration: const InputDecoration(labelText: 'Tipo de despesa'),
-              items: [
-                const DropdownMenuItem<String?>(
-                    value: null, child: Text('Todos')),
-                ...categories.map((item) => DropdownMenuItem<String?>(
-                    value: item.name, child: Text(item.name))),
+                onChanged: (value) => setState(() {
+                  category = value;
+                  summaryFuture = null;
+                }),
+              ),
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) => Text('Erro ao carregar tipos: $error'),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () async => _pickDate(context, true),
+                  icon: const Icon(Icons.date_range),
+                  label:
+                      Text(from == null ? 'Data inicial' : _formatDate(from!)),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async => _pickDate(context, false),
+                  icon: const Icon(Icons.date_range),
+                  label: Text(to == null ? 'Data final' : _formatDate(to!)),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _clearFilters,
+                  icon: const Icon(Icons.filter_alt_off_outlined),
+                  label: const Text('Limpar filtros'),
+                ),
               ],
-              onChanged: (value) => setState(() {
-                category = value;
-                summaryFuture = null;
-              }),
             ),
-            loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('Erro ao carregar tipos: $error'),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () async => _pickDate(context, true),
-                icon: const Icon(Icons.date_range),
-                label: Text(from == null ? 'Data inicial' : _formatDate(from!)),
+            const SizedBox(height: 16),
+            if (groupId != null && currentUserAsync.valueOrNull != null)
+              FutureBuilder<UserExpenseSummaryModel>(
+                future: summaryFuture ??= _summaryFuture(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Padding(
+                      padding: EdgeInsets.all(AppSpacing.xl),
+                      child: LoadingState(),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return ErrorState(
+                      message: friendlyApiError(snapshot.error!,
+                          fallback: 'Não foi possível carregar o extrato.'),
+                      onRetry: () => setState(() => summaryFuture = null),
+                    );
+                  }
+                  return _SummaryContent(summary: snapshot.data!);
+                },
               ),
-              OutlinedButton.icon(
-                onPressed: () async => _pickDate(context, false),
-                icon: const Icon(Icons.date_range),
-                label: Text(to == null ? 'Data final' : _formatDate(to!)),
-              ),
-              OutlinedButton.icon(
-                onPressed: _clearFilters,
-                icon: const Icon(Icons.filter_alt_off_outlined),
-                label: const Text('Limpar filtros'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (groupId != null && currentUserAsync.valueOrNull != null)
-            FutureBuilder<UserExpenseSummaryModel>(
-              future: summaryFuture ??= _summaryFuture(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState != ConnectionState.done) {
-                  return const Padding(
-                    padding: EdgeInsets.all(AppSpacing.xl),
-                    child: LoadingState(),
-                  );
-                }
-                if (snapshot.hasError) {
-                  return ErrorState(
-                    message: friendlyApiError(snapshot.error!,
-                        fallback: 'Não foi possível carregar o extrato.'),
-                    onRetry: () => setState(() => summaryFuture = null),
-                  );
-                }
-                return _SummaryContent(summary: snapshot.data!);
-              },
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

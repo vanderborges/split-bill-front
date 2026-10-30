@@ -9,6 +9,7 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
 import '../../../shared/widgets/money_text.dart';
+import '../../../shared/widgets/pinned_header.dart';
 import '../../events/services/events_repository.dart';
 import '../../events/widgets/event_picker_field.dart' show EventStatusBadge;
 import '../../expenses/services/expenses_repository.dart';
@@ -28,72 +29,78 @@ class DashboardPage extends ConsumerWidget {
       // Nome do app no lugar de "Início", maior que o padrão (26 pt).
       title: 'DividiAí',
       titleFontSize: 26,
-      child: ListView(
-        padding: EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.lg + topBarInset(context),
-            AppSpacing.lg,
-            AppSpacing.lg + bottomBarInset(context)),
-        children: [
-          Text(
-            'Bora dividir uma conta?',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          // Cor lisa (flat), a mesma do "Fechar evento" e do "+".
-          Material(
-            color: Theme.of(context).colorScheme.primary,
-            shape: const StadiumBorder(),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              customBorder: const StadiumBorder(),
-              // Abre o fluxo por cima da Home — ao salvar/cancelar a
-              // pessoa continua no Início.
-              onTap: () => openNewExpenseFlow(context, ref),
-              child: SizedBox(
-                height: 52,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.add,
-                        color: Theme.of(context).colorScheme.onPrimary),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Nova despesa',
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+      // "Bora dividir uma conta?" e "Nova despesa" fixos no topo (painel
+      // de vidro); os saldos rolam por trás.
+      child: PinnedHeaderLayout(
+        header: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Bora dividir uma conta?',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            // Cor lisa (flat), a mesma do "Fechar evento" e do "+".
+            Material(
+              color: Theme.of(context).colorScheme.primary,
+              shape: const StadiumBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                // Abre o fluxo por cima da Home — ao salvar/cancelar a
+                // pessoa continua no Início.
+                onTap: () => openNewExpenseFlow(context, ref),
+                child: SizedBox(
+                  height: 52,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add,
                           color: Theme.of(context).colorScheme.onPrimary),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Text(
+                        'Nova despesa',
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: Theme.of(context).colorScheme.onPrimary),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          Text(
-            'Saldo por grupo',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            'Mostrando apenas os grupos em que você participa.',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          balancesAsync.when(
-            data: (balances) => _BalancesContent(balances: balances),
-            loading: () => const Padding(
-              padding: EdgeInsets.all(AppSpacing.xl),
-              child: LoadingState(),
+          ],
+        ),
+        builder: (context, top) => ListView(
+          padding: EdgeInsets.fromLTRB(AppSpacing.lg, top + AppSpacing.sm,
+              AppSpacing.lg, AppSpacing.lg + bottomBarInset(context)),
+          children: [
+            Text(
+              'Saldo por grupo',
+              style: Theme.of(context).textTheme.titleLarge,
             ),
-            error: (_, __) => ErrorState(
-              message: 'Não foi possível carregar seus saldos.',
-              onRetry: () => ref.invalidate(dashboardGroupBalancesProvider),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Mostrando apenas os grupos em que você participa.',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-          ),
-        ],
+            const SizedBox(height: AppSpacing.lg),
+            balancesAsync.when(
+              data: (balances) => _BalancesContent(balances: balances),
+              loading: () => const Padding(
+                padding: EdgeInsets.all(AppSpacing.xl),
+                child: LoadingState(),
+              ),
+              error: (_, __) => ErrorState(
+                message: 'Não foi possível carregar seus saldos.',
+                onRetry: () => ref.invalidate(dashboardGroupBalancesProvider),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

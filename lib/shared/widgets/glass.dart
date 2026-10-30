@@ -3,11 +3,14 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
-/// Superfície "liquid glass" (iOS 26): fundo translúcido com desfoque do
-/// que está atrás, brilho de luz na borda (forte em cima à esquerda,
-/// fraco embaixo à direita), reflexo suave no topo e sombra leve.
+/// Superfície de vidro no padrão do Threads: modo dia branco quase opaco
+/// com contorno cinza fino; modo noite cinza-escuro. Desfoca o que está
+/// atrás (aparece só levemente), com brilho suave na borda e sem sombra.
 ///
 /// [tint]: vidro colorido (ex.: botão "+" verde) em vez do vidro neutro.
+/// Cinza-escuro do vidro no modo noite (barra do Threads).
+const Color _darkGlass = Color(0xFF2A2A2C);
+
 class GlassSurface extends StatelessWidget {
   const GlassSurface({
     super.key,
@@ -34,13 +37,14 @@ class GlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final tint = this.tint;
     final colors = tint == null
         ? [
-            scheme.surface.withValues(alpha: (dark ? 0.42 : 0.55) * opacity),
-            scheme.surface.withValues(alpha: (dark ? 0.30 : 0.40) * opacity),
+            (dark ? _darkGlass : Colors.white)
+                .withValues(alpha: (dark ? 0.90 : 0.94) * opacity),
+            (dark ? _darkGlass : Colors.white)
+                .withValues(alpha: (dark ? 0.84 : 0.88) * opacity),
           ]
         : [
             tint.withValues(alpha: 0.82 * opacity),
@@ -55,12 +59,19 @@ class GlassSurface extends StatelessWidget {
         child: CustomPaint(
           foregroundPainter: LiquidHighlightPainter(
             borderRadius: borderRadius,
-            strength: dark ? 0.55 : 1,
+            strength: dark ? 0.35 : 0.6,
           ),
           child: Container(
             padding: padding,
             decoration: BoxDecoration(
               borderRadius: borderRadius,
+              // Contorno fino (cinza no dia, claro e discreto à noite).
+              border: tint != null
+                  ? null
+                  : Border.all(
+                      color: dark
+                          ? Colors.white.withValues(alpha: 0.10)
+                          : Colors.black.withValues(alpha: 0.10)),
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -136,8 +147,9 @@ class LiquidHighlightPainter extends CustomPainter {
 /// continuar legível.
 const BorderRadius glassMenuRadius = BorderRadius.all(Radius.circular(24));
 
-/// Altura máxima da lista aberta dos dropdowns: 6 itens e meio (o meio
-/// item cortado mostra que dá pra rolar) + o respiro de 8 do menu.
+/// Limite antigo da lista aberta dos dropdowns (6 itens e meio). Desde
+/// 30/10/2026 a lista vai até antes da barra de menus; fica só como
+/// referência de tamanho nos testes.
 const double glassMenuMaxHeight = 6.5 * kMinInteractiveDimension + 8;
 
 Color glassMenuColor(BuildContext context) {
@@ -203,11 +215,13 @@ class GlassNavItem {
   final String label;
 }
 
-/// Azul do item selecionado na barra de menus (padrão do app Trello).
+/// Cor dos ícones da barra de menus: monocromática como no Threads (preto
+/// no modo dia, branco no modo noite). O selecionado se distingue pelo
+/// ícone preenchido e pela pílula cinza.
 Color navSelectedColor(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark
-        ? const Color(0xFF579DFF)
-        : const Color(0xFF0C66E4);
+        ? Colors.white
+        : Colors.black;
 
 /// Barra de navegação inferior flutuante no padrão do WhatsApp no iOS 26:
 /// cápsula de vidro bem transparente (o conteúdo passa desfocado por
@@ -354,10 +368,8 @@ class _GlassNavBarState extends State<GlassNavBar>
           // Compacta também fica um pouco mais estreita.
           padding: EdgeInsets.fromLTRB(
               16 + 24 * (1 - expanded), 4, 16 + 24 * (1 - expanded), 4),
-          // Vidro bem transparente: o conteúdo aparece desfocado por trás.
+          // Vidro do Threads: quase opaco, o conteúdo aparece só levemente.
           child: GlassSurface(
-            opacity: 0.38,
-            blurSigma: 14,
             padding: const EdgeInsets.all(5),
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -416,6 +428,10 @@ class _GlassNavBarState extends State<GlassNavBar>
                                     child: _GlassPill(
                                       width: width,
                                       dark: dark,
+                                      // 0 = parada (cinza), 1 = lente.
+                                      motion: _dragging
+                                          ? 1
+                                          : (speed * 0.2).clamp(0.0, 1.0),
                                     ),
                                   ),
                                 ),
@@ -454,38 +470,39 @@ class _GlassNavBarState extends State<GlassNavBar>
   }
 }
 
-/// Pílula de vidro claro do item selecionado: mais opaca que a barra, com
-/// o brilho na borda e reflexo do topo do vidro.
+/// Pílula do item selecionado (padrão Threads): parada é cinza sólida -
+/// cinza-claro no dia, um pouco mais escura que a barra à noite. Em
+/// movimento ([motion] 1) vira uma lente de vidro clara com brilho na borda.
 class _GlassPill extends StatelessWidget {
-  const _GlassPill({required this.width, required this.dark});
+  const _GlassPill({required this.width, required this.dark, this.motion = 0});
 
   final double width;
   final bool dark;
+  final double motion;
+
+  static const _restLight = Color(0xFFE4E4E6);
+  static const _restDark = Color(0xFF1C1C1E);
 
   @override
   Widget build(BuildContext context) {
     const radius = BorderRadius.all(Radius.circular(999));
     return CustomPaint(
-      foregroundPainter: LiquidHighlightPainter(
-        borderRadius: radius,
-        strength: dark ? 0.45 : 0.9,
-      ),
+      foregroundPainter: motion <= 0
+          ? null
+          : LiquidHighlightPainter(
+              borderRadius: radius,
+              strength: motion * (dark ? 0.6 : 1),
+            ),
       child: Container(
         width: width,
         decoration: BoxDecoration(
           borderRadius: radius,
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: dark
-                ? [
-                    Colors.white.withValues(alpha: 0.20),
-                    Colors.white.withValues(alpha: 0.12),
-                  ]
-                : [
-                    Colors.white.withValues(alpha: 0.85),
-                    Colors.white.withValues(alpha: 0.60),
-                  ],
+          color: Color.lerp(
+            dark ? _restDark : _restLight,
+            dark
+                ? Colors.white.withValues(alpha: 0.16)
+                : Colors.white.withValues(alpha: 0.70),
+            motion,
           ),
         ),
       ),
@@ -516,8 +533,7 @@ class _GlassNavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground =
-        selected ? color : Theme.of(context).colorScheme.onSurface;
+    final foreground = color;
     return Semantics(
       button: true,
       selected: selected,

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/routes/navigation_history.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/widgets/app_scaffold.dart';
@@ -28,7 +29,8 @@ class NotificationsPage extends ConsumerWidget {
       title: 'Notificações',
       // Sem a barra de menus; a seta volta pra tela de onde veio.
       showBottomBar: false,
-      onBack: () => context.go(ref.read(notificationsReturnPathProvider)),
+      onBack: () =>
+          goBack(context, fallback: ref.read(notificationsReturnPathProvider)),
       actions: [
         if (hasNotifications)
           IconButton(

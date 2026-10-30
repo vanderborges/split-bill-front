@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../../../core/routes/navigation_history.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/theme_mode_provider.dart';
 import '../../../shared/api_error.dart';
+import '../../../shared/phone_input_formatter.dart';
 import '../../../shared/session_reset.dart';
 import '../../../shared/validators.dart';
 import '../../../shared/widgets/app_scaffold.dart';
@@ -29,7 +31,7 @@ class ProfilePage extends ConsumerWidget {
       title: 'Perfil',
       // Sem a barra de menus; a seta volta pro Início.
       showBottomBar: false,
-      onBack: () => context.go('/'),
+      onBack: () => goBack(context, fallback: '/'),
       child: userAsync.when(
         data: (user) {
           if (user == null) {
@@ -306,7 +308,9 @@ Future<void> _showEditProfileDialog(
   final fullNameController = TextEditingController(text: user.fullName);
   final nicknameController = TextEditingController(text: user.nickname);
   final emailController = TextEditingController(text: user.email);
-  final phoneController = TextEditingController(text: user.phone);
+  // Já mostra o telefone salvo no formato (11) 98765-4321.
+  final phoneController =
+      TextEditingController(text: PhoneInputFormatter.format(user.phone));
   final pixKeyController = TextEditingController(text: user.pixKey);
 
   final saved = await showDialog<bool>(
@@ -342,9 +346,12 @@ Future<void> _showEditProfileDialog(
               const SizedBox(height: 12),
               TextField(
                 controller: phoneController,
-                maxLength: 20,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Telefone'),
+                // Máscara (xx) xxxxx-xxxx, só números e no máximo 11 (sem
+                // contador de caracteres).
+                inputFormatters: const [PhoneInputFormatter()],
+                decoration: const InputDecoration(
+                    labelText: 'Telefone', hintText: '(11) 98765-4321'),
               ),
               const SizedBox(height: 12),
               TextField(

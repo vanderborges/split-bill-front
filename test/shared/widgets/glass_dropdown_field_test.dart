@@ -37,17 +37,24 @@ void main() {
     expect(firstItem.top, greaterThanOrEqualTo(fieldRect.bottom));
   });
 
-  testWidgets('mostra no máximo 6 itens e meio', (tester) async {
+  testWidgets('abre com mais itens, até antes do limite de baixo, e rola',
+      (tester) async {
     await tester.pumpWidget(field());
+    final screen = tester.getSize(find.byType(Scaffold));
     await tester.tap(find.byKey(const ValueKey('campo')));
     await tester.pumpAndSettle();
-    final menu = find.ancestor(
-        of: find.text('Grupo 12'),
-        matching: find.byType(SingleChildScrollView));
-    // Menu rola: altura limitada a 6 itens e meio (+ respiro).
-    expect(tester.getSize(menu.first).height,
-        lessThanOrEqualTo(glassMenuMaxHeight));
-    expect(tester.getSize(menu.first).height, greaterThan(6 * 48));
+    final menu = find
+        .ancestor(
+            of: find.text('Grupo 1').last,
+            matching: find.byType(SingleChildScrollView))
+        .first;
+    final rect = tester.getRect(menu);
+    // Mais que os 6 itens e meio de antes, sem passar do fim da tela.
+    expect(rect.height, greaterThan(glassMenuMaxHeight));
+    expect(rect.bottom, lessThanOrEqualTo(screen.height));
+    // Não cabem os 13: o último fica pra rolar.
+    expect(tester.getRect(find.text('Grupo 12').last).top,
+        greaterThan(rect.bottom - 1));
   });
 
   testWidgets('campo perto do fim: a lista não passa do limite de baixo',

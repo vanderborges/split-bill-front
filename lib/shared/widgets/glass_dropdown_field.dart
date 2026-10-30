@@ -4,8 +4,8 @@ import 'glass.dart';
 
 /// Campo de seleção do app: a lista abre logo ABAIXO do campo tocado (o
 /// dropdown padrão do Flutter abre por cima, centrado no item escolhido),
-/// no vidro translúcido dos menus e com no máximo 6 itens e meio visíveis
-/// (rola o resto). Mesmo jeito de usar do `DropdownButtonFormField`.
+/// no vidro translúcido dos menus, mostrando quantos itens couberem até logo
+/// acima da barra de menus (rola o resto). Mesmo jeito de usar do `DropdownButtonFormField`.
 class GlassDropdownField<T> extends StatefulWidget {
   const GlassDropdownField({
     super.key,
@@ -61,10 +61,17 @@ class _GlassDropdownFieldState<T> extends State<GlassDropdownField<T>> {
 
   bool get _enabled => widget.onChanged != null && widget.items.isNotEmpty;
 
-  /// Altura que a lista quer: os itens (até 6 e meio) + o respiro do menu.
-  double get _desiredMenuHeight {
-    final full = widget.items.length * kMinInteractiveDimension + 16;
-    return full < glassMenuMaxHeight ? full : glassMenuMaxHeight;
+  /// Altura da lista inteira (todos os itens + o respiro do menu). Ela abre
+  /// com o máximo que couber até a barra de menus e rola o resto.
+  double get _desiredMenuHeight =>
+      widget.items.length * kMinInteractiveDimension + 16;
+
+  /// Espaço mínimo pra abrir embaixo sem subir a tela: 4 itens e meio (ou
+  /// a lista toda, se for menor).
+  double get _comfortableMenuHeight {
+    const comfortable = 4.5 * kMinInteractiveDimension + 16;
+    final desired = _desiredMenuHeight;
+    return desired < comfortable ? desired : comfortable;
   }
 
   /// Espaço livre abaixo do campo até logo acima da barra de menus (ou da
@@ -96,8 +103,9 @@ class _GlassDropdownFieldState<T> extends State<GlassDropdownField<T>> {
       return;
     }
     final desired = _desiredMenuHeight;
+    final comfortable = _comfortableMenuHeight;
     // Pouco espaço embaixo: rola a tela pra subir o campo e caber a lista.
-    if (measured.below < desired && Scrollable.maybeOf(context) != null) {
+    if (measured.below < comfortable && Scrollable.maybeOf(context) != null) {
       await Scrollable.ensureVisible(
         context,
         alignment: 0.05,
@@ -114,7 +122,7 @@ class _GlassDropdownFieldState<T> extends State<GlassDropdownField<T>> {
     // Abaixo do campo; só abre pra cima se embaixo não couber e em cima
     // tiver mais espaço. A altura respeita o limite (rola dentro da lista).
     final openAbove =
-        measured.below < desired && measured.above > measured.below;
+        measured.below < comfortable && measured.above > measured.below;
     final available = openAbove ? measured.above : measured.below;
     final menuHeight = available < desired ? available : desired;
     final top = openAbove ? field.top - 4 - menuHeight : field.bottom + 4;

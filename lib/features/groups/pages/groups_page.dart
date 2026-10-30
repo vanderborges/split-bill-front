@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/routes/navigation_history.dart';
 import '../../../core/constants/environment.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/ptbr_sort.dart';
@@ -175,7 +176,7 @@ class GroupDetailPage extends ConsumerWidget {
     return AppScaffold(
       scrollsBehindTopBar: true,
       title: group?.name ?? 'Grupo',
-      onBack: () => context.go('/groups'),
+      onBack: () => goBack(context, fallback: '/groups'),
       actions: [
         if (group != null && isAdmin)
           IconButton(
