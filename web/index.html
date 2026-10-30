@@ -31,6 +31,52 @@
 
   <title>DividiAi</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Tamanho do texto do iPhone/iPad (Ajustes > Tela e Brilho > Tamanho do
+    Texto) também no navegador. O Flutter web usa o tamanho de fonte da
+    página (16px = 100%) como escala do texto e percebe quando ele muda; o
+    Safari só expõe o tamanho do sistema pela fonte "-apple-system-body"
+    (17px no tamanho padrão). Aqui ela é medida e convertida pra escala da
+    página. Só no iOS: no Mac a mesma fonte é 13px e encolheria tudo.
+  -->
+  <script>
+    (function () {
+      var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (!isIOS || !window.CSS || !CSS.supports('font', '-apple-system-body')) {
+        return;
+      }
+      var IOS_DEFAULT_BODY_SIZE = 17;
+      // Limites pra tela não quebrar nos tamanhos de acessibilidade.
+      var MIN_SCALE = 0.85;
+      var MAX_SCALE = 1.6;
+      function applySystemTextSize() {
+        var probe = document.createElement('span');
+        probe.style.font = '-apple-system-body';
+        probe.style.position = 'absolute';
+        probe.style.visibility = 'hidden';
+        probe.textContent = 'A';
+        (document.body || document.documentElement).appendChild(probe);
+        var size = parseFloat(getComputedStyle(probe).fontSize);
+        probe.remove();
+        if (!size) {
+          return;
+        }
+        var scale = Math.min(MAX_SCALE,
+          Math.max(MIN_SCALE, size / IOS_DEFAULT_BODY_SIZE));
+        document.documentElement.style.fontSize = (16 * scale) + 'px';
+      }
+      applySystemTextSize();
+      // Mudou o tamanho nos Ajustes e voltou pro navegador.
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) {
+          applySystemTextSize();
+        }
+      });
+      window.addEventListener('focus', applySystemTextSize);
+    })();
+  </script>
 </head>
 <body>
   <script>
