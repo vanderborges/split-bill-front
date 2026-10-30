@@ -27,9 +27,9 @@ class DashboardPage extends ConsumerWidget {
 
     return AppScaffold(
       scrollsBehindTopBar: true,
-      // Nome do app no lugar de "Início", maior que o padrão (26 pt).
+      // Nome do app no lugar de "Início", maior que o padrão (28 pt).
       title: 'DividiAí',
-      titleFontSize: 26,
+      titleFontSize: 28,
       // "Bora dividir uma conta?" e "Nova despesa" fixos no topo (painel
       // de vidro); os saldos rolam por trás.
       child: PinnedHeaderLayout(

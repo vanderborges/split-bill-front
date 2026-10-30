@@ -77,9 +77,10 @@ class GroupsPage extends ConsumerWidget {
             );
           }
           final query = ref.watch(groupsSearchProvider);
-          final filtered = groups
-              .where((group) => matchesSearchPtBr(group.name, query))
-              .toList();
+          // Grupos em ordem alfabética (sem acento/caixa).
+          final filtered = sortedByNamePtBr(
+              groups.where((group) => matchesSearchPtBr(group.name, query)),
+              (group) => group.name);
           // Campo de busca fixo no topo; a lista rola por trás dele.
           return PinnedHeaderLayout(
             header: AppSearchField(

@@ -557,8 +557,15 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                       color: Theme.of(context).textTheme.bodyLarge?.color,
                     ),
                   ));
+                  // Extrato (cards com cabeçalho Grupo | Evento): evento aberto
+                  // mostra a etiqueta "Evento aberto" no lugar do pago/pendente.
+                  final showOpenTag =
+                      widget.isEventOpen && widget.header != null;
                   final Widget status = widget.isEventOpen
-                      ? const SizedBox.shrink()
+                      ? (showOpenTag
+                          ? const StatusBadge(AppStatus.aberto,
+                              label: 'Evento aberto')
+                          : const SizedBox.shrink())
                       : fade(_SettlementStatus(
                           settlement: settlement,
                           canUpdate: widget.canUpdateSettlements &&
@@ -614,7 +621,7 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                             toggle,
                           ],
                         ),
-                        if (!widget.isEventOpen)
+                        if (!widget.isEventOpen || showOpenTag)
                           Row(
                             children: [
                               Expanded(
@@ -1507,7 +1514,10 @@ class AllEventsStatementView extends ConsumerWidget {
                 .compareTo(a.createdAt ?? DateTime(0));
           });
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Soma dos cards (só com mais de um evento na tela).
+            _StatementTotal(events: sorted),
             for (final event in sorted)
               _MyEventBalanceCard(
                 key: ValueKey(event.id),
@@ -1607,6 +1617,62 @@ class _CopyPixLink extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Totalizador do Extrato com "Todos os eventos": soma o valor dos cards
+/// exibidos (o saldo de quem está logado em cada evento). Só aparece com
+/// mais de um card na tela e depois que todos carregaram.
+class _StatementTotal extends ConsumerWidget {
+  const _StatementTotal({required this.events});
+
+  final List<EventModel> events;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentUserId = ref.watch(currentUserProvider).valueOrNull?.id;
+    var total = 0.0;
+    var cards = 0;
+    for (final event in events) {
+      final reportAsync = ref.watch(eventReportProvider(event.id));
+      if (reportAsync.hasError) {
+        continue;
+      }
+      final report = reportAsync.valueOrNull;
+      if (report == null) {
+        // Ainda carregando: espera todos pra não mostrar soma parcial.
+        return const SizedBox.shrink();
+      }
+      final mine = report.balances.where((b) => b.includes(currentUserId));
+      if (mine.isEmpty) {
+        continue;
+      }
+      cards++;
+      total += mine.fold<double>(0, (sum, balance) => sum + balance.balance);
+    }
+    if (cards < 2) {
+      return const SizedBox.shrink();
+    }
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm + 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child:
+                Text('Total dos $cards eventos', style: textTheme.titleSmall),
+          ),
+          MoneyText(total,
+              colorBySign: true, showSign: true, style: textTheme.titleMedium),
+        ],
       ),
     );
   }
