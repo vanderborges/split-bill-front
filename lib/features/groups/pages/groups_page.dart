@@ -12,6 +12,7 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/glass_dropdown_field.dart';
 import '../../../shared/widgets/glass_search_field.dart';
+import '../../../shared/widgets/pinned_header.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
@@ -79,48 +80,52 @@ class GroupsPage extends ConsumerWidget {
           final filtered = groups
               .where((group) => matchesSearchPtBr(group.name, query))
               .toList();
-          final padding = EdgeInsets.fromLTRB(16, searchListTopInset(context),
-              16, fabClearance + bottomBarInset(context));
-          // Campo de busca sempre no topo; a lista rola por trás dele.
-          return SearchOverlay(
-            search: GlassSearchField(
+          // Campo de busca fixo no topo; a lista rola por trás dele.
+          return PinnedHeaderLayout(
+            header: AppSearchField(
               hint: 'Buscar grupo',
               onChanged: (value) =>
                   ref.read(groupsSearchProvider.notifier).state = value,
             ),
-            child: filtered.isEmpty
-                ? ListView(padding: padding, children: const [
-                    Padding(
-                      padding: EdgeInsets.only(top: 24),
-                      child: Text('Nenhum grupo encontrado.',
-                          textAlign: TextAlign.center),
-                    ),
-                  ])
-                : ListView.separated(
-                    padding: padding,
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final group = filtered[index];
-                      // Card mais alto que o de Eventos: o grupo é o destaque.
-                      return Card(
-                        child: ListTile(
-                          minVerticalPadding: 20,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 4),
-                          leading: const Icon(Icons.groups_outlined, size: 32),
-                          // Sem negrito no nome do grupo.
-                          title: Text(group.name,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w400)),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => openGroupDetail(context, ref, group.id),
-                        ),
-                      );
-                    },
-                  ),
+            builder: (context, top) {
+              final padding = EdgeInsets.fromLTRB(
+                  16, top, 16, fabClearance + bottomBarInset(context));
+              return filtered.isEmpty
+                  ? ListView(padding: padding, children: const [
+                      Padding(
+                        padding: EdgeInsets.only(top: 24),
+                        child: Text('Nenhum grupo encontrado.',
+                            textAlign: TextAlign.center),
+                      ),
+                    ])
+                  : ListView.separated(
+                      padding: padding,
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final group = filtered[index];
+                        // Card mais alto que o de Eventos: o grupo é o destaque.
+                        return Card(
+                          child: ListTile(
+                            minVerticalPadding: 20,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 4),
+                            leading:
+                                const Icon(Icons.groups_outlined, size: 32),
+                            // Sem negrito no nome do grupo.
+                            title: Text(group.name,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w400)),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () =>
+                                openGroupDetail(context, ref, group.id),
+                          ),
+                        );
+                      },
+                    );
+            },
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -193,23 +198,22 @@ class GroupDetailPage extends ConsumerWidget {
                   onRetry: () => ref.invalidate(groupsProvider),
                 )
               : const Center(child: CircularProgressIndicator())
-          // Busca de participantes sempre no topo; a lista rola por trás.
-          : SearchOverlay(
-              search: GlassSearchField(
+          // Busca de participantes fixa no topo; a lista rola por trás.
+          : PinnedHeaderLayout(
+              header: AppSearchField(
                 hint: 'Buscar participante',
                 onChanged: (value) =>
                     ref.read(groupMembersSearchProvider.notifier).state = value,
               ),
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(16, searchListTopInset(context),
-                    16, 16 + bottomBarInset(context)),
+              builder: (context, top) => ListView(
+                padding: EdgeInsets.fromLTRB(
+                    16, top, 16, 16 + bottomBarInset(context)),
                 children: [
-                  // Eventos deste grupo (tela Eventos já filtrada nele). Mesmo
-                  // padrão dos outros botões da tela (Convidar, Sair...): botão de
-                  // texto com ícone, à direita.
+                  // Eventos deste grupo (tela Eventos já filtrada nele). Mesma
+                  // aparência do "Fechar evento": botão azul preenchido, à direita.
                   Align(
                     alignment: Alignment.centerRight,
-                    child: TextButton.icon(
+                    child: FilledButton(
                       onPressed: () {
                         ref.read(selectedGroupIdProvider.notifier).state =
                             group.id;
@@ -218,8 +222,7 @@ class GroupDetailPage extends ConsumerWidget {
                         ref.invalidate(selectedEventProvider);
                         context.go('/events');
                       },
-                      icon: const Icon(Icons.event_outlined),
-                      label: const Text('Ver eventos'),
+                      child: const Text('Ver eventos'),
                     ),
                   ),
                   const SizedBox(height: 8),
