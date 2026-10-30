@@ -18,6 +18,7 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
 import '../../../shared/widgets/money_text.dart';
+import '../../../shared/widgets/pinned_header.dart';
 import '../../../shared/widgets/person_avatar.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../dashboard/services/dashboard_repository.dart';
@@ -99,7 +100,7 @@ class _ExpensesView extends ConsumerWidget {
       title: title,
       // Despesas/Saldo de um evento: a seta volta pra lista de Eventos.
       onBack: () => goBack(context, fallback: '/events'),
-      // Seletor e filtros rolam junto com a lista, por trás da barra.
+      // Evento e Despesas/Saldo fixos no topo; a lista rola por trás.
       scrollsBehindTopBar: true,
       // "+" também no Saldo (evento aberto).
       floatingActionButton: selectedEventClosedForExpenses
@@ -124,232 +125,243 @@ class _ExpensesView extends ConsumerWidget {
               ref.watch(groupRoleProvider(event.groupId)).valueOrNull ==
                   'ADMIN';
 
-          return CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                  child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    AppSpacing.lg + topBarInset(context),
-                    AppSpacing.lg,
-                    AppSpacing.sm),
-                child: eventsAsync.when(
-                  data: (allEvents) {
-                    // Lista todos os eventos do grupo (não só os abertos) —
-                    // senão, ao sair de um evento fechado/aguardando
-                    // pagamento ele some do seletor e não dá pra voltar.
-                    // Quem controla se dá pra ADICIONAR despesa é o status
-                    // do evento selecionado, não essa lista.
-                    final items = [...allEvents];
-                    if (items.every((item) => item.id != event.id)) {
-                      items.add(event);
-                    }
-                    return EventPickerField(
-                      // Muda a key ao trocar de evento por fora (ex.: toque
-                      // numa notificação) pra o campo pegar o novo valor.
-                      key: ValueKey(event.id),
-                      events: items,
-                      selectedId: event.id,
-                      // Só o nome do evento (pedido do usuário).
-                      showGroupName: false,
-                      groupNameOf: (groupId) =>
-                          _groupName(groupsAsync.valueOrNull, groupId),
-                      onChanged: (value) {
-                        final picked = items.where((item) => item.id == value);
-                        if (picked.isNotEmpty) {
-                          selectEvent(ref,
-                              groupId: picked.first.groupId, eventId: value);
-                        }
-                        ref.invalidate(selectedEventProvider);
-                        ref.invalidate(selectedEventExpensesProvider);
-                      },
-                    );
-                  },
-                  loading: () => Text('Evento ${event.name}',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  error: (_, __) => Text('Evento ${event.name}',
-                      style: Theme.of(context).textTheme.titleMedium),
-                ),
-              )),
-              // Despesas/Saldo e o filtro: rolam junto com a lista.
-              SliverToBoxAdapter(
-                  child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          return PinnedHeaderLayout(
+              // Seletor de Evento e Despesas/Saldo fixos (fundo desfocado).
+              header: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(
-                              value: false,
-                              icon: Icon(Icons.receipt_long_outlined),
-                              label: Text('Despesas')),
-                          ButtonSegment(
-                              value: true,
-                              icon: Icon(Icons.account_balance_wallet_outlined),
-                              label: Text('Saldo')),
-                        ],
-                        selected: {showBalance},
-                        showSelectedIcon: false,
-                        onSelectionChanged: (selection) => ref
-                            .read(showEventBalanceProvider.notifier)
-                            .state = selection.first,
-                      ),
+                  eventsAsync.when(
+                    data: (allEvents) {
+                      // Lista todos os eventos do grupo (não só os abertos) —
+                      // senão, ao sair de um evento fechado/aguardando
+                      // pagamento ele some do seletor e não dá pra voltar.
+                      // Quem controla se dá pra ADICIONAR despesa é o status
+                      // do evento selecionado, não essa lista.
+                      final items = [...allEvents];
+                      if (items.every((item) => item.id != event.id)) {
+                        items.add(event);
+                      }
+                      return EventPickerField(
+                        // Muda a key ao trocar de evento por fora (ex.: toque
+                        // numa notificação) pra o campo pegar o novo valor.
+                        key: ValueKey(event.id),
+                        events: items,
+                        selectedId: event.id,
+                        // Só o nome do evento (pedido do usuário).
+                        showGroupName: false,
+                        groupNameOf: (groupId) =>
+                            _groupName(groupsAsync.valueOrNull, groupId),
+                        onChanged: (value) {
+                          final picked =
+                              items.where((item) => item.id == value);
+                          if (picked.isNotEmpty) {
+                            selectEvent(ref,
+                                groupId: picked.first.groupId, eventId: value);
+                          }
+                          ref.invalidate(selectedEventProvider);
+                          ref.invalidate(selectedEventExpensesProvider);
+                        },
+                      );
+                    },
+                    loading: () => Text('Evento ${event.name}',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    error: (_, __) => Text('Evento ${event.name}',
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                            value: false,
+                            icon: Icon(Icons.receipt_long_outlined),
+                            label: Text('Despesas')),
+                        ButtonSegment(
+                            value: true,
+                            icon: Icon(Icons.account_balance_wallet_outlined),
+                            label: Text('Saldo')),
+                      ],
+                      selected: {showBalance},
+                      showSelectedIcon: false,
+                      onSelectionChanged: (selection) => ref
+                          .read(showEventBalanceProvider.notifier)
+                          .state = selection.first,
                     ),
                   ),
-                  if (!showBalance)
-                    Padding(
-                      padding: const EdgeInsets.only(right: AppSpacing.lg),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: CheckboxListTile(
-                              value: showOnlyMine,
-                              onChanged: (value) => ref
-                                  .read(showOnlyMyExpensesProvider.notifier)
-                                  .state = value ?? false,
-                              controlAffinity: ListTileControlAffinity.leading,
-                              dense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: AppSpacing.lg),
-                              title: const Text('Mostrar só minhas despesas'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                 ],
-              )),
-              // Saldo: o mesmo conteúdo do Relatório (ações do evento,
-              // pagamento, compartilhar e os cards de saldo).
-              if (showBalance)
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg,
-                      AppSpacing.lg, fabClearance + bottomBarInset(context)),
-                  sliver: const SliverToBoxAdapter(child: EventBalanceView()),
-                ),
-              if (!showBalance)
-                expensesAsync.when(
-                  data: (expenses) {
-                    final visibleExpenses = showOnlyMine
-                        ? expenses
-                            .where((expense) =>
-                                _isUserInvolved(expense, currentUser?.id))
-                            .toList()
-                        : expenses;
-                    if (visibleExpenses.isEmpty) {
-                      return SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: EmptyState(
-                            icon: Icons.receipt_long_outlined,
-                            title: showOnlyMine
-                                ? 'Você não participa de nenhuma despesa deste evento.'
-                                : 'Nenhuma despesa cadastrada.',
-                            message: showOnlyMine
-                                ? 'Desmarque o filtro para ver as despesas de todo o grupo.'
-                                : selectedEventClosedForExpenses
-                                    // Fechado não tem o "+".
-                                    ? 'Este evento não recebe mais despesas.'
-                                    : 'Toque em "+" para registrar o primeiro gasto deste evento.',
-                          ));
-                    }
-                    final sortedExpenses = [...visibleExpenses]
-                      ..sort((first, second) {
-                        final dateComparison =
-                            second.expenseDate.compareTo(first.expenseDate);
-                        if (dateComparison != 0) {
-                          return dateComparison;
-                        }
-                        return second.createdAt.compareTo(first.createdAt);
-                      });
-                    return SliverPadding(
-                        padding: EdgeInsets.fromLTRB(
-                            AppSpacing.lg,
-                            AppSpacing.sm,
-                            AppSpacing.lg,
-                            fabClearance + bottomBarInset(context)),
-                        sliver: SliverList.separated(
-                          itemCount: sortedExpenses.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final expense = sortedExpenses[index];
-                            final canChange = _canChangeExpense(
-                              expense,
-                              currentUser?.id,
-                              isGroupAdmin,
-                            );
-                            final shareSummary = _expenseShareSummary(expense);
-                            final installmentLabel = expense.installmentLabel;
-                            return ListTile(
-                              leading: SizedBox(
-                                width: 64,
-                                child: Text(
-                                  _formatDateShort(expense.expenseDate),
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  softWrap: false,
-                                  overflow: TextOverflow.visible,
-                                  style: Theme.of(context).textTheme.bodySmall,
+              ),
+              builder: (context, top) => CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(child: SizedBox(height: top)),
+                      // "Mostrar só minhas despesas" rola junto com a lista.
+                      if (!showBalance)
+                        SliverToBoxAdapter(
+                            child: Padding(
+                          padding: const EdgeInsets.only(right: AppSpacing.lg),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: CheckboxListTile(
+                                  value: showOnlyMine,
+                                  onChanged: (value) => ref
+                                      .read(showOnlyMyExpensesProvider.notifier)
+                                      .state = value ?? false,
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.lg),
+                                  title:
+                                      const Text('Mostrar só minhas despesas'),
                                 ),
                               ),
-                              onTap: () async {
-                                // Sempre abre o detalhe enxuto primeiro; o
-                                // formulário completo só vem pelo "Editar".
-                                final wantsEdit = await _openExpenseDetails(
-                                    context, expense,
-                                    canEdit: canChange && event.isOpen);
-                                if (!wantsEdit || !context.mounted) {
-                                  return;
+                            ],
+                          ),
+                        )),
+                      // Saldo: o mesmo conteúdo do Relatório (ações do evento,
+                      // pagamento, compartilhar e os cards de saldo).
+                      if (showBalance)
+                        SliverPadding(
+                          padding: EdgeInsets.fromLTRB(
+                              AppSpacing.lg,
+                              AppSpacing.lg,
+                              AppSpacing.lg,
+                              fabClearance + bottomBarInset(context)),
+                          sliver: const SliverToBoxAdapter(
+                              child: EventBalanceView()),
+                        ),
+                      if (!showBalance)
+                        expensesAsync.when(
+                          data: (expenses) {
+                            final visibleExpenses = showOnlyMine
+                                ? expenses
+                                    .where((expense) => _isUserInvolved(
+                                        expense, currentUser?.id))
+                                    .toList()
+                                : expenses;
+                            if (visibleExpenses.isEmpty) {
+                              return SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: EmptyState(
+                                    icon: Icons.receipt_long_outlined,
+                                    title: showOnlyMine
+                                        ? 'Você não participa de nenhuma despesa deste evento.'
+                                        : 'Nenhuma despesa cadastrada.',
+                                    message: showOnlyMine
+                                        ? 'Desmarque o filtro para ver as despesas de todo o grupo.'
+                                        : selectedEventClosedForExpenses
+                                            // Fechado não tem o "+".
+                                            ? 'Este evento não recebe mais despesas.'
+                                            : 'Toque em "+" para registrar o primeiro gasto deste evento.',
+                                  ));
+                            }
+                            final sortedExpenses = [...visibleExpenses]
+                              ..sort((first, second) {
+                                final dateComparison = second.expenseDate
+                                    .compareTo(first.expenseDate);
+                                if (dateComparison != 0) {
+                                  return dateComparison;
                                 }
-                                final users = await _loadEventUsers(
-                                    ref, event.groupId,
-                                    eventId: event.id,
-                                    keepUserIds: {
-                                      ...expense.participants.map(
-                                          (participant) => participant.userId),
-                                      ...expense.payers
-                                          .map((payer) => payer.userId),
-                                    });
-                                final categories =
-                                    await _loadCategoryNames(ref);
-                                if (context.mounted) {
-                                  await _openExpenseForm(
-                                      context, ref, event, users, categories,
-                                      expense: expense);
-                                }
-                              },
-                              title: Text(expense.description),
-                              subtitle: [shareSummary, installmentLabel]
-                                      .whereType<String>()
-                                      .isEmpty
-                                  ? null
-                                  : Text([shareSummary, installmentLabel]
-                                      .whereType<String>()
-                                      .join(' | ')),
-                              trailing: showOnlyMine
-                                  ? _UserBalanceText(
-                                      _userBalance(expense, currentUser?.id))
-                                  : MoneyText(expense.amount),
-                            );
+                                return second.createdAt
+                                    .compareTo(first.createdAt);
+                              });
+                            return SliverPadding(
+                                padding: EdgeInsets.fromLTRB(
+                                    AppSpacing.lg,
+                                    AppSpacing.sm,
+                                    AppSpacing.lg,
+                                    fabClearance + bottomBarInset(context)),
+                                sliver: SliverList.separated(
+                                  itemCount: sortedExpenses.length,
+                                  separatorBuilder: (_, __) =>
+                                      const Divider(height: 1),
+                                  itemBuilder: (context, index) {
+                                    final expense = sortedExpenses[index];
+                                    final canChange = _canChangeExpense(
+                                      expense,
+                                      currentUser?.id,
+                                      isGroupAdmin,
+                                    );
+                                    final shareSummary =
+                                        _expenseShareSummary(expense);
+                                    final installmentLabel =
+                                        expense.installmentLabel;
+                                    return ListTile(
+                                      leading: SizedBox(
+                                        width: 64,
+                                        child: Text(
+                                          _formatDateShort(expense.expenseDate),
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                          softWrap: false,
+                                          overflow: TextOverflow.visible,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                      ),
+                                      onTap: () async {
+                                        // Sempre abre o detalhe enxuto primeiro; o
+                                        // formulário completo só vem pelo "Editar".
+                                        final wantsEdit =
+                                            await _openExpenseDetails(
+                                                context, expense,
+                                                canEdit:
+                                                    canChange && event.isOpen);
+                                        if (!wantsEdit || !context.mounted) {
+                                          return;
+                                        }
+                                        final users = await _loadEventUsers(
+                                            ref, event.groupId,
+                                            eventId: event.id,
+                                            keepUserIds: {
+                                              ...expense.participants.map(
+                                                  (participant) =>
+                                                      participant.userId),
+                                              ...expense.payers
+                                                  .map((payer) => payer.userId),
+                                            });
+                                        final categories =
+                                            await _loadCategoryNames(ref);
+                                        if (context.mounted) {
+                                          await _openExpenseForm(context, ref,
+                                              event, users, categories,
+                                              expense: expense);
+                                        }
+                                      },
+                                      title: Text(expense.description),
+                                      subtitle: [shareSummary, installmentLabel]
+                                              .whereType<String>()
+                                              .isEmpty
+                                          ? null
+                                          : Text([
+                                              shareSummary,
+                                              installmentLabel
+                                            ].whereType<String>().join(' | ')),
+                                      trailing: showOnlyMine
+                                          ? _UserBalanceText(_userBalance(
+                                              expense, currentUser?.id))
+                                          : MoneyText(expense.amount),
+                                    );
+                                  },
+                                ));
                           },
-                        ));
-                  },
-                  loading: () => const SliverFillRemaining(
-                      hasScrollBody: false, child: LoadingState()),
-                  error: (error, _) => SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: ErrorState(
-                        message: friendlyApiError(error,
-                            fallback: 'Não foi possível carregar as despesas.'),
-                        onRetry: () =>
-                            ref.invalidate(selectedEventExpensesProvider),
-                      )),
-                ),
-            ],
-          );
+                          loading: () => const SliverFillRemaining(
+                              hasScrollBody: false, child: LoadingState()),
+                          error: (error, _) => SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: ErrorState(
+                                message: friendlyApiError(error,
+                                    fallback:
+                                        'Não foi possível carregar as despesas.'),
+                                onRetry: () => ref
+                                    .invalidate(selectedEventExpensesProvider),
+                              )),
+                        ),
+                    ],
+                  ));
         },
         loading: () => const LoadingState(),
         error: (error, _) => ErrorState(

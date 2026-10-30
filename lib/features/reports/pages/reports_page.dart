@@ -122,6 +122,9 @@ class EventFilterFields extends ConsumerWidget {
                     selectedId: allEvents ? null : event?.id,
                     allEventsLabel: allowAllEvents ? 'Todos os eventos' : null,
                     sortByGroup: allowAllEvents,
+                    // Extrato: "Grupo | Evento" só com "Todos os grupos"; com um
+                    // grupo escolhido, só o nome do evento.
+                    showGroupName: !allowAllEvents || selectedGroupId == null,
                     groupNameOf: (groupId) =>
                         _groupName(groupsAsync.valueOrNull, groupId),
                     onChanged: (value) {
