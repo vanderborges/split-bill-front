@@ -95,7 +95,7 @@ class AppScaffold extends ConsumerWidget {
 }
 
 Future<void> _logout(BuildContext context, WidgetRef ref) async {
-  await ref.read(authRepositoryProvider).logout();
+  await ref.read(authRepositoryProvider).logout(keepBiometric: true);
   resetSessionScopedProviders(ref);
   if (context.mounted) {
     context.go('/login');

@@ -283,8 +283,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         return;
       }
       try {
-        await ref.read(authRepositoryProvider).me();
-      } catch (_) {
+        final auth = ref.read(authRepositoryProvider);
+        if (!await auth.restoreBiometricSession()) {
+          throw StateError('sem sessão guardada');
+        }
+        await auth.me();
+      } catch (error) {
+        // Sem internet / servidor fora: não é sessão vencida - mantém a
+        // sessão guardada pra tentar de novo.
+        final status =
+            error is DioException ? error.response?.statusCode : null;
+        if (error is DioException && (status == null || status >= 500)) {
+          await ref.read(authRepositoryProvider).logout(keepBiometric: true);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text(
+                    'Não foi possível conectar. Tente de novo em instantes.')));
+          }
+          return;
+        }
         await ref.read(authRepositoryProvider).logout();
         resetSessionScopedProviders(ref);
         if (mounted) {

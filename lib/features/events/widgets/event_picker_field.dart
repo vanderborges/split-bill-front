@@ -17,6 +17,7 @@ class EventPickerField extends StatelessWidget {
     required this.onChanged,
     this.allEventsLabel,
     this.sortByGroup = false,
+    this.showGroupName = true,
   });
 
   final List<EventModel> events;
@@ -31,6 +32,13 @@ class EventPickerField extends StatelessWidget {
   /// Extrato: lista agrupada pelo nome do grupo (A-Z); dentro de cada
   /// grupo mantém a ordem de sempre ([EventModel.compareSettlingFirst]).
   final bool sortByGroup;
+
+  /// false (Despesas/Saldo): só o nome do evento, sem "Grupo | ".
+  final bool showGroupName;
+
+  String _label(EventModel event) => showGroupName
+      ? '${groupNameOf(event.groupId)} | ${event.name}'
+      : event.name;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +63,7 @@ class EventPickerField extends StatelessWidget {
         ...events.map((event) => Row(
               children: [
                 Expanded(
-                  child: Text('${groupNameOf(event.groupId)} | ${event.name}',
+                  child: Text(_label(event),
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
                 const SizedBox(width: 8),
@@ -72,7 +80,7 @@ class EventPickerField extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      '${groupNameOf(event.groupId)} | ${event.name}',
+                      _label(event),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

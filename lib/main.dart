@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,6 +13,9 @@ import 'features/notifications/services/push_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   configureUrlStrategy();
+  // Desenha até as bordas (atrás do relógio e da barra de navegação) também
+  // no Android até a versão 14, que punha uma faixa escura ali.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   await initializePush();
   final container = ProviderContainer();
   // App aberto por um toque na notificação: guarda pra onde ir antes da
@@ -42,6 +46,12 @@ class DividiAiApp extends ConsumerWidget {
       darkTheme: AppTheme.dark,
       themeMode: ref.watch(themeModeProvider),
       routerConfig: router,
+      // Telas sem barra superior (login, cadastro): mesma barra de status
+      // transparente com ícones no tom do tema.
+      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: AppTheme.systemOverlayFor(Theme.of(context).brightness),
+        child: child ?? const SizedBox.shrink(),
+      ),
       locale: const Locale('pt', 'BR'),
       supportedLocales: const [Locale('pt', 'BR')],
       localizationsDelegates: const [

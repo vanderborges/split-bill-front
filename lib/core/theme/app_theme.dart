@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_colors.dart';
 import 'app_semantic_colors.dart';
@@ -12,6 +13,23 @@ import 'app_spacing.dart';
 /// telas existentes — que já usam `FilledButton`, `TextField`, `Card`, `Chip`
 /// do Material padrão — herdem o novo visual sem precisar ser editadas.
 class AppTheme {
+  /// Barra de status (relógio/bateria) e barra de navegação do Android
+  /// transparentes, como no iOS 26: o conteúdo passa por baixo. Ícones
+  /// seguem o tema (escuros no modo dia, claros no modo noite).
+  static SystemUiOverlayStyle systemOverlayFor(Brightness brightness) {
+    final light = brightness == Brightness.light;
+    return SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      // Android: cor dos ícones; iOS: brilho do fundo (o inverso).
+      statusBarIconBrightness: light ? Brightness.dark : Brightness.light,
+      statusBarBrightness: light ? Brightness.light : Brightness.dark,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarContrastEnforced: false,
+      systemNavigationBarIconBrightness:
+          light ? Brightness.dark : Brightness.light,
+    );
+  }
+
   const AppTheme._();
 
   static ThemeData get light =>
@@ -72,6 +90,9 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
+        // Área do relógio transparente (conteúdo passa por baixo) e ícones
+        // escuros no modo dia / claros no modo noite.
+        systemOverlayStyle: AppTheme.systemOverlayFor(brightness),
       ),
       cardTheme: CardThemeData(
         elevation: 0,

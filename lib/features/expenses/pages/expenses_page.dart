@@ -83,7 +83,6 @@ class _ExpensesView extends ConsumerWidget {
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     final showOnlyMine = ref.watch(showOnlyMyExpensesProvider);
     final showBalance = ref.watch(showEventBalanceProvider);
-    final headerCollapsed = ref.watch(expensesHeaderCollapsedProvider);
 
     // Evento selecionado que não está aberto (aguardando pagamento ou
     // fechado) não aceita despesa — nem mostra o botão.
@@ -99,6 +98,8 @@ class _ExpensesView extends ConsumerWidget {
       title: title,
       // Despesas/Saldo de um evento: a seta volta pra lista de Eventos.
       onBack: () => context.go('/events'),
+      // Seletor e filtros rolam junto com a lista, por trás da barra.
+      scrollsBehindTopBar: true,
       // "+" também no Saldo (evento aberto).
       floatingActionButton: selectedEventClosedForExpenses
           ? null
@@ -122,12 +123,15 @@ class _ExpensesView extends ConsumerWidget {
               ref.watch(groupRoleProvider(event.groupId)).valueOrNull ==
                   'ADMIN';
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                  child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.lg + topBarInset(context),
+                    AppSpacing.lg,
+                    AppSpacing.sm),
                 child: eventsAsync.when(
                   data: (allEvents) {
                     // Lista todos os eventos do grupo (não só os abertos) —
@@ -145,6 +149,8 @@ class _ExpensesView extends ConsumerWidget {
                       key: ValueKey(event.id),
                       events: items,
                       selectedId: event.id,
+                      // Só o nome do evento (pedido do usuário).
+                      showGroupName: false,
                       groupNameOf: (groupId) =>
                           _groupName(groupsAsync.valueOrNull, groupId),
                       onChanged: (value) {
@@ -163,106 +169,80 @@ class _ExpensesView extends ConsumerWidget {
                   error: (_, __) => Text('Evento ${event.name}',
                       style: Theme.of(context).textTheme.titleMedium),
                 ),
-              ),
-              // Controles que somem ao rolar a lista pra baixo (fica só o
-              // seletor de evento) e voltam ao rolar pra cima.
-              ClipRect(
-                child: AnimatedSize(
-                  duration: const Duration(milliseconds: 120),
-                  curve: Curves.easeOut,
-                  alignment: Alignment.topCenter,
-                  child: headerCollapsed
-                      ? const SizedBox(width: double.infinity)
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
-                                  AppSpacing.sm, AppSpacing.lg, 0),
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: SegmentedButton<bool>(
-                                  segments: const [
-                                    ButtonSegment(
-                                        value: false,
-                                        icon: Icon(Icons.receipt_long_outlined),
-                                        label: Text('Despesas')),
-                                    ButtonSegment(
-                                        value: true,
-                                        icon: Icon(Icons
-                                            .account_balance_wallet_outlined),
-                                        label: Text('Saldo')),
-                                  ],
-                                  selected: {showBalance},
-                                  showSelectedIcon: false,
-                                  onSelectionChanged: (selection) => ref
-                                      .read(showEventBalanceProvider.notifier)
-                                      .state = selection.first,
-                                ),
-                              ),
+              )),
+              // Despesas/Saldo e o filtro: rolam junto com a lista.
+              SliverToBoxAdapter(
+                  child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<bool>(
+                        segments: const [
+                          ButtonSegment(
+                              value: false,
+                              icon: Icon(Icons.receipt_long_outlined),
+                              label: Text('Despesas')),
+                          ButtonSegment(
+                              value: true,
+                              icon: Icon(Icons.account_balance_wallet_outlined),
+                              label: Text('Saldo')),
+                        ],
+                        selected: {showBalance},
+                        showSelectedIcon: false,
+                        onSelectionChanged: (selection) => ref
+                            .read(showEventBalanceProvider.notifier)
+                            .state = selection.first,
+                      ),
+                    ),
+                  ),
+                  if (!showBalance)
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.lg),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: CheckboxListTile(
+                              value: showOnlyMine,
+                              onChanged: (value) => ref
+                                  .read(showOnlyMyExpensesProvider.notifier)
+                                  .state = value ?? false,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              dense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.lg),
+                              title: const Text('Mostrar só minhas despesas'),
                             ),
-                            if (!showBalance)
-                              Padding(
-                                padding:
-                                    const EdgeInsets.only(right: AppSpacing.lg),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: CheckboxListTile(
-                                        value: showOnlyMine,
-                                        onChanged: (value) => ref
-                                            .read(showOnlyMyExpensesProvider
-                                                .notifier)
-                                            .state = value ?? false,
-                                        controlAffinity:
-                                            ListTileControlAffinity.leading,
-                                        dense: true,
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                                horizontal: AppSpacing.lg),
-                                        title: const Text(
-                                            'Mostrar só minhas despesas'),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                ),
-              ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              )),
               // Saldo: o mesmo conteúdo do Relatório (ações do evento,
               // pagamento, compartilhar e os cards de saldo).
               if (showBalance)
-                Expanded(
-                  child: NotificationListener<ScrollUpdateNotification>(
-                    onNotification: (notification) =>
-                        _onUserScroll(ref, notification),
-                    child: ListView(
-                      padding: EdgeInsets.fromLTRB(
-                          AppSpacing.lg,
-                          AppSpacing.lg,
-                          AppSpacing.lg,
-                          fabClearance + bottomBarInset(context)),
-                      children: const [EventBalanceView()],
-                    ),
-                  ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg,
+                      AppSpacing.lg, fabClearance + bottomBarInset(context)),
+                  sliver: const SliverToBoxAdapter(child: EventBalanceView()),
                 ),
               if (!showBalance)
-                Expanded(
-                  child: NotificationListener<ScrollUpdateNotification>(
-                    onNotification: (notification) =>
-                        _onUserScroll(ref, notification),
-                    child: expensesAsync.when(
-                      data: (expenses) {
-                        final visibleExpenses = showOnlyMine
-                            ? expenses
-                                .where((expense) =>
-                                    _isUserInvolved(expense, currentUser?.id))
-                                .toList()
-                            : expenses;
-                        if (visibleExpenses.isEmpty) {
-                          return EmptyState(
+                expensesAsync.when(
+                  data: (expenses) {
+                    final visibleExpenses = showOnlyMine
+                        ? expenses
+                            .where((expense) =>
+                                _isUserInvolved(expense, currentUser?.id))
+                            .toList()
+                        : expenses;
+                    if (visibleExpenses.isEmpty) {
+                      return SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: EmptyState(
                             icon: Icons.receipt_long_outlined,
                             title: showOnlyMine
                                 ? 'Você não participa de nenhuma despesa deste evento.'
@@ -273,23 +253,24 @@ class _ExpensesView extends ConsumerWidget {
                                     // Fechado não tem o "+".
                                     ? 'Este evento não recebe mais despesas.'
                                     : 'Toque em "+" para registrar o primeiro gasto deste evento.',
-                          );
+                          ));
+                    }
+                    final sortedExpenses = [...visibleExpenses]
+                      ..sort((first, second) {
+                        final dateComparison =
+                            second.expenseDate.compareTo(first.expenseDate);
+                        if (dateComparison != 0) {
+                          return dateComparison;
                         }
-                        final sortedExpenses = [...visibleExpenses]
-                          ..sort((first, second) {
-                            final dateComparison =
-                                second.expenseDate.compareTo(first.expenseDate);
-                            if (dateComparison != 0) {
-                              return dateComparison;
-                            }
-                            return second.createdAt.compareTo(first.createdAt);
-                          });
-                        return ListView.separated(
-                          padding: EdgeInsets.fromLTRB(
-                              AppSpacing.lg,
-                              AppSpacing.lg,
-                              AppSpacing.lg,
-                              fabClearance + bottomBarInset(context)),
+                        return second.createdAt.compareTo(first.createdAt);
+                      });
+                    return SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                            AppSpacing.lg,
+                            AppSpacing.sm,
+                            AppSpacing.lg,
+                            fabClearance + bottomBarInset(context)),
+                        sliver: SliverList.separated(
                           itemCount: sortedExpenses.length,
                           separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (context, index) {
@@ -353,17 +334,18 @@ class _ExpensesView extends ConsumerWidget {
                                   : MoneyText(expense.amount),
                             );
                           },
-                        );
-                      },
-                      loading: () => const LoadingState(),
-                      error: (error, _) => ErrorState(
+                        ));
+                  },
+                  loading: () => const SliverFillRemaining(
+                      hasScrollBody: false, child: LoadingState()),
+                  error: (error, _) => SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: ErrorState(
                         message: friendlyApiError(error,
                             fallback: 'Não foi possível carregar as despesas.'),
                         onRetry: () =>
                             ref.invalidate(selectedEventExpensesProvider),
-                      ),
-                    ),
-                  ),
+                      )),
                 ),
             ],
           );
@@ -377,33 +359,6 @@ class _ExpensesView extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// Rolar pra baixo esconde os controles do topo; pra cima (ou voltar ao
-/// início da lista) mostra de novo. Reage a cada movimento do dedo
-/// (ScrollUpdateNotification) em vez de esperar a troca de direção, pra
-/// os campos sumirem junto com a lista.
-/// Altura aproximada do que some (Despesas/Saldo + filtro), com folga.
-const double _collapsibleHeaderHeight = 140;
-
-bool _onUserScroll(WidgetRef ref, ScrollUpdateNotification notification) {
-  final delta = notification.scrollDelta ?? 0;
-  if (notification.depth != 0 || notification.dragDetails == null) {
-    return false;
-  }
-  final collapsed = ref.read(expensesHeaderCollapsedProvider.notifier);
-  if (notification.metrics.pixels <= 0) {
-    collapsed.state = false;
-  } else if (delta > 2 &&
-      notification.metrics.maxScrollExtent > _collapsibleHeaderHeight) {
-    // Só esconde se a lista continuar rolável sem o topo. Lista curta (comum
-    // em Despesas com "só minhas despesas") passava a caber na tela ao
-    // esconder, voltava pro início e o topo reaparecia — ficava piscando.
-    collapsed.state = true;
-  } else if (delta < -2) {
-    collapsed.state = false;
-  }
-  return false;
 }
 
 String _groupName(List<dynamic>? groups, String groupId) {

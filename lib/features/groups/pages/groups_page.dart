@@ -6,9 +6,11 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/environment.dart';
 import '../../../shared/api_error.dart';
+import '../../../shared/ptbr_sort.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/glass_dropdown_field.dart';
+import '../../../shared/widgets/glass_search_field.dart';
 import '../../../shared/widgets/auto_collapsing_fab.dart';
 import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
@@ -22,6 +24,13 @@ import '../models/group_model.dart';
 import '../services/group_invite_repository.dart';
 import '../services/groups_repository.dart';
 import '../services/create_group_intent.dart';
+
+/// Texto da busca da tela Grupos (zera ao sair da tela).
+final groupsSearchProvider = StateProvider.autoDispose<String>((ref) => '');
+
+/// Texto da busca de participantes do grupo.
+final groupMembersSearchProvider =
+    StateProvider.autoDispose<String>((ref) => '');
 
 /// Grupos (aba da barra): lista dos grupos de quem está logado, no padrão
 /// da tela Eventos. Tocar num grupo abre os participantes dele
@@ -65,30 +74,52 @@ class GroupsPage extends ConsumerWidget {
               ),
             );
           }
-          return ListView.separated(
-            padding: EdgeInsets.fromLTRB(16, 16 + topBarInset(context), 16,
-                fabClearance + bottomBarInset(context)),
-            itemCount: groups.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final group = groups[index];
-              // Card mais alto que o de Eventos: o grupo é o destaque.
-              return Card(
-                child: ListTile(
-                  minVerticalPadding: 20,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                  leading: const Icon(Icons.groups_outlined, size: 32),
-                  title: Text(group.name,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600)),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => openGroupDetail(context, ref, group.id),
-                ),
-              );
-            },
+          final query = ref.watch(groupsSearchProvider);
+          final filtered = groups
+              .where((group) => matchesSearchPtBr(group.name, query))
+              .toList();
+          final padding = EdgeInsets.fromLTRB(16, searchListTopInset(context),
+              16, fabClearance + bottomBarInset(context));
+          // Campo de busca sempre no topo; a lista rola por trás dele.
+          return SearchOverlay(
+            search: GlassSearchField(
+              hint: 'Buscar grupo',
+              onChanged: (value) =>
+                  ref.read(groupsSearchProvider.notifier).state = value,
+            ),
+            child: filtered.isEmpty
+                ? ListView(padding: padding, children: const [
+                    Padding(
+                      padding: EdgeInsets.only(top: 24),
+                      child: Text('Nenhum grupo encontrado.',
+                          textAlign: TextAlign.center),
+                    ),
+                  ])
+                : ListView.separated(
+                    padding: padding,
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final group = filtered[index];
+                      // Card mais alto que o de Eventos: o grupo é o destaque.
+                      return Card(
+                        child: ListTile(
+                          minVerticalPadding: 20,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 4),
+                          leading: const Icon(Icons.groups_outlined, size: 32),
+                          // Sem negrito no nome do grupo.
+                          title: Text(group.name,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w400)),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => openGroupDetail(context, ref, group.id),
+                        ),
+                      );
+                    },
+                  ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -161,32 +192,40 @@ class GroupDetailPage extends ConsumerWidget {
                   onRetry: () => ref.invalidate(groupsProvider),
                 )
               : const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: EdgeInsets.fromLTRB(16, 16 + topBarInset(context), 16,
-                  16 + bottomBarInset(context)),
-              children: [
-                // Eventos deste grupo (tela Eventos já filtrada nele). Mesmo
-                // padrão dos outros botões da tela (Convidar, Sair...): botão de
-                // texto com ícone, à direita.
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () {
-                      ref.read(selectedGroupIdProvider.notifier).state =
-                          group.id;
-                      ref.read(selectedEventIdProvider.notifier).state = null;
-                      ref.invalidate(eventsProvider);
-                      ref.invalidate(selectedEventProvider);
-                      context.go('/events');
-                    },
-                    icon: const Icon(Icons.event_outlined),
-                    label: const Text('Ver eventos'),
+          // Busca de participantes sempre no topo; a lista rola por trás.
+          : SearchOverlay(
+              search: GlassSearchField(
+                hint: 'Buscar participante',
+                onChanged: (value) =>
+                    ref.read(groupMembersSearchProvider.notifier).state = value,
+              ),
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(16, searchListTopInset(context),
+                    16, 16 + bottomBarInset(context)),
+                children: [
+                  // Eventos deste grupo (tela Eventos já filtrada nele). Mesmo
+                  // padrão dos outros botões da tela (Convidar, Sair...): botão de
+                  // texto com ícone, à direita.
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        ref.read(selectedGroupIdProvider.notifier).state =
+                            group.id;
+                        ref.read(selectedEventIdProvider.notifier).state = null;
+                        ref.invalidate(eventsProvider);
+                        ref.invalidate(selectedEventProvider);
+                        context.go('/events');
+                      },
+                      icon: const Icon(Icons.event_outlined),
+                      label: const Text('Ver eventos'),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                _GroupMembers(group: group),
-                _GroupTemporaryMembers(group: group),
-              ],
+                  const SizedBox(height: 8),
+                  _GroupMembers(group: group),
+                  _GroupTemporaryMembers(group: group),
+                ],
+              ),
             ),
     );
   }
@@ -245,11 +284,15 @@ class _GroupMembers extends ConsumerWidget {
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
     return FutureBuilder<List<GroupMemberModel>>(
       future: ref.watch(groupsRepositoryProvider).listMembers(group.id),
-      builder: (context, snapshot) {
-        final members = snapshot.data ?? <GroupMemberModel>[];
+      builder: (context, snapshot) => Consumer(builder: (context, ref, _) {
+        final allMembers = snapshot.data ?? <GroupMemberModel>[];
+        final query = ref.watch(groupMembersSearchProvider);
+        final members = allMembers
+            .where((member) => matchesSearchPtBr(member.nickname, query))
+            .toList();
         // Convidar: admin e integrantes fixos (temporário não convida).
         final canInvite = isGroupAdmin ||
-            members.any((member) =>
+            allMembers.any((member) =>
                 member.userId == currentUser?.id && !member.temporary);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,11 +326,13 @@ class _GroupMembers extends ConsumerWidget {
               )
             else if (members.isEmpty &&
                 snapshot.connectionState == ConnectionState.done)
-              const EmptyState(
+              EmptyState(
                 icon: Icons.person_add_alt_outlined,
                 // Mensagem da seção Integrantes, não da tela.
                 centerOnScreen: false,
-                message: 'Nenhum integrante cadastrado.',
+                message: query.isEmpty
+                    ? 'Nenhum integrante cadastrado.'
+                    : 'Nenhum integrante encontrado.',
               )
             else
               ...members.map(
@@ -345,7 +390,7 @@ class _GroupMembers extends ConsumerWidget {
               ),
           ],
         );
-      },
+      }),
     );
   }
 }
@@ -752,6 +797,7 @@ class _GroupTemporaryMembersState
   Widget build(BuildContext context) {
     final isGroupAdmin =
         ref.watch(groupRoleProvider(widget.group.id)).valueOrNull == 'ADMIN';
+    final query = ref.watch(groupMembersSearchProvider);
     if (!isGroupAdmin) {
       return const SizedBox.shrink();
     }
@@ -760,10 +806,12 @@ class _GroupTemporaryMembersState
       child: FutureBuilder<List<GroupMemberModel>>(
         future: _load(),
         builder: (context, snapshot) {
-          final temporaries = [...snapshot.data ?? <GroupMemberModel>[]]..sort(
-              (first, second) => first.nickname
-                  .toLowerCase()
-                  .compareTo(second.nickname.toLowerCase()));
+          final temporaries = [
+            ...(snapshot.data ?? <GroupMemberModel>[])
+                .where((member) => matchesSearchPtBr(member.nickname, query))
+          ]..sort((first, second) => first.nickname
+              .toLowerCase()
+              .compareTo(second.nickname.toLowerCase()));
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

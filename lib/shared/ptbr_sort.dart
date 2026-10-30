@@ -31,3 +31,11 @@ List<T> sortedByNamePtBr<T>(Iterable<T> items, String Function(T) nameOf) {
   list.sort((a, b) => compareNamesPtBr(nameOf(a), nameOf(b)));
   return list;
 }
+
+/// Busca "digitando": [text] contém [query], ignorando acentos e caixa
+/// ("joao" acha "João"). Busca vazia aceita tudo.
+bool matchesSearchPtBr(String text, String query) {
+  final normalizedQuery = _normalizeForSort(query);
+  return normalizedQuery.isEmpty ||
+      _normalizeForSort(text).contains(normalizedQuery);
+}

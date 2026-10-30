@@ -18,7 +18,9 @@ class BiometricAuthService {
   final FlutterSecureStorage storage;
 
   Future<bool> canSignInWithBiometrics() async {
-    final token = await storage.read(key: authTokenKey);
+    // Sessão guardada pra biometria (fica depois do "Sair") ou a ativa.
+    final token = await storage.read(key: biometricTokenKey) ??
+        await storage.read(key: authTokenKey);
     if (token == null || token.isEmpty) {
       return false;
     }

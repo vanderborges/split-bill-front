@@ -76,7 +76,8 @@ class ProfilePage extends ConsumerWidget {
               const SizedBox(height: AppSpacing.md),
               const _ThemeModeSelector(),
               const SizedBox(height: AppSpacing.lg),
-              FilledButton.icon(
+              // Mesma aparência do "Alterar senha" (contorno).
+              OutlinedButton.icon(
                 onPressed: () => _showEditProfileDialog(context, ref, user),
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Editar perfil'),
@@ -207,7 +208,7 @@ class _AppVersionText extends ConsumerWidget {
 }
 
 Future<void> _logout(BuildContext context, WidgetRef ref) async {
-  await ref.read(authRepositoryProvider).logout();
+  await ref.read(authRepositoryProvider).logout(keepBiometric: true);
   resetSessionScopedProviders(ref);
   if (context.mounted) {
     context.go('/login');

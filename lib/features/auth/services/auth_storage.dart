@@ -12,3 +12,9 @@ final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
 /// backend). Fica salvo mesmo depois do logout, só pra lembrar a escolha
 /// no checkbox.
 const rememberMeKey = 'split_bill_remember_me';
+
+/// Sessão guardada pro "Entrar com biometria": continua salva depois do
+/// "Sair" (que só tranca o app), então a biometria segue disponível. Some
+/// ao trocar de conta (o login novo sobrescreve), ao excluir a conta ou
+/// quando a sessão vence/é recusada (30 dias depois do login com senha).
+const biometricTokenKey = 'split_bill_biometric_token';
