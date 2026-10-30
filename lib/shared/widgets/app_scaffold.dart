@@ -27,9 +27,12 @@ class AppScaffold extends ConsumerWidget {
     this.actions,
     this.onBack,
     this.showBottomBar = true,
+    this.titleFontSize,
   });
 
   final String title;
+  // Tamanho do título (null = padrão, 22). Início usa 24.
+  final double? titleFontSize;
   final Widget child;
   final Widget? floatingActionButton;
   // Seta de voltar à esquerda do título (telas abertas a partir de outra).
@@ -55,6 +58,7 @@ class AppScaffold extends ConsumerWidget {
       builder: (fab, body, scrolledDown) => isWide
           ? _WideScaffold(
               title: title,
+              titleFontSize: titleFontSize,
               showUsers: showUsers,
               currentPath: currentPath,
               floatingActionButton: fab,
@@ -64,6 +68,7 @@ class AppScaffold extends ConsumerWidget {
             )
           : _NarrowScaffold(
               title: title,
+              titleFontSize: titleFontSize,
               showUsers: showUsers,
               currentPath: currentPath,
               floatingActionButton: fab,
@@ -94,6 +99,7 @@ Future<void> _logout(BuildContext context, WidgetRef ref) async {
 class _WideScaffold extends ConsumerWidget {
   const _WideScaffold({
     required this.title,
+    required this.titleFontSize,
     required this.showUsers,
     required this.currentPath,
     required this.floatingActionButton,
@@ -103,6 +109,7 @@ class _WideScaffold extends ConsumerWidget {
   });
 
   final String title;
+  final double? titleFontSize;
   final bool showUsers;
   final String currentPath;
   final Widget? floatingActionButton;
@@ -129,6 +136,7 @@ class _WideScaffold extends ConsumerWidget {
       appBar: glassAppBar(
         context,
         title: title,
+        titleFontSize: titleFontSize,
         showDrawerButton: true,
         onBack: onBack,
         actions: [const _NotificationBell(), ...?actions],
@@ -204,6 +212,7 @@ class _WideScaffold extends ConsumerWidget {
 class _NarrowScaffold extends ConsumerWidget {
   const _NarrowScaffold({
     required this.title,
+    required this.titleFontSize,
     required this.showUsers,
     required this.currentPath,
     required this.floatingActionButton,
@@ -215,6 +224,7 @@ class _NarrowScaffold extends ConsumerWidget {
   });
 
   final String title;
+  final double? titleFontSize;
   final bool showUsers;
   final String currentPath;
   final Widget? floatingActionButton;
@@ -260,6 +270,7 @@ class _NarrowScaffold extends ConsumerWidget {
       appBar: glassAppBar(
         context,
         title: title,
+        titleFontSize: titleFontSize,
         onBack: onBack,
         actions: [
           const _NotificationBell(),

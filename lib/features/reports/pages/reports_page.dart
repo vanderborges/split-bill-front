@@ -31,6 +31,7 @@ import '../../settlements/models/my_payment_model.dart';
 import '../../settlements/services/event_settlements_repository.dart';
 import '../models/balance_expense_detail_model.dart';
 import '../models/monthly_report_model.dart';
+import '../models/payment_suggestion_model.dart';
 import '../services/reports_repository.dart';
 
 class ReportsPage extends ConsumerWidget {
@@ -118,6 +119,7 @@ class EventFilterFields extends ConsumerWidget {
                     events: events,
                     selectedId: allEvents ? null : event?.id,
                     allEventsLabel: allowAllEvents ? 'Todos os eventos' : null,
+                    sortByGroup: allowAllEvents,
                     groupNameOf: (groupId) =>
                         _groupName(groupsAsync.valueOrNull, groupId),
                     onChanged: (value) {
@@ -220,39 +222,46 @@ class EventBalanceView extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (hasActions) ...[
-              Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.xs,
-                children: [
-                  if (report.status == 'OPEN' && isGroupAdmin)
-                    FilledButton(
-                      onPressed: report.eventId == null
-                          ? null
-                          : () => confirmStartSettlement(
-                              context, ref, report.groupId, report.eventId!),
-                      child: const Text('Fechar evento'),
-                    ),
-                  if (report.status == 'SETTLING' && isGroupAdmin)
-                    OutlinedButton.icon(
-                      onPressed: report.eventId == null
-                          ? null
-                          : () =>
-                              _sendBillingAlert(context, ref, report.eventId!),
-                      icon: const Icon(Icons.campaign_outlined),
-                      label: const Text('Enviar alerta de cobrança'),
-                    ),
-                  // Habilitado com o evento aguardando pagamentos, mesmo com
-                  // pagamento em aberto: confirmar marca todos como pagos.
-                  if (report.status == 'SETTLING' && isGroupAdmin)
-                    FilledButton(
-                      onPressed: report.eventId == null
-                          ? null
-                          : () =>
-                              _confirmCloseEvent(context, ref, report.eventId!),
-                      child: const Text('Concluir evento'),
-                    ),
-                ],
+              SizedBox(
+                width: double.infinity,
+                child: Wrap(
+                  // "Fechar evento" fica do lado direito da tela.
+                  alignment: report.status == 'OPEN'
+                      ? WrapAlignment.end
+                      : WrapAlignment.start,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    if (report.status == 'OPEN' && isGroupAdmin)
+                      FilledButton(
+                        onPressed: report.eventId == null
+                            ? null
+                            : () => confirmStartSettlement(
+                                context, ref, report.groupId, report.eventId!),
+                        child: const Text('Fechar evento'),
+                      ),
+                    if (report.status == 'SETTLING' && isGroupAdmin)
+                      OutlinedButton.icon(
+                        onPressed: report.eventId == null
+                            ? null
+                            : () => _sendBillingAlert(
+                                context, ref, report.eventId!),
+                        icon: const Icon(Icons.campaign_outlined),
+                        label: const Text('Enviar alerta de cobrança'),
+                      ),
+                    // Habilitado com o evento aguardando pagamentos, mesmo com
+                    // pagamento em aberto: confirmar marca todos como pagos.
+                    if (report.status == 'SETTLING' && isGroupAdmin)
+                      FilledButton(
+                        onPressed: report.eventId == null
+                            ? null
+                            : () => _confirmCloseEvent(
+                                context, ref, report.eventId!),
+                        child: const Text('Concluir evento'),
+                      ),
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
             ],
@@ -288,6 +297,7 @@ class EventBalanceView extends ConsumerWidget {
                 settlements: settlements,
                 canUpdateSettlements: isGroupAdmin,
                 isAwaitingPayment: report.status == 'SETTLING',
+                receiverUserId: eventAsync.valueOrNull?.receiverUserId,
                 isEventOpen: report.status == 'OPEN',
                 eventId: report.eventId,
                 // Extrato: "Grupo | Evento" acima do nome.
@@ -327,8 +337,13 @@ class _ReportTable extends ConsumerStatefulWidget {
     required this.isAwaitingPayment,
     required this.isEventOpen,
     required this.eventId,
+    this.receiverUserId,
     this.header,
   });
+
+  /// Quem recebe os pagamentos do evento: já fica "Pago" (backend) e o
+  /// status dele não muda.
+  final String? receiverUserId;
 
   /// Extrato: linha pequena "Grupo | Evento" no topo do card, acima do
   /// nome.
@@ -354,6 +369,28 @@ class _ReportTable extends ConsumerStatefulWidget {
 class _ReportTableState extends ConsumerState<_ReportTable> {
   final Set<String> expandedUserIds = {};
   final Map<String, Future<List<BalanceExpenseDetailModel>>> detailsByUser = {};
+
+  /// Quem paga quanto pra quem (evento aguardando pagamentos) - o
+  /// informativo do card aberto. Carrega na primeira vez que abre um card.
+  Future<List<PaymentSuggestionModel>>? _suggestionsFuture;
+
+  @override
+  void didUpdateWidget(_ReportTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Saldos recarregados (pagamento alterado, recebedor): busca de novo.
+    if (!identical(oldWidget.balances, widget.balances)) {
+      _suggestionsFuture = null;
+    }
+  }
+
+  Future<List<PaymentSuggestionModel>>? _suggestions() {
+    final eventId = widget.eventId;
+    if (!widget.isAwaitingPayment || eventId == null) {
+      return null;
+    }
+    return _suggestionsFuture ??=
+        ref.read(reportsRepositoryProvider).getPaymentSuggestions(eventId);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -401,189 +438,251 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
         // como "Você".
         final isCurrentUser = balance.includes(currentUserId);
         // Pago: fundo neutro + linha esmaecida, pra destacar visualmente
-        // quem ainda está pendente.
+        // quem ainda está pendente. Aberto, o card pago fica igual ao
+        // pendente; ao fechar volta a esmaecer. A seta de abrir nunca
+        // esmaece (mesma cor do card pendente).
         final isPaid = !widget.isEventOpen &&
             settlement != null &&
             settlement.amount != 0 &&
             settlement.normalizedStatus == 'PAID';
-        final color = isPaid
-            ? Theme.of(context).colorScheme.surfaceContainerHighest
+        final dimmed = isPaid && !expanded;
+        Widget fade(Widget child) => AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: dimmed ? 0.55 : 1,
+              child: child,
+            );
+        final color = dimmed
+            ? Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest
+                .withValues(alpha: 0.55)
             : balance.balance < 0
                 ? semantic.negative.withValues(alpha: 0.12)
                 : balance.balance > 0
                     ? semantic.positive.withValues(alpha: 0.12)
                     : Colors.transparent;
+        final borderColor = isCurrentUser
+            ? Theme.of(context).colorScheme.primary
+            : Theme.of(context).dividerColor;
+        // Evento aguardando pagamentos, card aberto: quem paga quanto pra
+        // quem, à esquerda, na altura do status.
+        final suggestions = expanded ? _suggestions() : null;
+        final Widget? hint = suggestions == null
+            ? null
+            : FutureBuilder<List<PaymentSuggestionModel>>(
+                future: suggestions,
+                builder: (context, snapshot) => _PaymentHint(
+                  userId: balance.userId,
+                  myUserId: widget.balances
+                      .where((item) => item.includes(currentUserId))
+                      .firstOrNull
+                      ?.userId,
+                  suggestions: snapshot.data ?? const [],
+                ),
+              );
 
-        return AnimatedOpacity(
+        return AnimatedContainer(
           duration: const Duration(milliseconds: 250),
-          opacity: isPaid ? 0.55 : 1,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-            padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md, vertical: AppSpacing.sm + 2),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(AppRadius.card),
-              border: Border.all(
-                color: isCurrentUser
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).dividerColor,
-                width: isCurrentUser ? 1.5 : 1,
-              ),
+          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md, vertical: AppSpacing.sm + 2),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(
+              color: dimmed
+                  ? borderColor.withValues(alpha: borderColor.a * 0.55)
+                  : borderColor,
+              width: isCurrentUser ? 1.5 : 1,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (widget.header != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                    child: Text(
-                      widget.header!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.header != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                  child: fade(Text(
+                    widget.header!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  )),
+                ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 430;
+                  final toggle = IconButton(
+                    tooltip: expanded ? 'Ocultar despesas' : 'Ver despesas',
+                    onPressed: () => _toggle(balance.userId),
+                    icon: Icon(expanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down),
+                  );
+                  final name = fade(InkWell(
+                    onTap: () => _toggle(balance.userId),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        PersonAvatar(
+                            name: balance.nickname,
+                            seed: balance.userId,
+                            radius: 14),
+                        const SizedBox(width: AppSpacing.sm),
+                        Flexible(
+                          child: Text(
+                            isCurrentUser
+                                ? _youLabel(balance, currentUserId)
+                                : _groupedLabel(balance),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final compact = constraints.maxWidth < 430;
-                    final toggle = IconButton(
-                      tooltip: expanded ? 'Ocultar despesas' : 'Ver despesas',
-                      onPressed: () => _toggle(balance.userId),
-                      icon: Icon(expanded
-                          ? Icons.keyboard_arrow_up
-                          : Icons.keyboard_arrow_down),
-                    );
-                    final name = InkWell(
-                      onTap: () => _toggle(balance.userId),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          PersonAvatar(
-                              name: balance.nickname,
-                              seed: balance.userId,
-                              radius: 14),
-                          const SizedBox(width: AppSpacing.sm),
-                          Flexible(
-                            child: Text(
-                              isCurrentUser
-                                  ? _youLabel(balance, currentUserId)
-                                  : _groupedLabel(balance),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w600),
-                            ),
+                  ));
+                  final amount = fade(MoneyText(
+                    balance.balance,
+                    colorBySign: true,
+                    showSign: true,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
+                  ));
+                  final Widget status = widget.isEventOpen
+                      ? const SizedBox.shrink()
+                      : fade(_SettlementStatus(
+                          settlement: settlement,
+                          canUpdate: widget.canUpdateSettlements &&
+                              widget.isAwaitingPayment &&
+                              settlement?.userId != widget.receiverUserId,
+                          onChanged: (value) => _updateSettlement(
+                              context, ref, settlement!, value),
+                        ));
+                  // Quem recebe os pagamentos do evento (aguardando
+                  // pagamentos) repassa o crédito de quem ficou positivo:
+                  // link discreto pra copiar o PIX dessa pessoa.
+                  final pixKey = balance.pixKey;
+                  final Widget? pixLink = widget.isAwaitingPayment &&
+                          widget.receiverUserId != null &&
+                          widget.receiverUserId == currentUserId &&
+                          !isCurrentUser &&
+                          balance.balance > 0 &&
+                          pixKey != null &&
+                          pixKey.isNotEmpty
+                      ? _CopyPixLink(pixKey: pixKey, name: balance.nickname)
+                      : null;
+                  // "Pagar" só na linha de quem está logado, com o evento
+                  // aguardando pagamento e ainda devendo.
+                  final payButton = widget.isAwaitingPayment &&
+                          isCurrentUser &&
+                          settlement != null &&
+                          settlement.role == 'DEBTOR' &&
+                          settlement.amount != 0 &&
+                          settlement.normalizedStatus == 'PENDING' &&
+                          widget.eventId != null
+                      ? Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton.icon(
+                            onPressed: () =>
+                                _openPayDialog(context, ref, widget.eventId!),
+                            icon: const Icon(Icons.payments_outlined, size: 18),
+                            label: const Text('Pagar'),
                           ),
-                        ],
-                      ),
-                    );
-                    final amount = MoneyText(
-                      balance.balance,
-                      colorBySign: true,
-                      showSign: true,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Theme.of(context).textTheme.bodyLarge?.color,
-                      ),
-                    );
-                    final Widget status = widget.isEventOpen
-                        ? const SizedBox.shrink()
-                        : _SettlementStatus(
-                            settlement: settlement,
-                            canUpdate: widget.canUpdateSettlements &&
-                                widget.isAwaitingPayment,
-                            onChanged: (value) => _updateSettlement(
-                                context, ref, settlement!, value),
-                          );
-                    // "Pagar" só na linha de quem está logado, com o evento
-                    // aguardando pagamento e ainda devendo.
-                    final payButton = widget.isAwaitingPayment &&
-                            isCurrentUser &&
-                            settlement != null &&
-                            settlement.role == 'DEBTOR' &&
-                            settlement.amount != 0 &&
-                            settlement.normalizedStatus == 'PENDING' &&
-                            widget.eventId != null
-                        ? Align(
-                            alignment: Alignment.centerRight,
-                            child: FilledButton.icon(
-                              onPressed: () =>
-                                  _openPayDialog(context, ref, widget.eventId!),
-                              icon:
-                                  const Icon(Icons.payments_outlined, size: 18),
-                              label: const Text('Pagar'),
-                            ),
-                          )
-                        : null;
+                        )
+                      : null;
 
-                    // Nome e valor na mesma linha; o status de pagamento vai
-                    // embaixo, alinhado à direita (evento aberto não tem status).
-                    if (compact) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(child: name),
-                              const SizedBox(width: AppSpacing.sm),
-                              amount,
-                              toggle,
-                            ],
-                          ),
-                          if (!widget.isEventOpen)
-                            Align(
-                                alignment: Alignment.centerRight,
-                                child: status),
-                          if (payButton != null) ...[
-                            const SizedBox(height: 6),
-                            payButton,
-                          ],
-                          if (expanded) _detailsWidget(balance, currentUserId),
-                        ],
-                      );
-                    }
-
+                  // Nome e valor na mesma linha; o status de pagamento vai
+                  // embaixo, alinhado à direita (evento aberto não tem status).
+                  if (compact) {
                     return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            toggle,
                             Expanded(child: name),
-                            SizedBox(
-                              width: 110,
-                              child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: amount),
-                            ),
-                            const SizedBox(width: 16),
-                            SizedBox(
-                              width: 130,
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: status,
-                              ),
-                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            amount,
+                            toggle,
                           ],
                         ),
-                        if (payButton != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: payButton,
+                        if (!widget.isEventOpen)
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (hint != null) hint,
+                                    if (pixLink != null) pixLink,
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              status,
+                            ],
                           ),
-                        if (expanded)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 48, top: 8),
-                            child: _detailsWidget(balance, currentUserId),
-                          ),
+                        if (payButton != null) ...[
+                          const SizedBox(height: 6),
+                          payButton,
+                        ],
+                        if (expanded) _detailsWidget(balance, currentUserId),
                       ],
                     );
-                  },
-                ),
-              ],
-            ),
+                  }
+
+                  return Column(
+                    children: [
+                      Row(
+                        children: [
+                          toggle,
+                          Expanded(child: name),
+                          SizedBox(
+                            width: 110,
+                            child: Align(
+                                alignment: Alignment.centerRight,
+                                child: amount),
+                          ),
+                          const SizedBox(width: 16),
+                          SizedBox(
+                            width: 130,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: status,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (hint != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 48, top: 4),
+                          child: Align(
+                              alignment: Alignment.centerLeft, child: hint),
+                        ),
+                      if (pixLink != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 48),
+                          child: Align(
+                              alignment: Alignment.centerLeft, child: pixLink),
+                        ),
+                      if (payButton != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: payButton,
+                        ),
+                      if (expanded)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 48, top: 8),
+                          child: _detailsWidget(balance, currentUserId),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ],
           ),
         );
       }).toList(),
@@ -789,6 +888,55 @@ class _SettlementStatus extends StatelessWidget {
     if (picked != null && picked != settlement!.normalizedStatus) {
       onChanged(picked);
     }
+  }
+}
+
+/// Informativo do card aberto com o evento aguardando pagamentos, em
+/// itálico: quanto a pessoa deve pagar e pra quem; com saldo positivo, quem
+/// deve pagar pra ela.
+class _PaymentHint extends StatelessWidget {
+  const _PaymentHint({
+    required this.userId,
+    required this.myUserId,
+    required this.suggestions,
+  });
+
+  /// Pessoa do card (titular, no gasto agrupado).
+  final String userId;
+
+  /// Card de quem está logado (titular do gasto agrupado dele), pra
+  /// escrever "Você"/"você".
+  final String? myUserId;
+  final List<PaymentSuggestionModel> suggestions;
+
+  @override
+  Widget build(BuildContext context) {
+    final mine = suggestions
+        .where((item) => item.fromUserId == userId || item.toUserId == userId)
+        .toList();
+    if (mine.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
+        fontStyle: FontStyle.italic,
+        color: Theme.of(context).colorScheme.onSurfaceVariant);
+    String subject(String id, String nickname) =>
+        id == myUserId ? 'Você' : nickname;
+    String target(String id, String nickname) =>
+        id == myUserId ? 'você' : nickname;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final item in mine)
+          Text(
+            '${subject(item.fromUserId, item.fromNickname)} deve pagar '
+            '${formatCurrencyBRL(item.amount)} para '
+            '${target(item.toUserId, item.toNickname)}',
+            style: style,
+          ),
+      ],
+    );
   }
 }
 
@@ -1412,9 +1560,49 @@ class _MyEventBalanceCard extends ConsumerWidget {
       settlements: settlements,
       canUpdateSettlements: isGroupAdmin,
       isAwaitingPayment: report.status == 'SETTLING',
+      receiverUserId: event.receiverUserId,
       isEventOpen: report.status == 'OPEN',
       eventId: event.id,
       header: '$groupName | ${event.name}',
+    );
+  }
+}
+
+/// Link discreto "Copiar chave PIX" no card de quem tem crédito, só pra
+/// quem recebe os pagamentos do evento (repassa o valor pra essa pessoa).
+class _CopyPixLink extends StatelessWidget {
+  const _CopyPixLink({required this.pixKey, required this.name});
+
+  final String pixKey;
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: () async {
+        await Clipboard.setData(ClipboardData(text: pixKey));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Chave PIX de $name copiada.')));
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.copy_outlined, size: 14, color: color),
+            const SizedBox(width: 4),
+            Text(
+              'Copiar chave PIX',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: color, decoration: TextDecoration.underline),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

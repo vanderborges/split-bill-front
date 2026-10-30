@@ -108,4 +108,36 @@ void main() {
     await tester.tap(find.text('Eventos'));
     expect(tapped, 2);
   });
+
+  testWidgets('arrastar o dedo pela barra abre o item mais próximo',
+      (tester) async {
+    int? picked;
+    await tester.pumpWidget(bar(0, onSelected: (index) => picked = index));
+    await tester.pumpAndSettle();
+    final start = tester.getCenter(find.text('Início'));
+    final end = tester.getCenter(find.text('Eventos'));
+    await tester.dragFrom(start, end - start + const Offset(8, 0));
+    await tester.pumpAndSettle();
+    expect(picked, 2);
+  });
+
+  testWidgets('a pílula estica no caminho (gota) e volta ao tamanho',
+      (tester) async {
+    await tester.pumpWidget(bar(0));
+    await tester.pumpAndSettle();
+    double pillWidth() => tester
+        .getSize(find
+            .descendant(
+                of: find.byKey(const ValueKey('nav-pill')),
+                matching: find.byType(Container))
+            .first)
+        .width;
+    final rest = pillWidth();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(bar(3));
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(pillWidth(), greaterThan(rest));
+    await tester.pumpAndSettle();
+    expect(pillWidth(), closeTo(rest, 0.01));
+  });
 }

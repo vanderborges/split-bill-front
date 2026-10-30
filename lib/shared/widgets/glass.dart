@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 
 /// Superfície "liquid glass" (iOS 26): fundo translúcido com desfoque do
 /// que está atrás, brilho de luz na borda (forte em cima à esquerda,
@@ -15,6 +16,7 @@ class GlassSurface extends StatelessWidget {
     this.padding,
     this.opacity = 1,
     this.tint,
+    this.blurSigma = 24,
   });
 
   final Widget child;
@@ -25,6 +27,10 @@ class GlassSurface extends StatelessWidget {
   /// (barra de menus).
   final double opacity;
   final Color? tint;
+
+  /// Desfoque do que está atrás: menor deixa o conteúdo mais reconhecível
+  /// (barra de menus, como no iOS 26).
+  final double blurSigma;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +61,7 @@ class GlassSurface extends StatelessWidget {
       child: ClipRRect(
         borderRadius: borderRadius,
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
           child: CustomPaint(
             foregroundPainter: LiquidHighlightPainter(
               borderRadius: borderRadius,
@@ -205,11 +211,16 @@ Color navSelectedColor(BuildContext context) =>
         ? const Color(0xFF579DFF)
         : const Color(0xFF0C66E4);
 
-/// Barra de navegação inferior flutuante, numa pílula de vidro. Como no
-/// Trello, o item selecionado fica azul e a pílula de destaque desliza de
-/// um item pro outro ao trocar de aba. Cada tela monta a própria barra
-/// (não há shell), então a posição anterior fica em [_lastPosition] e a
-/// barra nova anima a partir dela.
+/// Barra de navegação inferior flutuante no padrão do WhatsApp no iOS 26:
+/// cápsula de vidro bem transparente (o conteúdo passa desfocado por
+/// trás) e o item selecionado numa pílula de vidro claro, com ícone e nome
+/// em azul. Ao trocar de aba a pílula vai até o item novo com efeito mola
+/// (passa um pouco e volta) e, no caminho, estica no sentido do movimento e
+/// cresce um pouco, como uma gota. Dá pra arrastar o dedo pela barra: a
+/// pílula acompanha e, ao soltar, abre o item mais próximo.
+///
+/// Cada tela monta a própria barra (não há shell), então a posição anterior
+/// fica em [_lastPosition] e a barra nova anima a partir dela.
 class GlassNavBar extends StatefulWidget {
   const GlassNavBar({
     super.key,
@@ -231,28 +242,108 @@ class GlassNavBar extends StatefulWidget {
 
   static double? _lastPosition;
 
+  /// Mola da pílula: um pouco "solta" (passa do ponto e volta).
+  static final SpringDescription spring = SpringDescription.withDampingRatio(
+    mass: 1,
+    stiffness: 320,
+    ratio: 0.68,
+  );
+
   @override
   State<GlassNavBar> createState() => _GlassNavBarState();
 }
 
-class _GlassNavBarState extends State<GlassNavBar> {
-  // De onde a pílula parte: a posição da barra da tela anterior. Lida no
-  // initState, antes do build gravar a posição nova.
-  double? _from;
+class _GlassNavBarState extends State<GlassNavBar>
+    with SingleTickerProviderStateMixin {
+  // Posição da pílula em "índices" (0 = primeiro item; fracionado no meio
+  // do caminho). Sem limite: a mola passa um pouco do destino.
+  late final AnimationController _position =
+      AnimationController.unbounded(vsync: this);
+  bool _dragging = false;
+
+  int get _itemCount => widget.items.length;
+
+  bool get _hasSelection =>
+      widget.selectedIndex >= 0 && widget.selectedIndex < _itemCount;
 
   @override
   void initState() {
     super.initState();
-    _from = GlassNavBar._lastPosition;
+    // De onde a pílula parte: a posição da barra da tela anterior. Lida
+    // aqui, antes do build gravar a posição nova.
+    final from = GlassNavBar._lastPosition;
+    if (_hasSelection) {
+      final target = widget.selectedIndex.toDouble();
+      _position.value = from ?? target;
+      if (from != null && from != target) {
+        _springTo(target);
+      }
+    }
+  }
+
+  @override
+  void didUpdateWidget(GlassNavBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedIndex != widget.selectedIndex && _hasSelection) {
+      final target = widget.selectedIndex.toDouble();
+      if (oldWidget.selectedIndex < 0) {
+        _position.value = target;
+      } else {
+        _springTo(target);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _position.dispose();
+    super.dispose();
+  }
+
+  void _springTo(double target, {double velocity = 0}) {
+    _position
+        .animateWith(SpringSimulation(
+            GlassNavBar.spring, _position.value, target, velocity))
+        // A mola para "quase" no destino: encaixa certinho no fim.
+        .whenCompleteOrCancel(() {
+      if (mounted && !_dragging && !_position.isAnimating) {
+        _position.value = target;
+      }
+    });
+  }
+
+  double _indexAt(double dx, double itemWidth) =>
+      (dx / itemWidth - 0.5).clamp(0, _itemCount - 1).toDouble();
+
+  void _dragStart(DragStartDetails details, double itemWidth) {
+    _position.stop();
+    setState(() => _dragging = true);
+    _position.value = _indexAt(details.localPosition.dx, itemWidth);
+  }
+
+  void _dragUpdate(DragUpdateDetails details, double itemWidth) {
+    _position.value = _indexAt(details.localPosition.dx, itemWidth);
+  }
+
+  void _dragEnd(DragEndDetails details, double itemWidth) {
+    setState(() => _dragging = false);
+    final index = _position.value.round().clamp(0, _itemCount - 1);
+    _springTo(index.toDouble(),
+        velocity: details.velocity.pixelsPerSecond.dx / itemWidth);
+    if (index != widget.selectedIndex) {
+      widget.onSelected(index);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final selected = widget.selectedIndex;
-    final hasSelection = selected >= 0 && selected < widget.items.length;
-    final target = hasSelection ? selected.toDouble() : null;
-    GlassNavBar._lastPosition = target;
+    final target = _hasSelection ? selected.toDouble() : null;
+    if (target == null) {
+      GlassNavBar._lastPosition = null;
+    }
     final color = navSelectedColor(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return TweenAnimationBuilder<double>(
       // 1 = normal (com nomes), 0 = compacta (só ícones).
       tween: Tween(end: widget.compact ? 0 : 1),
@@ -265,59 +356,146 @@ class _GlassNavBarState extends State<GlassNavBar> {
           // Compacta também fica um pouco mais estreita.
           padding: EdgeInsets.fromLTRB(
               16 + 24 * (1 - expanded), 4, 16 + 24 * (1 - expanded), 4),
-          // Mais transparente que o vidro da barra de cima.
+          // Vidro bem transparente: o conteúdo aparece desfocado por trás.
           child: GlassSurface(
-            opacity: 0.5,
+            opacity: 0.38,
+            blurSigma: 14,
             padding: const EdgeInsets.all(5),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final itemWidth = constraints.maxWidth / widget.items.length;
-                return Stack(
-                  children: [
-                    if (target != null)
-                      Positioned.fill(
-                        child: TweenAnimationBuilder<double>(
-                          tween: Tween(begin: _from ?? target, end: target),
-                          duration: const Duration(milliseconds: 260),
-                          curve: Curves.easeOutCubic,
-                          builder: (context, position, _) => Align(
-                            alignment: Alignment.centerLeft,
-                            child: Transform.translate(
-                              key: const ValueKey('nav-pill'),
-                              offset: Offset(position * itemWidth, 0),
-                              // Pílula azul lisa (como na versão 45).
-                              child: Container(
-                                width: itemWidth,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(999),
-                                  color: color.withValues(alpha: 0.14),
+                final itemWidth = constraints.maxWidth / _itemCount;
+                return GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragStart: target == null
+                      ? null
+                      : (details) => _dragStart(details, itemWidth),
+                  onHorizontalDragUpdate: target == null
+                      ? null
+                      : (details) => _dragUpdate(details, itemWidth),
+                  onHorizontalDragEnd: target == null
+                      ? null
+                      : (details) => _dragEnd(details, itemWidth),
+                  child: AnimatedBuilder(
+                    animation: _position,
+                    builder: (context, _) {
+                      final position = _position.value;
+                      // Onde a pílula está agora: a barra da próxima tela
+                      // continua dali (toque ou arraste no meio do caminho).
+                      if (target != null) {
+                        GlassNavBar._lastPosition = position;
+                      }
+                      final speed = _position.isAnimating
+                          ? _position.velocity.abs()
+                          : 0.0;
+                      // Gota: estica com a velocidade e cresce um pouco
+                      // enquanto se move (ou com o dedo em cima).
+                      final stretch = (speed * 0.05).clamp(0.0, 0.45);
+                      final grow = _dragging
+                          ? 0.12
+                          : (speed * 0.03).clamp(0.0, 0.12).toDouble();
+                      final width = itemWidth * (1 + stretch);
+                      final left = (position + 0.5) * itemWidth - width / 2;
+                      // Item debaixo da pílula: durante o arraste, o mais
+                      // perto do dedo fica marcado.
+                      final active = target == null
+                          ? -1
+                          : _dragging
+                              ? position.round()
+                              : selected;
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          if (target != null)
+                            Positioned.fill(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Transform.translate(
+                                  key: const ValueKey('nav-pill'),
+                                  offset: Offset(left, 0),
+                                  child: Transform.scale(
+                                    scaleY: 1 + grow - stretch * 0.15,
+                                    scaleX: 1 + grow,
+                                    child: _GlassPill(
+                                      width: width,
+                                      dark: dark,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
+                          Row(
+                            children: [
+                              for (var index = 0; index < _itemCount; index++)
+                                Expanded(
+                                  child: _GlassNavButton(
+                                    item: widget.items[index],
+                                    selected: index == active,
+                                    expanded: expanded,
+                                    color: color,
+                                    // Lente: o ícone debaixo da pílula
+                                    // aumenta junto com ela.
+                                    lens: (position - index).abs() < 0.5
+                                        ? grow
+                                        : 0,
+                                    onTap: () => widget.onSelected(index),
+                                  ),
+                                ),
+                            ],
                           ),
-                        ),
-                      ),
-                    Row(
-                      children: [
-                        for (var index = 0;
-                            index < widget.items.length;
-                            index++)
-                          Expanded(
-                            child: _GlassNavButton(
-                              item: widget.items[index],
-                              selected: index == selected,
-                              expanded: expanded,
-                              color: color,
-                              onTap: () => widget.onSelected(index),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      );
+                    },
+                  ),
                 );
               },
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pílula de vidro claro do item selecionado: mais opaca que a barra, com
+/// o brilho na borda e reflexo do topo do vidro.
+class _GlassPill extends StatelessWidget {
+  const _GlassPill({required this.width, required this.dark});
+
+  final double width;
+  final bool dark;
+
+  @override
+  Widget build(BuildContext context) {
+    const radius = BorderRadius.all(Radius.circular(999));
+    return CustomPaint(
+      foregroundPainter: LiquidHighlightPainter(
+        borderRadius: radius,
+        strength: dark ? 0.45 : 0.9,
+      ),
+      child: Container(
+        width: width,
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: dark
+                ? [
+                    Colors.white.withValues(alpha: 0.20),
+                    Colors.white.withValues(alpha: 0.12),
+                  ]
+                : [
+                    Colors.white.withValues(alpha: 0.85),
+                    Colors.white.withValues(alpha: 0.60),
+                  ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: dark ? 0.30 : 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
       ),
     );
@@ -331,6 +509,7 @@ class _GlassNavButton extends StatelessWidget {
     required this.expanded,
     required this.color,
     required this.onTap,
+    this.lens = 0,
   });
 
   final GlassNavItem item;
@@ -341,10 +520,13 @@ class _GlassNavButton extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
+  /// Quanto o ícone aumenta com a pílula passando por cima (0 = normal).
+  final double lens;
+
   @override
   Widget build(BuildContext context) {
     final foreground =
-        selected ? color : Theme.of(context).colorScheme.onSurfaceVariant;
+        selected ? color : Theme.of(context).colorScheme.onSurface;
     return Semantics(
       button: true,
       selected: selected,
@@ -354,35 +536,38 @@ class _GlassNavButton extends StatelessWidget {
         onTap: onTap,
         // A pílula de destaque é desenhada pela barra (desliza entre os
         // itens); aqui só ícone e rótulo.
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 4 + 2 * expanded),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(selected ? item.selectedIcon : item.icon,
-                  color: foreground, size: 24),
-              SizedBox(height: 2 * expanded),
-              // O nome encolhe até sumir (barra compacta).
-              ClipRect(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  heightFactor: expanded,
-                  child: Opacity(
-                    opacity: expanded,
-                    child: Text(
-                      item.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: foreground,
-                            fontWeight:
-                                selected ? FontWeight.w700 : FontWeight.w500,
-                          ),
+        child: Transform.scale(
+          scale: 1 + lens,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 4 + 2 * expanded),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(selected ? item.selectedIcon : item.icon,
+                    color: foreground, size: 24),
+                SizedBox(height: 2 * expanded),
+                // O nome encolhe até sumir (barra compacta).
+                ClipRect(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    heightFactor: expanded,
+                    child: Opacity(
+                      opacity: expanded,
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: foreground,
+                              fontWeight:
+                                  selected ? FontWeight.w700 : FontWeight.w500,
+                            ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -398,6 +583,7 @@ PreferredSizeWidget glassAppBar(
   BuildContext context, {
   required String title,
   required List<Widget> actions,
+  double? titleFontSize,
   bool showDrawerButton = false,
   VoidCallback? onBack,
 }) {
@@ -408,7 +594,7 @@ PreferredSizeWidget glassAppBar(
     style: Theme.of(context)
         .textTheme
         .titleLarge
-        ?.copyWith(fontWeight: FontWeight.w700),
+        ?.copyWith(fontWeight: FontWeight.w700, fontSize: titleFontSize),
   );
   return AppBar(
     backgroundColor: Colors.transparent,

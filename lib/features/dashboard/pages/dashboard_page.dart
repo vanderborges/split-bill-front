@@ -24,7 +24,9 @@ class DashboardPage extends ConsumerWidget {
     final balancesAsync = ref.watch(dashboardGroupBalancesProvider);
 
     return AppScaffold(
-      title: 'Início',
+      // Nome do app no lugar de "Início", um pouco maior (24 pt).
+      title: 'DividiAí',
+      titleFontSize: 24,
       child: ListView(
         padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg,
             AppSpacing.lg, AppSpacing.lg + bottomBarInset(context)),
@@ -36,31 +38,30 @@ class DashboardPage extends ConsumerWidget {
                 ),
           ),
           const SizedBox(height: AppSpacing.md),
-          // Mesma cor/vidro do botão "+" das outras telas.
-          GlassSurface(
-            tint: Theme.of(context).colorScheme.primary,
-            child: Material(
-              type: MaterialType.transparency,
-              child: InkWell(
-                customBorder: const StadiumBorder(),
-                // Abre o fluxo por cima da Home — ao salvar/cancelar a
-                // pessoa continua no Início.
-                onTap: () => openNewExpenseFlow(context, ref),
-                child: SizedBox(
-                  height: 52,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add,
+          // Cor lisa (flat), a mesma do "Fechar evento" e do "+".
+          Material(
+            color: Theme.of(context).colorScheme.primary,
+            shape: const StadiumBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              // Abre o fluxo por cima da Home — ao salvar/cancelar a
+              // pessoa continua no Início.
+              onTap: () => openNewExpenseFlow(context, ref),
+              child: SizedBox(
+                height: 52,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add,
+                        color: Theme.of(context).colorScheme.onPrimary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Nova despesa',
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
                           color: Theme.of(context).colorScheme.onPrimary),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Nova despesa',
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            color: Theme.of(context).colorScheme.onPrimary),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),

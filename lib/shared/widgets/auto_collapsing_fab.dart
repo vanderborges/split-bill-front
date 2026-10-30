@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'glass.dart';
 
 /// Espaço que uma lista com botão "+" precisa no fim: 56 do botão + 16 de
 /// margem de cada lado. Sem isso o último item (e os botões dele) ficava
@@ -84,50 +83,49 @@ class _AutoCollapsingFabState extends State<AutoCollapsingFab>
         final scheme = Theme.of(context).colorScheme;
         // Com t = 0: 16 + ícone 24 + 16 = 56, o mesmo tamanho do FAB
         // normal — o fim da animação coincide com o botão "+".
-        // Vidro verde (liquid glass, iOS 26), como a barra de menus.
+        // Cor lisa (flat), a mesma do botão "Fechar evento".
         final button = Semantics(
           button: true,
           label: widget.label,
-          child: GlassSurface(
-            tint: scheme.primary,
-            child: Material(
-              type: MaterialType.transparency,
-              child: InkWell(
-                customBorder: const StadiumBorder(),
-                onTap: _handlePressed,
-                child: SizedBox(
-                  height: 56,
-                  child: Padding(
-                    padding: EdgeInsetsDirectional.only(
-                      start: 16,
-                      end: 16 + 4 * t,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(widget.icon, color: scheme.onPrimary),
-                        SizedBox(width: 8 * t),
-                        if (t > 0)
-                          ClipRect(
-                            child: Align(
-                              alignment: AlignmentDirectional.centerStart,
-                              widthFactor: t,
-                              child: Opacity(
-                                opacity: Curves.easeIn.transform(t),
-                                child: Text(
-                                  widget.label,
-                                  maxLines: 1,
-                                  softWrap: false,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelLarge
-                                      ?.copyWith(color: scheme.onPrimary),
-                                ),
+          child: Material(
+            color: scheme.primary,
+            shape: const StadiumBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              onTap: _handlePressed,
+              child: SizedBox(
+                height: 56,
+                child: Padding(
+                  padding: EdgeInsetsDirectional.only(
+                    start: 16,
+                    end: 16 + 4 * t,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(widget.icon, color: scheme.onPrimary),
+                      SizedBox(width: 8 * t),
+                      if (t > 0)
+                        ClipRect(
+                          child: Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            widthFactor: t,
+                            child: Opacity(
+                              opacity: Curves.easeIn.transform(t),
+                              child: Text(
+                                widget.label,
+                                maxLines: 1,
+                                softWrap: false,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(color: scheme.onPrimary),
                               ),
                             ),
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
                 ),
               ),

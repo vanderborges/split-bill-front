@@ -446,35 +446,17 @@ void _disposeControllers(List<TextEditingController> controllers) {
 
 Future<void> _showDeleteAccountDialog(
     BuildContext context, WidgetRef ref, UserModel user) async {
-  final confirmationController = TextEditingController();
-
   final confirmed = await showDialog<bool>(
     barrierDismissible: false,
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Excluir conta'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Esta ação é permanente. Sua conta, seus dados de perfil e seu '
-            'acesso ao DividiAí serão excluídos e não podem ser recuperados. '
-            'Despesas e grupos compartilhados com outras pessoas podem '
-            'continuar visíveis para elas.',
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Para confirmar, digite EXCLUIR abaixo:',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: confirmationController,
-            decoration: const InputDecoration(hintText: 'EXCLUIR'),
-            textCapitalization: TextCapitalization.characters,
-          ),
-        ],
+      // Sem digitar "EXCLUIR": o aviso + o botão vermelho já confirmam.
+      content: const Text(
+        'Esta ação é permanente. Sua conta, seus dados de perfil e seu '
+        'acesso ao DividiAí serão excluídos e não podem ser recuperados. '
+        'Despesas e grupos compartilhados com outras pessoas podem '
+        'continuar visíveis para elas.',
       ),
       actions: [
         TextButton(
@@ -492,16 +474,9 @@ Future<void> _showDeleteAccountDialog(
     ),
   );
 
-  if (confirmed != true ||
-      confirmationController.text.trim().toUpperCase() != 'EXCLUIR') {
-    confirmationController.dispose();
-    if (confirmed == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Digite EXCLUIR para confirmar a exclusão da conta.')));
-    }
+  if (confirmed != true) {
     return;
   }
-  confirmationController.dispose();
 
   try {
     await ref.read(usersRepositoryProvider).delete(user.id);
