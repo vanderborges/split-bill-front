@@ -25,9 +25,9 @@ class DashboardPage extends ConsumerWidget {
 
     return AppScaffold(
       scrollsBehindTopBar: true,
-      // Nome do app no lugar de "Início", um pouco maior (24 pt).
+      // Nome do app no lugar de "Início", maior que o padrão (26 pt).
       title: 'DividiAí',
-      titleFontSize: 24,
+      titleFontSize: 26,
       child: ListView(
         padding: EdgeInsets.fromLTRB(
             AppSpacing.lg,
@@ -38,6 +38,7 @@ class DashboardPage extends ConsumerWidget {
           Text(
             'Bora dividir uma conta?',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontSize: 22,
                   fontWeight: FontWeight.w700,
                 ),
           ),
