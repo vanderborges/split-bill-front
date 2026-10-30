@@ -17,9 +17,11 @@ class StatementPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final allEvents = ref.watch(statementAllEventsProvider);
     return AppScaffold(
+      scrollsBehindTopBar: true,
       title: 'Extrato',
       child: ListView(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomBarInset(context)),
+        padding: EdgeInsets.fromLTRB(
+            16, 16 + topBarInset(context), 16, 16 + bottomBarInset(context)),
         children: [
           const EventFilterFields(allowAllEvents: true),
           Align(

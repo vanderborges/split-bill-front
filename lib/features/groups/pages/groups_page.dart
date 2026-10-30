@@ -45,6 +45,7 @@ class GroupsPage extends ConsumerWidget {
     }
 
     return AppScaffold(
+      scrollsBehindTopBar: true,
       title: 'Grupos',
       floatingActionButton: AutoCollapsingFab(
         label: 'Novo grupo',
@@ -65,8 +66,8 @@ class GroupsPage extends ConsumerWidget {
             );
           }
           return ListView.separated(
-            padding: EdgeInsets.fromLTRB(
-                16, 16, 16, fabClearance + bottomBarInset(context)),
+            padding: EdgeInsets.fromLTRB(16, 16 + topBarInset(context), 16,
+                fabClearance + bottomBarInset(context)),
             itemCount: groups.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
@@ -141,6 +142,7 @@ class GroupDetailPage extends ConsumerWidget {
     }
 
     return AppScaffold(
+      scrollsBehindTopBar: true,
       title: group?.name ?? 'Grupo',
       onBack: () => context.go('/groups'),
       actions: [
@@ -160,13 +162,15 @@ class GroupDetailPage extends ConsumerWidget {
                 )
               : const Center(child: CircularProgressIndicator())
           : ListView(
-              padding:
-                  EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomBarInset(context)),
+              padding: EdgeInsets.fromLTRB(16, 16 + topBarInset(context), 16,
+                  16 + bottomBarInset(context)),
               children: [
-                // Eventos deste grupo (tela Eventos já filtrada nele).
+                // Eventos deste grupo (tela Eventos já filtrada nele). Mesmo
+                // padrão dos outros botões da tela (Convidar, Sair...): botão de
+                // texto com ícone, à direita.
                 Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
                     onPressed: () {
                       ref.read(selectedGroupIdProvider.notifier).state =
                           group.id;
@@ -179,7 +183,7 @@ class GroupDetailPage extends ConsumerWidget {
                     label: const Text('Ver eventos'),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
                 _GroupMembers(group: group),
                 _GroupTemporaryMembers(group: group),
               ],

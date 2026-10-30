@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -47,106 +48,120 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             padding: const EdgeInsets.all(24),
             child: Form(
               key: formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Criar conta',
-                      style: Theme.of(context).textTheme.headlineMedium),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Depois do cadastro, crie seu próprio grupo ou entre em um pelo link de convite.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 24),
-                  TextFormField(
-                    controller: fullNameController,
-                    maxLength: 80,
-                    textInputAction: TextInputAction.next,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                        counterText: '', labelText: 'Nome completo'),
-                    validator: _required,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: nicknameController,
-                    maxLength: 30,
-                    textInputAction: TextInputAction.next,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                        counterText: '', labelText: 'Apelido'),
-                    validator: _required,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: emailController,
-                    maxLength: 120,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                        counterText: '', labelText: 'E-mail'),
-                    validator: _email,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: phoneController,
-                    maxLength: 20,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: const [PhoneInputFormatter()],
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                        counterText: '', labelText: 'Telefone'),
-                    validator: _required,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: pixKeyController,
-                    maxLength: 120,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                        counterText: '', labelText: 'Chave PIX'),
-                    validator: _required,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: passwordController,
-                    maxLength: 64,
-                    obscureText: true,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                        counterText: '', labelText: 'Senha'),
-                    validator: _password,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: confirmPasswordController,
-                    maxLength: 64,
-                    obscureText: true,
-                    textInputAction: TextInputAction.done,
-                    decoration: const InputDecoration(
-                        counterText: '', labelText: 'Confirmar senha'),
-                    validator: (value) =>
-                        _confirmPassword(value, passwordController.text),
-                    onFieldSubmitted: (_) => _save(),
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: saving ? null : _save,
-                    child: saving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Cadastrar'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: saving ? null : () => context.go('/login'),
-                    child: const Text('Voltar para entrar'),
-                  ),
-                ],
+              // Celular reconhece o cadastro: sugere senha forte (iPhone) e
+              // salva e-mail/senha ao criar a conta.
+              child: AutofillGroup(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Criar conta',
+                        style: Theme.of(context).textTheme.headlineMedium),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Depois do cadastro, crie seu próprio grupo ou entre em um pelo link de convite.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 24),
+                    TextFormField(
+                      controller: fullNameController,
+                      autofillHints: const [AutofillHints.name],
+                      maxLength: 80,
+                      textInputAction: TextInputAction.next,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                          counterText: '', labelText: 'Nome completo'),
+                      validator: _required,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: nicknameController,
+                      autofillHints: const [AutofillHints.nickname],
+                      maxLength: 30,
+                      textInputAction: TextInputAction.next,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                          counterText: '', labelText: 'Apelido'),
+                      validator: _required,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: emailController,
+                      autofillHints: const [
+                        AutofillHints.newUsername,
+                        AutofillHints.email,
+                      ],
+                      autocorrect: false,
+                      maxLength: 120,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                          counterText: '', labelText: 'E-mail'),
+                      validator: _email,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: phoneController,
+                      autofillHints: const [AutofillHints.telephoneNumber],
+                      maxLength: 20,
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: const [PhoneInputFormatter()],
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                          counterText: '', labelText: 'Telefone'),
+                      validator: _required,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: pixKeyController,
+                      maxLength: 120,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                          counterText: '', labelText: 'Chave PIX'),
+                      validator: _required,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: passwordController,
+                      autofillHints: const [AutofillHints.newPassword],
+                      maxLength: 64,
+                      obscureText: true,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                          counterText: '', labelText: 'Senha'),
+                      validator: _password,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: confirmPasswordController,
+                      autofillHints: const [AutofillHints.newPassword],
+                      maxLength: 64,
+                      obscureText: true,
+                      textInputAction: TextInputAction.done,
+                      decoration: const InputDecoration(
+                          counterText: '', labelText: 'Confirmar senha'),
+                      validator: (value) =>
+                          _confirmPassword(value, passwordController.text),
+                      onFieldSubmitted: (_) => _save(),
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: saving ? null : _save,
+                      child: saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Cadastrar'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: saving ? null : () => context.go('/login'),
+                      child: const Text('Voltar para entrar'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -170,6 +185,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             password: passwordController.text,
             admin: false,
           );
+      // Conta criada: o sistema oferece salvar e-mail/senha.
+      TextInput.finishAutofillContext();
       ref.invalidate(usersProvider);
       if (!mounted) {
         return;

@@ -28,11 +28,17 @@ class AppScaffold extends ConsumerWidget {
     this.onBack,
     this.showBottomBar = true,
     this.titleFontSize,
+    this.scrollsBehindTopBar = false,
   });
 
   final String title;
   // Tamanho do título (null = padrão, 22). Início usa 24.
   final double? titleFontSize;
+
+  // true: a lista da tela rola por trás da barra superior (WhatsApp iOS
+  // 26) - a própria lista soma [topBarInset] no padding de cima. false:
+  // o conteúdo começa abaixo da barra (telas com cabeçalho fixo).
+  final bool scrollsBehindTopBar;
   final Widget child;
   final Widget? floatingActionButton;
   // Seta de voltar à esquerda do título (telas abertas a partir de outra).
@@ -59,6 +65,7 @@ class AppScaffold extends ConsumerWidget {
           ? _WideScaffold(
               title: title,
               titleFontSize: titleFontSize,
+              scrollsBehindTopBar: scrollsBehindTopBar,
               showUsers: showUsers,
               currentPath: currentPath,
               floatingActionButton: fab,
@@ -69,6 +76,7 @@ class AppScaffold extends ConsumerWidget {
           : _NarrowScaffold(
               title: title,
               titleFontSize: titleFontSize,
+              scrollsBehindTopBar: scrollsBehindTopBar,
               showUsers: showUsers,
               currentPath: currentPath,
               floatingActionButton: fab,
@@ -100,6 +108,7 @@ class _WideScaffold extends ConsumerWidget {
   const _WideScaffold({
     required this.title,
     required this.titleFontSize,
+    required this.scrollsBehindTopBar,
     required this.showUsers,
     required this.currentPath,
     required this.floatingActionButton,
@@ -110,6 +119,7 @@ class _WideScaffold extends ConsumerWidget {
 
   final String title;
   final double? titleFontSize;
+  final bool scrollsBehindTopBar;
   final bool showUsers;
   final String currentPath;
   final Widget? floatingActionButton;
@@ -197,7 +207,9 @@ class _WideScaffold extends ConsumerWidget {
         ],
       ),
       floatingActionButton: floatingActionButton,
-      body: _ScreenBody(child: SafeArea(child: child)),
+      extendBodyBehindAppBar: true,
+      body:
+          _ScreenBody(child: SafeArea(top: !scrollsBehindTopBar, child: child)),
     );
   }
 }
@@ -213,6 +225,7 @@ class _NarrowScaffold extends ConsumerWidget {
   const _NarrowScaffold({
     required this.title,
     required this.titleFontSize,
+    required this.scrollsBehindTopBar,
     required this.showUsers,
     required this.currentPath,
     required this.floatingActionButton,
@@ -225,6 +238,7 @@ class _NarrowScaffold extends ConsumerWidget {
 
   final String title;
   final double? titleFontSize;
+  final bool scrollsBehindTopBar;
   final bool showUsers;
   final String currentPath;
   final Widget? floatingActionButton;
@@ -344,7 +358,12 @@ class _NarrowScaffold extends ConsumerWidget {
       // listas somam bottomBarInset no fim pra o último item aparecer.
       extendBody: showBottomBar,
       floatingActionButton: floatingActionButton,
-      body: _ScreenBody(child: SafeArea(bottom: false, child: child)),
+      // O conteúdo vai até o topo da tela (por trás da barra superior);
+      // o SafeArea de cima segura quem não rola por trás.
+      extendBodyBehindAppBar: true,
+      body: _ScreenBody(
+          child:
+              SafeArea(top: !scrollsBehindTopBar, bottom: false, child: child)),
     );
   }
 }

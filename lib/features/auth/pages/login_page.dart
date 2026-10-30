@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -121,91 +122,105 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           constraints: const BoxConstraints(maxWidth: 420),
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('DividiAí',
-                    style: Theme.of(context).textTheme.headlineMedium),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: emailController,
-                  maxLength: 120,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                      counterText: '', labelText: 'E-mail'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: passwordController,
-                  maxLength: 64,
-                  obscureText: !showPassword,
-                  decoration: InputDecoration(
-                    counterText: '',
-                    labelText: 'Senha',
-                    suffixIcon: IconButton(
-                      tooltip: showPassword ? 'Ocultar senha' : 'Mostrar senha',
-                      icon: Icon(
-                        showPassword
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
+            // E-mail + senha como par de login: o celular oferece os usuários
+            // salvos e, depois de entrar, pergunta se quer salvar a senha.
+            child: AutofillGroup(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('DividiAí',
+                      style: Theme.of(context).textTheme.headlineMedium),
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: emailController,
+                    maxLength: 120,
+                    keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [
+                      AutofillHints.username,
+                      AutofillHints.email,
+                    ],
+                    textInputAction: TextInputAction.next,
+                    autocorrect: false,
+                    decoration: const InputDecoration(
+                        counterText: '', labelText: 'E-mail'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passwordController,
+                    maxLength: 64,
+                    obscureText: !showPassword,
+                    autofillHints: const [AutofillHints.password],
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => loading ? null : _login(),
+                    decoration: InputDecoration(
+                      counterText: '',
+                      labelText: 'Senha',
+                      suffixIcon: IconButton(
+                        tooltip:
+                            showPassword ? 'Ocultar senha' : 'Mostrar senha',
+                        icon: Icon(
+                          showPassword
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                        ),
+                        onPressed: () =>
+                            setState(() => showPassword = !showPassword),
                       ),
-                      onPressed: () =>
-                          setState(() => showPassword = !showPassword),
                     ),
                   ),
-                ),
-                CheckboxListTile(
-                  value: rememberMe,
-                  onChanged: (value) =>
-                      setState(() => rememberMe = value ?? true),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: const Text('Manter conectado'),
-                ),
-                const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: loading ? null : _login,
-                  child: loading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Entrar'),
-                ),
-                FutureBuilder<bool>(
-                  future: biometricAvailable,
-                  builder: (context, snapshot) {
-                    if (snapshot.data != true) {
-                      return const SizedBox.shrink();
-                    }
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: OutlinedButton.icon(
-                        onPressed: loading || biometricLoading
-                            ? null
-                            : _biometricLogin,
-                        icon: biometricLoading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.fingerprint),
-                        label: const Text('Entrar com biometria'),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => context.go('/register'),
-                  child: const Text('Cadastre-se'),
-                ),
-              ],
+                  CheckboxListTile(
+                    value: rememberMe,
+                    onChanged: (value) =>
+                        setState(() => rememberMe = value ?? true),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Manter conectado'),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    onPressed: loading ? null : _login,
+                    child: loading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Entrar'),
+                  ),
+                  FutureBuilder<bool>(
+                    future: biometricAvailable,
+                    builder: (context, snapshot) {
+                      if (snapshot.data != true) {
+                        return const SizedBox.shrink();
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: OutlinedButton.icon(
+                          onPressed: loading || biometricLoading
+                              ? null
+                              : _biometricLogin,
+                          icon: biometricLoading
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.fingerprint),
+                          label: const Text('Entrar com biometria'),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => context.go('/register'),
+                    child: const Text('Cadastre-se'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -235,6 +250,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             password: password,
             rememberMe: rememberMe,
           );
+      // Login deu certo: o sistema oferece salvar e-mail/senha (iPhone:
+      // Keychain; Android: Gerenciador de senhas do Google).
+      TextInput.finishAutofillContext();
       resetSessionScopedProviders(ref);
       if (mounted) {
         setState(() {

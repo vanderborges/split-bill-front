@@ -40,13 +40,15 @@ class ReportsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return AppScaffold(
+      scrollsBehindTopBar: true,
       title: 'Relatórios',
       // Os seletores de grupo/evento ficam sempre visíveis, mesmo sem
       // nenhum relatório ainda — antes ficavam escondidos atrás do estado
       // vazio, e quem não tinha nada cadastrado não via nem a lista de
       // grupos pra navegar.
       child: ListView(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomBarInset(context)),
+        padding: EdgeInsets.fromLTRB(
+            16, 16 + topBarInset(context), 16, 16 + bottomBarInset(context)),
         children: const [
           EventFilterFields(),
           SizedBox(height: 16),

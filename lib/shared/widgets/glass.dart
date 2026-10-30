@@ -46,39 +46,28 @@ class GlassSurface extends StatelessWidget {
             tint.withValues(alpha: 0.82 * opacity),
             tint.withValues(alpha: 0.66 * opacity),
           ];
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: borderRadius,
-        boxShadow: [
-          BoxShadow(
-            color: (tint ?? Colors.black)
-                .withValues(alpha: tint != null ? 0.30 : (dark ? 0.35 : 0.10)),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
+    // Sem sombra (como o vidro do WhatsApp no iOS 26): o destaque vem só
+    // do desfoque e do brilho da borda.
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+        child: CustomPaint(
+          foregroundPainter: LiquidHighlightPainter(
+            borderRadius: borderRadius,
+            strength: dark ? 0.55 : 1,
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          child: CustomPaint(
-            foregroundPainter: LiquidHighlightPainter(
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
               borderRadius: borderRadius,
-              strength: dark ? 0.55 : 1,
-            ),
-            child: Container(
-              padding: padding,
-              decoration: BoxDecoration(
-                borderRadius: borderRadius,
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: colors,
-                ),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: colors,
               ),
-              child: child,
             ),
+            child: child,
           ),
         ),
       ),
@@ -190,6 +179,15 @@ double bottomBarInset(BuildContext context) {
       2 +
       labelHeight +
       8;
+}
+
+/// Espaço no topo das listas que rolam por trás da barra superior
+/// ([AppScaffold.scrollsBehindTopBar]): margem do aparelho + a barra. Com o
+/// context da PÁGINA (acima do Scaffold) o MediaQuery não tem a barra, então
+/// soma a altura dela; dentro do Scaffold (extendBodyBehindAppBar) já vem.
+double topBarInset(BuildContext context) {
+  final top = MediaQuery.paddingOf(context).top;
+  return Scaffold.maybeOf(context) != null ? top : top + kToolbarHeight;
 }
 
 /// Item da barra de navegação em pílula.
@@ -489,13 +487,6 @@ class _GlassPill extends StatelessWidget {
                     Colors.white.withValues(alpha: 0.60),
                   ],
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: dark ? 0.30 : 0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
         ),
       ),
     );
@@ -601,6 +592,8 @@ PreferredSizeWidget glassAppBar(
     surfaceTintColor: Colors.transparent,
     elevation: 0,
     scrolledUnderElevation: 0,
+    // Sem fundo: o conteúdo que rola por trás fica desfocado em degradê.
+    flexibleSpace: const TopEdgeBlur(),
     automaticallyImplyLeading: showDrawerButton,
     titleSpacing: showDrawerButton || onBack != null ? 0 : 16,
     title: onBack == null
@@ -647,6 +640,65 @@ class GlassBackButton extends StatelessWidget {
             icon: const Icon(Icons.arrow_back, size: 22),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Fundo da barra superior no padrão do WhatsApp (iOS 26): nada de faixa
+/// sólida. O conteúdo que rola por trás fica desfocado e esmaecido em
+/// degradê - mais forte na borda de cima da tela, sumindo até a altura dos
+/// botões. Parada no topo (nada atrás), a barra fica invisível.
+///
+/// Desfoque progressivo não existe pronto no Flutter: faixas sobrepostas,
+/// cada uma mais curta, somam mais desfoque perto do topo.
+class TopEdgeBlur extends StatelessWidget {
+  const TopEdgeBlur({super.key});
+
+  static const _bands = [1.0, 0.75, 0.5, 0.3];
+
+  @override
+  Widget build(BuildContext context) {
+    final background = Theme.of(context).scaffoldBackgroundColor;
+    return IgnorePointer(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final height = constraints.maxHeight;
+          return Stack(
+            children: [
+              for (final band in _bands)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: height * band,
+                  child: ClipRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                ),
+              // Esmaece com a cor do fundo da tela (some no fim da barra).
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        background.withValues(alpha: 0.85),
+                        background.withValues(alpha: 0.55),
+                        background.withValues(alpha: 0),
+                      ],
+                      stops: const [0, 0.55, 1],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

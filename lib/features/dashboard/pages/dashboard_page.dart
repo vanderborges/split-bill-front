@@ -24,12 +24,16 @@ class DashboardPage extends ConsumerWidget {
     final balancesAsync = ref.watch(dashboardGroupBalancesProvider);
 
     return AppScaffold(
+      scrollsBehindTopBar: true,
       // Nome do app no lugar de "Início", um pouco maior (24 pt).
       title: 'DividiAí',
       titleFontSize: 24,
       child: ListView(
-        padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg,
-            AppSpacing.lg, AppSpacing.lg + bottomBarInset(context)),
+        padding: EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg + topBarInset(context),
+            AppSpacing.lg,
+            AppSpacing.lg + bottomBarInset(context)),
         children: [
           Text(
             'Bora dividir uma conta?',

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Liga o app ao site dividiai.com no Gerenciador de senhas do Google:
+         senha salva no app aparece no site e vice-versa (o site publica o
+         par em /.well-known/assetlinks.json). -->
+    <string name="asset_statements" translatable="false">[{\"include\": \"https://dividiai.com/.well-known/assetlinks.json\"}]</string>
+</resources>

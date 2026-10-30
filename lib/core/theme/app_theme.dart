@@ -114,7 +114,8 @@ class AppTheme {
             vertical: AppSpacing.md,
           ),
           shape: RoundedRectangleBorder(borderRadius: borderRadius),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+          // Texto sem negrito: mesmo peso dos outros botões (w500, padrão).
+          textStyle: const TextStyle(fontWeight: FontWeight.w500),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(

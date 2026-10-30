@@ -28,6 +28,7 @@ class UsersPage extends ConsumerWidget {
     final isAdmin = currentUser?.admin ?? false;
 
     return AppScaffold(
+      scrollsBehindTopBar: true,
       title: 'Usuários',
       floatingActionButton: isAdmin
           ? AutoCollapsingFab(
@@ -50,8 +51,8 @@ class UsersPage extends ConsumerWidget {
             );
           }
           return ListView.separated(
-            padding: EdgeInsets.fromLTRB(
-                16, 16, 16, fabClearance + bottomBarInset(context)),
+            padding: EdgeInsets.fromLTRB(16, 16 + topBarInset(context), 16,
+                fabClearance + bottomBarInset(context)),
             itemCount: users.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, index) {

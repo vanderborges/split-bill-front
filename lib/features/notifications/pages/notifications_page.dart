@@ -24,6 +24,7 @@ class NotificationsPage extends ConsumerWidget {
         notificationsAsync.valueOrNull?.isNotEmpty ?? false;
 
     return AppScaffold(
+      scrollsBehindTopBar: true,
       title: 'Notificações',
       // Sem a barra de menus; a seta volta pra tela de onde veio.
       showBottomBar: false,
@@ -46,8 +47,11 @@ class NotificationsPage extends ConsumerWidget {
             );
           }
           return ListView.separated(
-            padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg,
-                AppSpacing.lg, AppSpacing.lg + bottomBarInset(context)),
+            padding: EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.lg + topBarInset(context),
+                AppSpacing.lg,
+                AppSpacing.lg + bottomBarInset(context)),
             itemCount: notifications.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, index) {

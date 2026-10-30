@@ -47,6 +47,10 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="dividiai_notifications" />
+        <!-- Senhas salvas compartilhadas com o site (assetlinks.json). -->
+        <meta-data
+            android:name="asset_statements"
+            android:resource="@string/asset_statements" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
