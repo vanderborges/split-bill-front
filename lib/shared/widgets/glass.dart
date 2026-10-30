@@ -3,9 +3,10 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
-/// Superfície de vidro no padrão do Threads: modo dia branco quase opaco
-/// com contorno cinza fino; modo noite cinza-escuro. Desfoca o que está
-/// atrás (aparece só levemente), com brilho suave na borda e sem sombra.
+/// Superfície de vidro no padrão do Threads: modo dia branco translúcido
+/// (~70%) com contorno cinza fino; modo noite cinza-escuro (~65%). O que
+/// passa por trás continua legível, só levemente desfocado (como entre os
+/// botões da barra do Threads), com brilho suave na borda e sem sombra.
 ///
 /// [tint]: vidro colorido (ex.: botão "+" verde) em vez do vidro neutro.
 /// Cinza-escuro do vidro no modo noite (barra do Threads).
@@ -19,7 +20,7 @@ class GlassSurface extends StatelessWidget {
     this.padding,
     this.opacity = 1,
     this.tint,
-    this.blurSigma = 24,
+    this.blurSigma = 8,
   });
 
   final Widget child;
@@ -42,9 +43,9 @@ class GlassSurface extends StatelessWidget {
     final colors = tint == null
         ? [
             (dark ? _darkGlass : Colors.white)
-                .withValues(alpha: (dark ? 0.90 : 0.94) * opacity),
+                .withValues(alpha: (dark ? 0.68 : 0.72) * opacity),
             (dark ? _darkGlass : Colors.white)
-                .withValues(alpha: (dark ? 0.84 : 0.88) * opacity),
+                .withValues(alpha: (dark ? 0.62 : 0.66) * opacity),
           ]
         : [
             tint.withValues(alpha: 0.82 * opacity),
@@ -368,7 +369,7 @@ class _GlassNavBarState extends State<GlassNavBar>
           // Compacta também fica um pouco mais estreita.
           padding: EdgeInsets.fromLTRB(
               16 + 24 * (1 - expanded), 4, 16 + 24 * (1 - expanded), 4),
-          // Vidro do Threads: quase opaco, o conteúdo aparece só levemente.
+          // Vidro do Threads: translúcido, o conteúdo aparece entre os botões.
           child: GlassSurface(
             padding: const EdgeInsets.all(5),
             child: LayoutBuilder(
