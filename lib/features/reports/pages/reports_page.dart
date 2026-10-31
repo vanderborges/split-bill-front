@@ -94,11 +94,13 @@ class EventFilterFields extends ConsumerWidget {
             items: [
               const DropdownMenuItem<String?>(
                   value: null, child: Text('Todos os grupos')),
-              ...groups.map((group) => DropdownMenuItem<String?>(
-                  value: group.id,
-                  child: Text(group.viewerRemoved
-                      ? '${group.name} (você saiu)'
-                      : group.name))),
+              // Grupos em ordem alfabética.
+              ...sortedByNamePtBr(groups, (group) => group.name).map((group) =>
+                  DropdownMenuItem<String?>(
+                      value: group.id,
+                      child: Text(group.viewerRemoved
+                          ? '${group.name} (você saiu)'
+                          : group.name))),
             ],
             onChanged: (value) {
               ref.read(selectedGroupIdProvider.notifier).state = value;
@@ -199,10 +201,15 @@ class EventBalanceView extends ConsumerWidget {
     return reportAsync.when(
       data: (report) {
         if (report == null) {
-          return const EmptyState(
+          // Extrato fala de extrato; Saldo/Relatório, de relatório.
+          return EmptyState(
             icon: Icons.bar_chart_outlined,
-            title: 'Nenhum relatório para mostrar.',
-            message: 'Crie ou selecione um evento para ver o relatório.',
+            title: onlyCurrentUser
+                ? 'Nenhum extrato para mostrar.'
+                : 'Nenhum relatório para mostrar.',
+            message: onlyCurrentUser
+                ? 'Crie ou selecione um evento para ver o extrato.'
+                : 'Crie ou selecione um evento para ver o relatório.',
           );
         }
         // Sem título/status aqui: o status fica na lista do seletor de

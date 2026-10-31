@@ -71,34 +71,9 @@ class NotificationsPage extends ConsumerWidget {
                   child: Icon(Icons.delete_outline,
                       color: Theme.of(context).colorScheme.onErrorContainer),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Cobrança vai com o "Bom dia" do grupo do WhatsApp
-                    // (figurinha animada, WebP); aviso de gente nova no
-                    // grupo não.
-                    if (notification.isBilling)
-                      GestureDetector(
-                        onTap: () => _open(context, ref, notification),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(
-                              AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
-                          child: Center(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.asset(
-                                'assets/images/bom_dia.webp',
-                                height: 120,
-                                fit: BoxFit.contain,
-                                semanticLabel: 'Bom dia',
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    _notificationTile(context, ref, notification),
-                  ],
-                ),
+                // Sem a figurinha "Bom dia" na cobrança (removida em
+                // 31/10/2026): só o texto.
+                child: _notificationTile(context, ref, notification),
               );
             },
           );

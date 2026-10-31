@@ -29,8 +29,9 @@ class EventPickerField extends StatelessWidget {
   /// texto — usado no Extrato ("Todos os eventos").
   final String? allEventsLabel;
 
-  /// Extrato: lista agrupada pelo nome do grupo (A-Z); dentro de cada
-  /// grupo mantém a ordem de sempre ([EventModel.compareSettlingFirst]).
+  /// Extrato: lista agrupada pelo nome do grupo (A-Z) e, dentro de cada
+  /// grupo, do evento mais novo pro mais antigo. (O evento que já vem
+  /// escolhido continua sendo o de [pickSelectedEvent].)
   final bool sortByGroup;
 
   /// false (Despesas/Saldo): só o nome do evento, sem "Grupo | ".
@@ -49,6 +50,12 @@ class EventPickerField extends StatelessWidget {
           if (byGroup != 0) {
             return byGroup;
           }
+          final byDate = second.sortDate.compareTo(first.sortDate);
+          if (byDate != 0) {
+            return byDate;
+          }
+          return (second.createdAt ?? DateTime(0))
+              .compareTo(first.createdAt ?? DateTime(0));
         }
         return EventModel.compareSettlingFirst(first, second);
       });

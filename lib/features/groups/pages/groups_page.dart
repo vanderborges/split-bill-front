@@ -292,7 +292,10 @@ class _GroupMembers extends ConsumerWidget {
       builder: (context, snapshot) => Consumer(builder: (context, ref, _) {
         final allMembers = snapshot.data ?? <GroupMemberModel>[];
         final query = ref.watch(groupMembersSearchProvider);
+        // Temporários ficam só na lista "Temporários"; ao virar integrante
+        // fixo a pessoa sobe pra cá.
         final members = allMembers
+            .where((member) => !member.temporary)
             .where((member) => matchesSearchPtBr(member.nickname, query))
             .toList();
         // Convidar: admin e integrantes fixos (temporário não convida).
@@ -803,9 +806,7 @@ class _GroupTemporaryMembersState
     final isGroupAdmin =
         ref.watch(groupRoleProvider(widget.group.id)).valueOrNull == 'ADMIN';
     final query = ref.watch(groupMembersSearchProvider);
-    if (!isGroupAdmin) {
-      return const SizedBox.shrink();
-    }
+    // Todos os integrantes veem os temporários; só o admin altera.
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: FutureBuilder<List<GroupMemberModel>>(
@@ -817,6 +818,13 @@ class _GroupTemporaryMembersState
           ]..sort((first, second) => first.nickname
               .toLowerCase()
               .compareTo(second.nickname.toLowerCase()));
+          // Quem não é admin só vê a seção se tiver algum temporário.
+          if (!isGroupAdmin &&
+              (snapshot.connectionState != ConnectionState.done ||
+                  snapshot.hasError ||
+                  temporaries.isEmpty)) {
+            return const SizedBox.shrink();
+          }
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -825,25 +833,27 @@ class _GroupTemporaryMembersState
                   Expanded(
                       child: Text('Temporários',
                           style: Theme.of(context).textTheme.titleMedium)),
-                  TextButton.icon(
-                    onPressed: () async {
-                      if (await showTemporaryGuestDialog(
-                          context, ref, widget.group.id)) {
-                        _reload();
-                      }
-                    },
-                    icon: const Icon(Icons.person_add_alt),
-                    label: const Text('Incluir temporário'),
-                  ),
+                  if (isGroupAdmin)
+                    TextButton.icon(
+                      onPressed: () async {
+                        if (await showTemporaryGuestDialog(
+                            context, ref, widget.group.id)) {
+                          _reload();
+                        }
+                      },
+                      icon: const Icon(Icons.person_add_alt),
+                      label: const Text('Incluir temporário'),
+                    ),
                 ],
               ),
-              Text(
-                'Cadastre só o nome para já lançar despesas. A pessoa sai da '
-                'lista quando todos os eventos com despesa dela forem '
-                'fechados. Depois que ela criar conta pelo convite, dá para '
-                'torná-la integrante do grupo.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              if (isGroupAdmin)
+                Text(
+                  'Cadastre só o nome para já lançar despesas. A pessoa sai da '
+                  'lista quando todos os eventos com despesa dela forem '
+                  'fechados. Depois que ela criar conta pelo convite, dá para '
+                  'torná-la integrante do grupo.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               if (snapshot.connectionState != ConnectionState.done)
                 const LinearProgressIndicator()
               else if (snapshot.hasError)
@@ -863,51 +873,56 @@ class _GroupTemporaryMembersState
                     ),
                     title: Text(member.nickname),
                     subtitle: Text(_subtitle(member)),
-                    trailing: Wrap(
-                      children: [
-                        // Só dá pra renomear quem ainda não tem conta: o
-                        // nome de quem tem conta é dele.
-                        if (member.placeholder)
-                          IconButton(
-                            tooltip: 'Editar nome',
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: () async {
-                              if (await _renamePlaceholder(
-                                  context, ref, widget.group.id, member)) {
-                                _reload();
-                              }
-                            },
+                    trailing: !isGroupAdmin
+                        ? null
+                        : Wrap(
+                            children: [
+                              // Só dá pra renomear quem ainda não tem conta: o
+                              // nome de quem tem conta é dele.
+                              if (member.placeholder)
+                                IconButton(
+                                  tooltip: 'Editar nome',
+                                  icon: const Icon(Icons.edit_outlined),
+                                  onPressed: () async {
+                                    if (await _renamePlaceholder(context, ref,
+                                        widget.group.id, member)) {
+                                      _reload();
+                                    }
+                                  },
+                                ),
+                              if (!member.placeholder)
+                                IconButton(
+                                  tooltip: 'Alterar perfil no grupo',
+                                  icon: const Icon(
+                                      Icons.manage_accounts_outlined),
+                                  onPressed: () async {
+                                    if (await _showEditMemberRoleDialog(
+                                        context, ref, widget.group, member)) {
+                                      _reload();
+                                    }
+                                  },
+                                ),
+                              if (member.placeholder)
+                                IconButton(
+                                  tooltip: 'Remover',
+                                  icon:
+                                      const Icon(Icons.person_remove_outlined),
+                                  onPressed: () async {
+                                    if (await _removePlaceholder(context, ref,
+                                        widget.group.id, member)) {
+                                      _reload();
+                                    }
+                                  },
+                                ),
+                            ],
                           ),
-                        if (!member.placeholder)
-                          IconButton(
-                            tooltip: 'Alterar perfil no grupo',
-                            icon: const Icon(Icons.manage_accounts_outlined),
-                            onPressed: () async {
-                              if (await _showEditMemberRoleDialog(
-                                  context, ref, widget.group, member)) {
-                                _reload();
-                              }
-                            },
-                          ),
-                        if (member.placeholder)
-                          IconButton(
-                            tooltip: 'Remover',
-                            icon: const Icon(Icons.person_remove_outlined),
-                            onPressed: () async {
-                              if (await _removePlaceholder(
-                                  context, ref, widget.group.id, member)) {
-                                _reload();
-                              }
-                            },
-                          ),
-                      ],
-                    ),
                   ),
                 ),
               // Com algum temporário: link pra mandar o convite do grupo
               // (é por ele que o temporário cria conta e fica com as
               // despesas).
-              if (snapshot.connectionState == ConnectionState.done &&
+              if (isGroupAdmin &&
+                  snapshot.connectionState == ConnectionState.done &&
                   !snapshot.hasError &&
                   temporaries.isNotEmpty)
                 TextButton.icon(

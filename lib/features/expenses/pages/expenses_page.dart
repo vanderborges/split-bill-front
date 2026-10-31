@@ -267,7 +267,42 @@ class _ExpensesView extends ConsumerWidget {
                                 return second.createdAt
                                     .compareTo(first.createdAt);
                               });
-                            return SliverPadding(
+                            // Total no padrão do Saldo: com "só minhas
+                            // despesas", o saldo de quem está logado; sem, o
+                            // total do evento.
+                            final total = showOnlyMine
+                                ? visibleExpenses.fold<double>(
+                                    0,
+                                    (sum, expense) =>
+                                        sum +
+                                        _userBalance(expense, currentUser?.id))
+                                : expenses.fold<double>(
+                                    0, (sum, expense) => sum + expense.amount);
+                            return SliverMainAxisGroup(slivers: [
+                              SliverPadding(
+                                padding: const EdgeInsets.fromLTRB(
+                                    AppSpacing.lg,
+                                    AppSpacing.sm,
+                                    AppSpacing.lg,
+                                    0),
+                                sliver: SliverToBoxAdapter(
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                          showOnlyMine
+                                              ? 'Seu saldo: '
+                                              : 'Total de despesas: ',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium),
+                                      MoneyText(total,
+                                          colorBySign: showOnlyMine,
+                                          showSign: showOnlyMine),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              SliverPadding(
                                 padding: EdgeInsets.fromLTRB(
                                     AppSpacing.lg,
                                     AppSpacing.sm,
@@ -346,7 +381,9 @@ class _ExpensesView extends ConsumerWidget {
                                           : MoneyText(expense.amount),
                                     );
                                   },
-                                ));
+                                ),
+                              ),
+                            ]);
                           },
                           loading: () => const SliverFillRemaining(
                               hasScrollBody: false, child: LoadingState()),
