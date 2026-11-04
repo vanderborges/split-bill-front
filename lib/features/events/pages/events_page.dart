@@ -18,7 +18,8 @@ import '../../../shared/widgets/status_badge.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../expenses/services/expenses_repository.dart';
 import '../../groups/models/group_model.dart';
-import '../../groups/pages/groups_page.dart' show showTemporaryGuestDialog;
+import '../../groups/pages/groups_page.dart'
+    show openGroupDetail, showTemporaryGuestDialog;
 import '../../groups/services/groups_repository.dart';
 import '../../groups/services/create_group_intent.dart';
 import '../../months/services/months_repository.dart';
@@ -36,7 +37,11 @@ class EventsPage extends ConsumerWidget {
     final eventsAsync = ref.watch(eventsProvider);
     final groupsAsync = ref.watch(groupsProvider);
     final selectedGroupId = ref.watch(selectedGroupIdProvider);
-    final hideClosed = ref.watch(hideClosedEventsProvider);
+    final loadedEvents = eventsAsync.valueOrNull;
+    final hideClosed = ref.watch(hideClosedEventsProvider) ??
+        hideClosedByDefault(loadedEvents);
+    // Sem evento cadastrado o botão fica no meio da tela, no lugar do "+".
+    final hasEvents = loadedEvents?.isNotEmpty ?? false;
 
     if (ref.read(pendingAutoOpenEventProvider)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -55,23 +60,12 @@ class EventsPage extends ConsumerWidget {
       title: 'Eventos',
       // A lista rola por trás da barra superior e do filtro fixo.
       scrollsBehindTopBar: true,
-      floatingActionButton: AutoCollapsingFab(
-        label: 'Novo evento',
-        onPressed: () async {
-          // Sem grupo não dá pra criar evento: leva pra criar o grupo.
-          final groups = await ref
-              .read(groupsProvider.future)
-              .catchError((_) => <GroupModel>[]);
-          if (!context.mounted) {
-            return;
-          }
-          if (groups.isEmpty) {
-            await showCreateGroupFirstDialog(context, ref);
-          } else {
-            await _showCreateEventDialog(context, ref);
-          }
-        },
-      ),
+      floatingActionButton: hasEvents
+          ? AutoCollapsingFab(
+              label: 'Novo evento',
+              onPressed: () => _openNewEvent(context, ref),
+            )
+          : null,
       child: PinnedHeaderLayout(
         // "Filtrar por grupo" fica fixo no topo, num painel de vidro.
         header: groupsAsync.when<Widget?>(
@@ -158,8 +152,10 @@ class EventsPage extends ConsumerWidget {
                             ? 'Nenhum evento cadastrado.'
                             : 'Nenhum evento aberto.',
                         message: allEvents.isEmpty
-                            ? 'Toque em "+" para criar um mês ou evento avulso.'
+                            ? 'Crie um mês ou evento avulso.'
                             : 'Desmarque "Ocultar fechados" para ver todos.',
+                        actionLabel: allEvents.isEmpty ? 'Novo evento' : null,
+                        onAction: () => _openNewEvent(context, ref),
                       ));
                 }
                 final groupsById = {
@@ -252,7 +248,7 @@ class EventsPage extends ConsumerWidget {
                                 if (isEventAdmin && !event.isOpen)
                                   const PopupMenuItem(
                                       value: 'reopen', child: Text('Reabrir')),
-                                if (isEventAdmin && !event.isClosed)
+                                if (!event.isClosed)
                                   const PopupMenuItem(
                                       value: 'add-temporary',
                                       child: Text('Incluir temporário')),
@@ -280,6 +276,20 @@ class EventsPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// Sem grupo não dá pra criar evento: leva pra criar o grupo.
+Future<void> _openNewEvent(BuildContext context, WidgetRef ref) async {
+  final groups =
+      await ref.read(groupsProvider.future).catchError((_) => <GroupModel>[]);
+  if (!context.mounted) {
+    return;
+  }
+  if (groups.isEmpty) {
+    await showCreateGroupFirstDialog(context, ref);
+  } else {
+    await _showCreateEventDialog(context, ref);
   }
 }
 
@@ -606,6 +616,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
   }
 
   try {
+    final EventModel event;
     if (type == 'MONTHLY') {
       final month = int.tryParse(monthController.text.trim());
       final year = int.tryParse(yearController.text.trim());
@@ -621,7 +632,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
         throw Exception('Nenhum grupo cadastrado');
       }
       final groupId = selectedGroupId ?? groups.first.id;
-      final event = await ref.read(eventsRepositoryProvider).create(
+      event = await ref.read(eventsRepositoryProvider).create(
             name: '${month.toString().padLeft(2, '0')}/$year',
             type: type,
             month: month,
@@ -636,7 +647,7 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
         throw Exception('Nenhum grupo cadastrado');
       }
       final groupId = selectedGroupId ?? groups.first.id;
-      final event = await ref.read(eventsRepositoryProvider).create(
+      event = await ref.read(eventsRepositoryProvider).create(
             name: nameController.text.trim(),
             type: type,
             groupId: groupId,
@@ -644,9 +655,9 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
       selectEvent(ref, groupId: event.groupId, eventId: event.id);
     }
     _invalidateEventState(ref);
-    // Evento novo abre direto nas despesas dele.
+    // Evento novo leva pro detalhe do grupo dele.
     if (context.mounted) {
-      context.go('/expenses');
+      openGroupDetail(context, ref, event.groupId);
     }
   } catch (error) {
     if (context.mounted) {

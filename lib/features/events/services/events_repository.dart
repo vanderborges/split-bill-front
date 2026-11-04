@@ -45,9 +45,15 @@ final openEventsProvider = FutureProvider<List<EventModel>>((ref) async {
 
 /// Filtro da tela de Eventos: quando true, esconde os eventos já
 /// fechados da lista (continuam existindo, só não aparecem ali).
-// autoDispose + true: a tela Eventos sempre abre com "Ocultar fechados"
-// marcado (pedido do usuário).
-final hideClosedEventsProvider = StateProvider.autoDispose<bool>((ref) => true);
+// autoDispose + null: a cada abertura da tela Eventos vale o padrão (marcado,
+// menos quando todos os eventos estão fechados - senão a lista viria vazia);
+// a escolha da pessoa só vale até sair da tela.
+final hideClosedEventsProvider =
+    StateProvider.autoDispose<bool?>((ref) => null);
+
+/// Padrão de "Ocultar fechados": marcado, menos com todos os eventos fechados.
+bool hideClosedByDefault(List<EventModel>? events) =>
+    events == null || events.isEmpty || events.any((event) => !event.isClosed);
 
 final selectedEventIdProvider = StateProvider<String?>((ref) => null);
 

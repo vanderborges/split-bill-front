@@ -95,6 +95,11 @@ class _ExpensesView extends ConsumerWidget {
     final title = selectedEvent == null
         ? 'Despesas'
         : _groupName(groupsAsync.valueOrNull, selectedEvent.groupId);
+    // Sem despesa cadastrada o botão fica no meio da tela, no lugar do "+".
+    // No Saldo não tem essa mensagem: o "+" continua.
+    final emptyStateHasButton = eventAsync.hasValue &&
+        (selectedEvent == null ||
+            (!showBalance && (expensesAsync.valueOrNull?.isEmpty ?? false)));
 
     return AppScaffold(
       title: title,
@@ -103,22 +108,23 @@ class _ExpensesView extends ConsumerWidget {
       // Evento e Despesas/Saldo fixos no topo; a lista rola por trás.
       scrollsBehindTopBar: true,
       // "+" também no Saldo (evento aberto).
-      floatingActionButton: selectedEventClosedForExpenses
-          ? null
-          : AutoCollapsingFab(
-              label: 'Nova despesa',
-              onPressed: () =>
-                  openNewExpenseFlow(context, ref, useSelectedEvent: true),
-            ),
+      floatingActionButton:
+          selectedEventClosedForExpenses || emptyStateHasButton
+              ? null
+              : AutoCollapsingFab(
+                  label: 'Nova despesa',
+                  onPressed: () =>
+                      openNewExpenseFlow(context, ref, useSelectedEvent: true),
+                ),
       child: eventAsync.when(
         data: (event) {
           if (event == null) {
-            return Center(
-              child: FilledButton.icon(
-                onPressed: () => openNewExpenseFlow(context, ref),
-                icon: const Icon(Icons.add),
-                label: const Text('Adicionar despesa'),
-              ),
+            return EmptyState(
+              icon: Icons.receipt_long_outlined,
+              title: 'Nenhuma despesa cadastrada.',
+              message: 'Registre o primeiro gasto.',
+              actionLabel: 'Nova despesa',
+              onAction: () => openNewExpenseFlow(context, ref),
             );
           }
           final isGroupAdmin =
@@ -181,7 +187,7 @@ class _ExpensesView extends ConsumerWidget {
                         ButtonSegment(
                             value: true,
                             icon: Icon(Icons.account_balance_wallet_outlined),
-                            label: Text('Saldo')),
+                            label: Text('Saldos')),
                       ],
                       selected: {showBalance},
                       showSelectedIcon: false,
@@ -246,15 +252,21 @@ class _ExpensesView extends ConsumerWidget {
                                   hasScrollBody: false,
                                   child: EmptyState(
                                     icon: Icons.receipt_long_outlined,
-                                    title: showOnlyMine
-                                        ? 'Você não participa de nenhuma despesa deste evento.'
-                                        : 'Nenhuma despesa cadastrada.',
-                                    message: showOnlyMine
+                                    title: expenses.isEmpty
+                                        ? 'Nenhuma despesa cadastrada.'
+                                        : 'Você não participa de nenhuma despesa deste evento.',
+                                    message: expenses.isNotEmpty
                                         ? 'Desmarque o filtro para ver as despesas de todo o grupo.'
                                         : selectedEventClosedForExpenses
-                                            // Fechado não tem o "+".
                                             ? 'Este evento não recebe mais despesas.'
-                                            : 'Toque em "+" para registrar o primeiro gasto deste evento.',
+                                            : 'Registre o primeiro gasto deste evento.',
+                                    actionLabel: expenses.isEmpty &&
+                                            !selectedEventClosedForExpenses
+                                        ? 'Nova despesa'
+                                        : null,
+                                    onAction: () => openNewExpenseFlow(
+                                        context, ref,
+                                        useSelectedEvent: true),
                                   ));
                             }
                             final sortedExpenses = [...visibleExpenses]
@@ -683,9 +695,10 @@ Future<({EventModel? event, bool createEvent})?> _pickExpenseDestination(
   List<EventModel> openEvents,
   EventModel? current,
 ) {
-  var groupId = groups.any((group) => group.id == current?.groupId)
+  final sortedGroups = sortedByNamePtBr(groups, (group) => group.name);
+  var groupId = sortedGroups.any((group) => group.id == current?.groupId)
       ? current!.groupId
-      : groups.first.id;
+      : sortedGroups.first.id;
   List<EventModel> eventsOf(String id) =>
       openEvents.where((item) => item.groupId == id).toList();
   String? defaultEventFor(String id) {
@@ -721,7 +734,7 @@ Future<({EventModel? event, bool createEvent})?> _pickExpenseDestination(
                 GlassDropdownField<String>(
                   initialValue: groupId,
                   decoration: const InputDecoration(labelText: 'Grupo'),
-                  items: groups
+                  items: sortedGroups
                       .map((group) => DropdownMenuItem(
                           value: group.id, child: Text(group.name)))
                       .toList(),
@@ -836,11 +849,6 @@ Future<void> _openExpenseForm(
   // da despesa sendo editada) — o form só mostra onde vai lançar.
   final groups = await ref.read(groupsProvider.future);
   final groupName = _groupName(groups, event.groupId);
-  // Só admin cria temporário (regra do backend): só ele vê o botão.
-  final isGroupAdmin = await ref
-          .read(groupRoleProvider(event.groupId).future)
-          .catchError((_) => null) ==
-      'ADMIN';
   var currentUsers = users;
 
   late Set<String> selectedParticipants;
@@ -1469,39 +1477,36 @@ Future<void> _openExpenseForm(
                     ),
                     // Pessoa sem cadastro na hora: entra no grupo como
                     // temporária e já volta marcada nesta despesa.
-                    if (isGroupAdmin) ...[
-                      const SizedBox(height: AppSpacing.xs),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: () async {
-                            final added = await _addTemporaryParticipant(
-                                routeContext, ref, event.groupId);
-                            if (added == null || !routeContext.mounted) {
-                              return;
+                    const SizedBox(height: AppSpacing.xs),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          final added = await _addTemporaryParticipant(
+                              routeContext, ref, event.groupId);
+                          if (added == null || !routeContext.mounted) {
+                            return;
+                          }
+                          setState(() {
+                            currentUsers = [...currentUsers, added];
+                            shareCountControllers[added.id] =
+                                TextEditingController(text: '1');
+                            shareDescriptionControllers[added.id] =
+                                TextEditingController();
+                            shareAmountControllers[added.id] =
+                                TextEditingController();
+                            payerControllers[added.id] =
+                                TextEditingController();
+                            selectedParticipants.add(added.id);
+                            if (splitByValue) {
+                              redistributeShareAmounts();
                             }
-                            setState(() {
-                              currentUsers = [...currentUsers, added];
-                              shareCountControllers[added.id] =
-                                  TextEditingController(text: '1');
-                              shareDescriptionControllers[added.id] =
-                                  TextEditingController();
-                              shareAmountControllers[added.id] =
-                                  TextEditingController();
-                              payerControllers[added.id] =
-                                  TextEditingController();
-                              selectedParticipants.add(added.id);
-                              if (splitByValue) {
-                                redistributeShareAmounts();
-                              }
-                            });
-                          },
-                          icon: const Icon(Icons.person_add_alt_outlined),
-                          label:
-                              const Text('Adicionar participante temporário'),
-                        ),
+                          });
+                        },
+                        icon: const Icon(Icons.person_add_alt_outlined),
+                        label: const Text('Adicionar participante temporário'),
                       ),
-                    ],
+                    ),
                     const SizedBox(height: AppSpacing.md),
                     Container(
                       width: double.infinity,

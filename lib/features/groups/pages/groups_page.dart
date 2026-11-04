@@ -43,6 +43,8 @@ class GroupsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final groupsAsync = ref.watch(groupsProvider);
+    // Sem grupo cadastrado o botão fica no meio da tela, no lugar do "+".
+    final hasGroups = groupsAsync.valueOrNull?.isNotEmpty ?? false;
 
     // Veio do aviso "crie um grupo primeiro" (Eventos/Início).
     if (ref.read(pendingCreateGroupProvider)) {
@@ -58,20 +60,23 @@ class GroupsPage extends ConsumerWidget {
     return AppScaffold(
       scrollsBehindTopBar: true,
       title: 'Grupos',
-      floatingActionButton: AutoCollapsingFab(
-        label: 'Novo grupo',
-        onPressed: () => _showCreateGroupDialog(context, ref),
-      ),
+      floatingActionButton: hasGroups
+          ? AutoCollapsingFab(
+              label: 'Novo grupo',
+              onPressed: () => _showCreateGroupDialog(context, ref),
+            )
+          : null,
       child: groupsAsync.when(
         data: (groups) {
           if (groups.isEmpty) {
-            return const Center(
+            return Center(
               child: SingleChildScrollView(
                 child: EmptyState(
                   icon: Icons.groups_outlined,
                   title: 'Nenhum grupo cadastrado.',
-                  message:
-                      'Toque em "+" para criar um grupo e começar a dividir despesas.',
+                  message: 'Crie um grupo para começar a dividir despesas.',
+                  actionLabel: 'Novo grupo',
+                  onAction: () => _showCreateGroupDialog(context, ref),
                 ),
               ),
             );
@@ -759,11 +764,11 @@ Future<void> _showInviteDialog(
   );
 }
 
-/// Admin-only: temporários do grupo ("Pessoas sem cadastro" e "Pessoas
-/// temporárias" viraram uma lista só, 27/10/2026). Cadastrados pelo
-/// "Incluir temporário" (só o nome), entram nas despesas de qualquer evento
-/// e saem da lista quando todos os eventos com despesa deles fecham. Quem
-/// entra pelo convite escolhendo o nome continua temporário até o admin
+/// Temporários do grupo ("Pessoas sem cadastro" e "Pessoas temporárias"
+/// viraram uma lista só, 27/10/2026). Qualquer integrante cadastra pelo
+/// "Incluir temporário" (só o nome); eles entram nas despesas de qualquer
+/// evento e saem da lista quando todos os eventos com despesa deles fecham.
+/// Quem entra pelo convite escolhendo o nome continua temporário até o admin
 /// tornar integrante. Temporários antigos, presos a um evento, continuam
 /// aparecendo aqui (esmaecidos quando o evento fecha).
 class _GroupTemporaryMembers extends ConsumerStatefulWidget {
@@ -806,7 +811,7 @@ class _GroupTemporaryMembersState
     final isGroupAdmin =
         ref.watch(groupRoleProvider(widget.group.id)).valueOrNull == 'ADMIN';
     final query = ref.watch(groupMembersSearchProvider);
-    // Todos os integrantes veem os temporários; só o admin altera.
+    // Todos os integrantes veem e incluem temporários; só o admin altera.
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: FutureBuilder<List<GroupMemberModel>>(
@@ -818,13 +823,6 @@ class _GroupTemporaryMembersState
           ]..sort((first, second) => first.nickname
               .toLowerCase()
               .compareTo(second.nickname.toLowerCase()));
-          // Quem não é admin só vê a seção se tiver algum temporário.
-          if (!isGroupAdmin &&
-              (snapshot.connectionState != ConnectionState.done ||
-                  snapshot.hasError ||
-                  temporaries.isEmpty)) {
-            return const SizedBox.shrink();
-          }
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -833,27 +831,25 @@ class _GroupTemporaryMembersState
                   Expanded(
                       child: Text('Temporários',
                           style: Theme.of(context).textTheme.titleMedium)),
-                  if (isGroupAdmin)
-                    TextButton.icon(
-                      onPressed: () async {
-                        if (await showTemporaryGuestDialog(
-                            context, ref, widget.group.id)) {
-                          _reload();
-                        }
-                      },
-                      icon: const Icon(Icons.person_add_alt),
-                      label: const Text('Incluir temporário'),
-                    ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      if (await showTemporaryGuestDialog(
+                          context, ref, widget.group.id)) {
+                        _reload();
+                      }
+                    },
+                    icon: const Icon(Icons.person_add_alt),
+                    label: const Text('Incluir temporário'),
+                  ),
                 ],
               ),
-              if (isGroupAdmin)
-                Text(
-                  'Cadastre só o nome para já lançar despesas. A pessoa sai da '
-                  'lista quando todos os eventos com despesa dela forem '
-                  'fechados. Depois que ela criar conta pelo convite, dá para '
-                  'torná-la integrante do grupo.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+              Text(
+                'Cadastre só o nome para já lançar despesas. A pessoa sai da '
+                'lista quando todos os eventos com despesa dela forem '
+                'fechados. Depois que ela criar conta pelo convite, o '
+                'administrador pode torná-la integrante do grupo.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               if (snapshot.connectionState != ConnectionState.done)
                 const LinearProgressIndicator()
               else if (snapshot.hasError)
@@ -960,7 +956,7 @@ Future<void> _shareGroupInvite(
       ShareParams(text: 'Entre no grupo ${group.name} no DividiAí: $url'));
 }
 
-/// "Incluir temporário": o admin digita só o nome e a pessoa já entra no
+/// "Incluir temporário": o integrante digita só o nome e a pessoa já entra no
 /// grupo como temporária (sem conta) — dá pra lançar despesas dela em
 /// qualquer evento aberto. Depois aparece o link do convite do grupo: quem
 /// criar conta por ele e escolher o nome em "Quem é você?" fica com as
@@ -1032,12 +1028,11 @@ Future<bool> showTemporaryGuestDialog(
   final GroupInviteModel invite;
   try {
     invite = await ref.read(groupInviteRepositoryProvider).getOrCreate(groupId);
-  } catch (error) {
+  } catch (_) {
+    // Ex.: temporário cadastra outro temporário, mas não convida.
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(friendlyApiError(error,
-              fallback:
-                  '$nickname foi adicionado(a), mas não foi possível gerar o convite.'))));
+          content: Text('$nickname adicionado(a), sem link de convite.')));
     }
     return true;
   }
