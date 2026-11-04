@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/routes/exclusive_open.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/ptbr_sort.dart';
 import '../../../shared/widgets/app_scaffold.dart';
@@ -54,7 +55,8 @@ class DashboardPage extends ConsumerWidget {
                 customBorder: const StadiumBorder(),
                 // Abre o fluxo por cima da Home — ao salvar/cancelar a
                 // pessoa continua no Início.
-                onTap: () => openNewExpenseFlow(context, ref),
+                onTap: () =>
+                    openExclusive(() => openNewExpenseFlow(context, ref)),
                 child: SizedBox(
                   height: 52,
                   child: Row(

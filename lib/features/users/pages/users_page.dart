@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/routes/exclusive_open.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/validators.dart';
@@ -33,7 +34,8 @@ class UsersPage extends ConsumerWidget {
       floatingActionButton: isAdmin
           ? AutoCollapsingFab(
               label: 'Novo usuário',
-              onPressed: () => _showUserDialog(context, ref),
+              onPressed: () =>
+                  openExclusive(() => _showUserDialog(context, ref)),
             )
           : null,
       child: usersAsync.when(
@@ -64,27 +66,29 @@ class UsersPage extends ConsumerWidget {
                     ? null
                     : Text(
                         'Saldo junto com ${_billingUserLabel(users, user.billingUserId)}'),
-                onTap: () => _openFreshUserDetails(context, ref, user.id),
+                onTap: () => openExclusive(
+                    () => _openFreshUserDetails(context, ref, user.id)),
                 trailing: isAdmin
                     ? Wrap(
                         spacing: 8,
                         children: [
                           IconButton(
                             tooltip: 'Reiniciar senha',
-                            onPressed: () =>
-                                _showResetPasswordDialog(context, ref, user),
+                            onPressed: () => openExclusive(() =>
+                                _showResetPasswordDialog(context, ref, user)),
                             icon: const Icon(Icons.lock_reset_outlined),
                           ),
                           IconButton(
                             tooltip: 'Editar usuário',
-                            onPressed: () =>
-                                _showUserDialog(context, ref, user),
+                            onPressed: () => openExclusive(
+                                () => _showUserDialog(context, ref, user)),
                             icon: const Icon(Icons.edit_outlined),
                           ),
                           IconButton(
-                            tooltip: 'Apagar usuário',
-                            onPressed: () => _confirmDeleteUser(
-                                context, ref, user.id, user.fullName),
+                            tooltip: 'Excluir usuário',
+                            onPressed: () => openExclusive(() =>
+                                _confirmDeleteUser(
+                                    context, ref, user.id, user.fullName)),
                             icon: const Icon(Icons.delete_outline),
                           ),
                         ],
@@ -476,15 +480,15 @@ Future<void> _confirmDeleteUser(
     context: context,
     builder: (context) {
       return AlertDialog(
-        title: const Text('Apagar usuário'),
-        content: Text('Deseja apagar $fullName?'),
+        title: const Text('Excluir usuário'),
+        content: Text('Deseja excluir $fullName?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cancelar')),
           FilledButton.tonal(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Apagar')),
+              child: const Text('Excluir')),
         ],
       );
     },
@@ -502,7 +506,7 @@ Future<void> _confirmDeleteUser(
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(friendlyApiError(error,
-                fallback: 'Não foi possível apagar o usuário.'))),
+                fallback: 'Não foi possível excluir o usuário.'))),
       );
     }
   }

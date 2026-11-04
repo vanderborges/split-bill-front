@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/routes/exclusive_open.dart';
 import '../../../core/theme/app_semantic_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
@@ -249,16 +250,16 @@ class EventBalanceView extends ConsumerWidget {
                       FilledButton(
                         onPressed: report.eventId == null
                             ? null
-                            : () => confirmStartSettlement(
-                                context, ref, report.groupId, report.eventId!),
+                            : () => openExclusive(() => confirmStartSettlement(
+                                context, ref, report.groupId, report.eventId!)),
                         child: const Text('Fechar evento'),
                       ),
                     if (report.status == 'SETTLING' && isGroupAdmin)
                       OutlinedButton.icon(
                         onPressed: report.eventId == null
                             ? null
-                            : () => _sendBillingAlert(
-                                context, ref, report.eventId!),
+                            : () => openExclusive(() => _sendBillingAlert(
+                                context, ref, report.eventId!)),
                         icon: const Icon(Icons.campaign_outlined),
                         label: const Text('Enviar alerta de cobrança'),
                       ),
@@ -268,8 +269,8 @@ class EventBalanceView extends ConsumerWidget {
                       FilledButton(
                         onPressed: report.eventId == null
                             ? null
-                            : () => _confirmCloseEvent(
-                                context, ref, report.eventId!),
+                            : () => openExclusive(() => _confirmCloseEvent(
+                                context, ref, report.eventId!)),
                         child: const Text('Concluir evento'),
                       ),
                   ],
@@ -606,8 +607,8 @@ class _ReportTableState extends ConsumerState<_ReportTable> {
                       ? Align(
                           alignment: Alignment.centerRight,
                           child: FilledButton.icon(
-                            onPressed: () =>
-                                _openPayDialog(context, ref, widget.eventId!),
+                            onPressed: () => openExclusive(() =>
+                                _openPayDialog(context, ref, widget.eventId!)),
                             icon: const Icon(Icons.payments_outlined, size: 18),
                             label: const Text('Pagar'),
                           ),
@@ -1245,8 +1246,13 @@ Future<void> confirmStartSettlement(
     return;
   }
 
+  // A tela recarrega ao abrir o pagamento e o botão que chamou aqui pode sair
+  // do ar: a pergunta seguinte não depende dele.
+  final appContext = Navigator.of(context, rootNavigator: true).context;
+  final container = ProviderScope.containerOf(context, listen: false);
+  final EventModel settled;
   try {
-    await ref
+    settled = await ref
         .read(eventsRepositoryProvider)
         .startSettlement(eventId, receiverUserId: receiverUserId);
     ref.invalidate(monthsProvider);
@@ -1271,6 +1277,73 @@ Future<void> confirmStartSettlement(
             content: Text(friendlyApiError(error,
                 fallback: 'Não foi possível fechar o evento.'))),
       );
+    }
+    return;
+  }
+  if (appContext.mounted) {
+    await _offerNextMonth(appContext, container, settled);
+  }
+}
+
+/// Sem parcela/assinatura o mês seguinte não nasce sozinho: pergunta se quer
+/// criá-lo, aberto e sem despesas. "Agora não" só segue o fluxo do evento.
+Future<void> _offerNextMonth(BuildContext context, ProviderContainer container,
+    EventModel settled) async {
+  try {
+    final repository = container.read(eventsRepositoryProvider);
+    final next = settled.type == 'MONTHLY'
+        ? nextMonthToOffer(
+            settled, await repository.list(groupId: settled.groupId))
+        : null;
+    if (next == null || !context.mounted) {
+      return;
+    }
+    final (month, year) = next;
+    final monthName = '${month.toString().padLeft(2, '0')}/$year';
+    final create = await showDialog<bool>(
+      barrierDismissible: false,
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Criar o mês seguinte?'),
+        content: Text('Este mês não tem parcelas nem assinaturas para o '
+            'próximo. Deseja criar o evento $monthName agora, aberto e sem '
+            'despesas?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Agora não')),
+          FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text('Criar $monthName')),
+        ],
+      ),
+    );
+    if (create != true) {
+      return;
+    }
+    await repository.create(
+      name: monthName,
+      type: 'MONTHLY',
+      month: month,
+      year: year,
+      groupId: settled.groupId,
+    );
+    container.invalidate(monthsProvider);
+    container.invalidate(eventsProvider);
+    container.invalidate(dashboardGroupBalancesProvider);
+    if (context.mounted) {
+      // Tira o "Evento fechado..." da fila: este aviso aparece na hora.
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('Evento $monthName criado.')));
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+            content: Text(friendlyApiError(error,
+                fallback: 'Não foi possível criar o mês seguinte.'))));
     }
   }
 }

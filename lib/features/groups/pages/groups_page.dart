@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/routes/exclusive_open.dart';
 import '../../../core/routes/navigation_history.dart';
 import '../../../core/constants/environment.dart';
 import '../../../shared/api_error.dart';
@@ -53,7 +54,7 @@ class GroupsPage extends ConsumerWidget {
           return;
         }
         ref.read(pendingCreateGroupProvider.notifier).state = false;
-        _showCreateGroupDialog(context, ref);
+        openExclusive(() => _showCreateGroupDialog(context, ref));
       });
     }
 
@@ -63,22 +64,27 @@ class GroupsPage extends ConsumerWidget {
       floatingActionButton: hasGroups
           ? AutoCollapsingFab(
               label: 'Novo grupo',
-              onPressed: () => _showCreateGroupDialog(context, ref),
+              onPressed: () =>
+                  openExclusive(() => _showCreateGroupDialog(context, ref)),
             )
           : null,
       child: groupsAsync.when(
         data: (groups) {
           if (groups.isEmpty) {
-            return Center(
-              child: SingleChildScrollView(
-                child: EmptyState(
-                  icon: Icons.groups_outlined,
-                  title: 'Nenhum grupo cadastrado.',
-                  message: 'Crie um grupo para começar a dividir despesas.',
-                  actionLabel: 'Novo grupo',
-                  onAction: () => _showCreateGroupDialog(context, ref),
+            return CustomScrollView(
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: EmptyState(
+                    icon: Icons.groups_outlined,
+                    title: 'Nenhum grupo cadastrado.',
+                    message: 'Crie um grupo para começar a dividir despesas.',
+                    actionLabel: 'Novo grupo',
+                    onAction: () => openExclusive(
+                        () => _showCreateGroupDialog(context, ref)),
+                  ),
                 ),
-              ),
+              ],
             );
           }
           final query = ref.watch(groupsSearchProvider);
@@ -192,7 +198,8 @@ class GroupDetailPage extends ConsumerWidget {
         if (group != null && isAdmin)
           IconButton(
             tooltip: 'Editar grupo',
-            onPressed: () => _showEditGroupDialog(context, ref, group),
+            onPressed: () =>
+                openExclusive(() => _showEditGroupDialog(context, ref, group)),
             icon: const Icon(Icons.edit_outlined),
           ),
       ],
@@ -277,7 +284,7 @@ Future<void> _deleteGroup(
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(friendlyApiError(error,
-              fallback: 'Não foi possível deletar o grupo.'))));
+              fallback: 'Não foi possível excluir o grupo.'))));
     }
   }
 }
@@ -317,13 +324,15 @@ class _GroupMembers extends ConsumerWidget {
                         style: Theme.of(context).textTheme.titleMedium)),
                 if (canInvite)
                   TextButton.icon(
-                    onPressed: () => _showInviteDialog(context, ref, group),
+                    onPressed: () => openExclusive(
+                        () => _showInviteDialog(context, ref, group)),
                     icon: const Icon(Icons.person_add),
                     label: const Text('Convidar'),
                   ),
                 if (currentUser != null)
                   TextButton.icon(
-                    onPressed: () => _confirmLeaveGroup(context, ref, group),
+                    onPressed: () => openExclusive(
+                        () => _confirmLeaveGroup(context, ref, group)),
                     icon: const Icon(Icons.exit_to_app),
                     label: const Text('Sair'),
                   ),
@@ -364,12 +373,12 @@ class _GroupMembers extends ConsumerWidget {
                               IconButton(
                                 tooltip: 'Editar nome',
                                 icon: const Icon(Icons.edit_outlined),
-                                onPressed: () async {
+                                onPressed: () => openExclusive(() async {
                                   if (await _renamePlaceholder(
                                       context, ref, group.id, member)) {
                                     ref.invalidate(selectedGroupProvider);
                                   }
-                                },
+                                }),
                               ),
                             // Perfil (inclui tornar temporário em fixo): só
                             // quem já criou conta.
@@ -378,13 +387,14 @@ class _GroupMembers extends ConsumerWidget {
                                 tooltip: 'Alterar perfil no grupo',
                                 icon:
                                     const Icon(Icons.manage_accounts_outlined),
-                                onPressed: () => _showEditMemberRoleDialog(
-                                    context, ref, group, member),
+                                onPressed: () => openExclusive(() =>
+                                    _showEditMemberRoleDialog(
+                                        context, ref, group, member)),
                               ),
                             IconButton(
                               tooltip: 'Remover integrante',
                               icon: const Icon(Icons.person_remove_outlined),
-                              onPressed: () async {
+                              onPressed: () => openExclusive(() async {
                                 if (member.placeholder) {
                                   if (await _removePlaceholder(
                                       context, ref, group.id, member)) {
@@ -394,7 +404,7 @@ class _GroupMembers extends ConsumerWidget {
                                   await _confirmRemoveMember(
                                       context, ref, group, member);
                                 }
-                              },
+                              }),
                             ),
                           ],
                         )
@@ -695,12 +705,13 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
   try {
     final group = await ref.read(groupsRepositoryProvider).create(name: name);
     ref.read(selectedGroupIdProvider.notifier).state = group.id;
+    ref.read(selectedEventIdProvider.notifier).state = null;
     ref.invalidate(groupsProvider);
     ref.invalidate(selectedGroupProvider);
     ref.invalidate(dashboardGroupBalancesProvider);
-    // Grupo novo abre direto nos participantes (pra convidar).
+    // Grupo novo abre em Eventos, já filtrado nele (pra criar o 1o evento).
     if (context.mounted) {
-      context.go('/groups/${group.id}');
+      context.go('/events');
     }
   } catch (error) {
     if (context.mounted) {

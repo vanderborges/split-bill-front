@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_spacing.dart';
@@ -121,9 +123,22 @@ class _CenterOnScreenState extends State<_CenterOnScreen> {
         MediaQuery.paddingOf(widget.body.currentContext!).bottom;
     final bodyTop = bodyBox.localToGlobal(Offset.zero);
     final visibleCenterY = bodyTop.dy + (bodyBox.size.height - bottomInset) / 2;
-    // A posição medida já inclui o deslocamento atual.
+    // A posição medida já inclui o deslocamento atual. Mede como se a lista
+    // estivesse parada: reconstruir no meio da rolagem não pode segurar o
+    // bloco na tela enquanto o resto rola.
+    final scroll = Scrollable.maybeOf(context)?.position;
+    final scrolled = scroll != null && scroll.hasPixels ? scroll.pixels : 0.0;
     final ownCenter = ownBox.localToGlobal(ownBox.size.center(Offset.zero));
-    final shift = _shift + Offset(0, visibleCenterY - ownCenter.dy);
+    var shiftY = _shift.dy + visibleCenterY - (ownCenter.dy + scrolled);
+    // Não sai da área reservada ao bloco: fora dela o toque não chega (o
+    // Flutter só testa o toque dentro da área de quem está em volta) e o
+    // bloco ficaria por cima dos filtros.
+    final area = context.findRenderObject()?.parent;
+    if (area is RenderBox && area.hasSize) {
+      final room = math.max(0.0, (area.size.height - ownBox.size.height) / 2);
+      shiftY = shiftY.clamp(-room, room);
+    }
+    final shift = Offset(0, shiftY);
     if (!_measured || (shift - _shift).distance > 0.5) {
       setState(() {
         _shift = shift;
@@ -135,10 +150,13 @@ class _CenterOnScreenState extends State<_CenterOnScreen> {
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
-    return Opacity(
-      opacity: _measured ? 1 : 0,
-      child: Transform.translate(
-        offset: _shift,
+    // O deslocamento fica por fora do Opacity: por dentro, o desenho mudava
+    // de lugar e a área de toque do Opacity ficava na posição original, e o
+    // botão aparecia na tela sem responder.
+    return Transform.translate(
+      offset: _shift,
+      child: Opacity(
+        opacity: _measured ? 1 : 0,
         child: KeyedSubtree(key: _anchor, child: widget.child),
       ),
     );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/routes/exclusive_open.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/ptbr_sort.dart';
@@ -14,6 +15,7 @@ import '../../../shared/widgets/empty_state.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/keyboard_done_bar.dart';
 import '../../../shared/widgets/loading_state.dart';
+import '../../../shared/widgets/money_text.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../expenses/services/expenses_repository.dart';
@@ -26,6 +28,7 @@ import '../../months/services/months_repository.dart';
 import '../../reports/pages/reports_page.dart' show confirmStartSettlement;
 import '../../reports/services/reports_repository.dart';
 import '../models/event_model.dart';
+import '../models/pending_installment_model.dart';
 import '../services/events_repository.dart';
 import '../services/new_event_intent.dart';
 
@@ -52,7 +55,7 @@ class EventsPage extends ConsumerWidget {
           return;
         }
         ref.read(pendingAutoOpenEventProvider.notifier).state = false;
-        _showCreateEventDialog(context, ref);
+        openExclusive(() => _showCreateEventDialog(context, ref));
       });
     }
 
@@ -63,7 +66,7 @@ class EventsPage extends ConsumerWidget {
       floatingActionButton: hasEvents
           ? AutoCollapsingFab(
               label: 'Novo evento',
-              onPressed: () => _openNewEvent(context, ref),
+              onPressed: () => openExclusive(() => _openNewEvent(context, ref)),
             )
           : null,
       child: PinnedHeaderLayout(
@@ -108,8 +111,8 @@ class EventsPage extends ConsumerWidget {
         builder: (context, top) => CustomScrollView(
           slivers: [
             SliverToBoxAdapter(child: SizedBox(height: top - 8)),
-            // Sem nenhum grupo não há evento pra ocultar.
-            if (groupsAsync.valueOrNull?.isNotEmpty ?? false)
+            // Sem nenhum evento não há o que ocultar.
+            if (hasEvents)
               SliverToBoxAdapter(
                   child: CheckboxListTile(
                 value: hideClosed,
@@ -155,7 +158,8 @@ class EventsPage extends ConsumerWidget {
                             ? 'Crie um mês ou evento avulso.'
                             : 'Desmarque "Ocultar fechados" para ver todos.',
                         actionLabel: allEvents.isEmpty ? 'Novo evento' : null,
-                        onAction: () => _openNewEvent(context, ref),
+                        onAction: () =>
+                            openExclusive(() => _openNewEvent(context, ref)),
                       ));
                 }
                 final groupsById = {
@@ -206,7 +210,7 @@ class EventsPage extends ConsumerWidget {
                               context.go('/expenses');
                             },
                             trailing: PopupMenuButton<String>(
-                              onSelected: (value) async {
+                              onSelected: (value) => openExclusive(() async {
                                 if (value == 'expenses') {
                                   selectEvent(ref,
                                       groupId: event.groupId,
@@ -230,7 +234,7 @@ class EventsPage extends ConsumerWidget {
                                 } else if (value == 'delete') {
                                   await _deleteEvent(context, ref, event);
                                 }
-                              },
+                              }),
                               itemBuilder: (_) => [
                                 const PopupMenuItem(
                                     value: 'expenses',
@@ -254,7 +258,7 @@ class EventsPage extends ConsumerWidget {
                                       child: Text('Incluir temporário')),
                                 if (isEventAdmin)
                                   const PopupMenuItem(
-                                      value: 'delete', child: Text('Deletar')),
+                                      value: 'delete', child: Text('Excluir')),
                               ],
                             ),
                           ),
@@ -632,12 +636,30 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
         throw Exception('Nenhum grupo cadastrado');
       }
       final groupId = selectedGroupId ?? groups.first.id;
+      final monthName = '${month.toString().padLeft(2, '0')}/$year';
+      // Mês seguinte apagado depois do anterior sair de aberto: as parcelas
+      // não entram sozinhas, quem decide é a pessoa.
+      final pending = await ref
+          .read(eventsRepositoryProvider)
+          .pendingInstallments(groupId: groupId, month: month, year: year);
+      List<String>? toContinue;
+      if (pending.isNotEmpty) {
+        if (!context.mounted) {
+          return;
+        }
+        toContinue =
+            await askInstallmentsToContinue(context, pending, monthName);
+        if (toContinue == null) {
+          return;
+        }
+      }
       event = await ref.read(eventsRepositoryProvider).create(
-            name: '${month.toString().padLeft(2, '0')}/$year',
+            name: monthName,
             type: type,
             month: month,
             year: year,
             groupId: groupId,
+            continueInstallmentGroupIds: toContinue,
           );
       selectEvent(ref, groupId: event.groupId, eventId: event.id);
       ref.invalidate(monthsProvider);
@@ -672,6 +694,61 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
     monthController.dispose();
     yearController.dispose();
   }
+}
+
+/// "Seguir com as parcelas?": a pessoa marca quais parcelas/assinaturas do
+/// mês anterior entram em [monthName]. Vêm todas marcadas (desmarcar é o que
+/// interrompe a cobrança). null = cancelou, e o mês não é criado.
+Future<List<String>?> askInstallmentsToContinue(
+  BuildContext context,
+  List<PendingInstallmentModel> pending,
+  String monthName,
+) {
+  final selected = pending.map((item) => item.installmentGroupId).toSet();
+  return showDialog<List<String>>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setState) => AlertDialog(
+        title: const Text('Seguir com as parcelas?'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Marque o que entra em $monthName. O que ficar '
+                  'desmarcado para de ser cobrado nos próximos meses.'),
+              const SizedBox(height: AppSpacing.sm),
+              ...pending.map((item) => CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: selected.contains(item.installmentGroupId),
+                    onChanged: (checked) => setState(() {
+                      if (checked ?? false) {
+                        selected.add(item.installmentGroupId);
+                      } else {
+                        selected.remove(item.installmentGroupId);
+                      }
+                    }),
+                    title: Text(item.description),
+                    subtitle: Text(
+                        '${item.label} · ${formatCurrencyBRL(item.amount)}'),
+                  )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(selected.toList()),
+              child: Text('Criar $monthName')),
+        ],
+      ),
+    ),
+  );
 }
 
 /// Fechamento definitivo, depois de todos os pagamentos confirmados na tela
@@ -738,15 +815,15 @@ Future<void> _deleteEvent(
     barrierDismissible: false,
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Deletar evento'),
-      content: Text('Deseja deletar ${event.name}?'),
+      title: const Text('Excluir evento'),
+      content: Text('Deseja excluir ${event.name}?'),
       actions: [
         TextButton(
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancelar')),
         FilledButton.tonal(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Deletar')),
+            child: const Text('Excluir')),
       ],
     ),
   );
@@ -761,7 +838,7 @@ Future<void> _deleteEvent(
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(friendlyApiError(error,
-              fallback: 'Não foi possível deletar o evento.'))));
+              fallback: 'Não foi possível excluir o evento.'))));
     }
   }
 }

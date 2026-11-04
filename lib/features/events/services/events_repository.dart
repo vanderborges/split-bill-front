@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/dio_provider.dart';
 import '../../groups/services/groups_repository.dart';
 import '../models/event_model.dart';
+import '../models/pending_installment_model.dart';
 
 final eventsRepositoryProvider = Provider<EventsRepository>((ref) {
   return EventsRepository(ref.watch(dioProvider));
@@ -54,6 +55,28 @@ final hideClosedEventsProvider =
 /// Padrão de "Ocultar fechados": marcado, menos com todos os eventos fechados.
 bool hideClosedByDefault(List<EventModel>? events) =>
     events == null || events.isEmpty || events.any((event) => !event.isClosed);
+
+/// Mês a oferecer depois de [settled] entrar em pagamento: o seguinte, se o
+/// grupo não tem nenhum mês depois dele. Parcela/assinatura já cria o mês
+/// seguinte ao abrir o pagamento, então nesse caso não há o que perguntar.
+(int month, int year)? nextMonthToOffer(
+    EventModel settled, List<EventModel> groupEvents) {
+  final month = settled.month;
+  final year = settled.year;
+  if (settled.type != 'MONTHLY' || month == null || year == null) {
+    return null;
+  }
+  final reference = year * 12 + month;
+  final hasLater = groupEvents.any((event) =>
+      event.type == 'MONTHLY' &&
+      event.month != null &&
+      event.year != null &&
+      event.year! * 12 + event.month! > reference);
+  if (hasLater) {
+    return null;
+  }
+  return month == 12 ? (1, year + 1) : (month + 1, year);
+}
 
 final selectedEventIdProvider = StateProvider<String?>((ref) => null);
 
@@ -125,6 +148,7 @@ class EventsRepository {
     int? month,
     int? year,
     required String groupId,
+    List<String>? continueInstallmentGroupIds,
   }) async {
     final response = await dio.post<Map<String, dynamic>>(
       '/events',
@@ -136,9 +160,28 @@ class EventsRepository {
         'month': month,
         'year': year,
         'groupId': groupId,
+        if (continueInstallmentGroupIds != null)
+          'continueInstallmentGroupIds': continueInstallmentGroupIds,
       },
     );
     return EventModel.fromJson(response.data!);
+  }
+
+  /// Parcelas/assinaturas do mês anterior que só seguem no mês novo se a
+  /// pessoa escolher. Vazio = não há o que perguntar.
+  Future<List<PendingInstallmentModel>> pendingInstallments({
+    required String groupId,
+    required int month,
+    required int year,
+  }) async {
+    final response = await dio.get<List<dynamic>>(
+      '/events/pending-installments',
+      queryParameters: {'groupId': groupId, 'month': month, 'year': year},
+    );
+    return response.data!
+        .map((item) =>
+            PendingInstallmentModel.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   /// Primeira etapa do fechamento: congela o evento para novas despesas e

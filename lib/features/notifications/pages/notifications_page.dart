@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/routes/exclusive_open.dart';
 import '../../../core/routes/navigation_history.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/api_error.dart';
@@ -36,7 +37,8 @@ class NotificationsPage extends ConsumerWidget {
           IconButton(
             tooltip: 'Limpar todas',
             icon: const Icon(Icons.delete_sweep_outlined),
-            onPressed: () => _confirmClearAll(context, ref),
+            onPressed: () =>
+                openExclusive(() => _confirmClearAll(context, ref)),
           ),
       ],
       child: notificationsAsync.when(

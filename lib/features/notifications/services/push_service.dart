@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_provider.dart';
 import '../../../core/routes/app_router.dart';
+import '../../../core/routes/exclusive_open.dart';
 import '../../../firebase_options.dart';
 import 'notifications_repository.dart';
 
@@ -156,7 +157,11 @@ class PushService {
     // Toque na notificação com o app em segundo plano (já logado).
     FirebaseMessaging.onMessageOpenedApp.listen((message) async {
       await _markAsRead(message);
-      ref.read(appRouterProvider).go(_routeOf(message));
+      // Com form ou pop-up aberto, trocar de rota fecharia ele e perderia o
+      // que foi digitado: fica onde está (o aviso continua no sininho).
+      if (!isExclusiveOpen) {
+        ref.read(appRouterProvider).go(_routeOf(message));
+      }
     });
   }
 

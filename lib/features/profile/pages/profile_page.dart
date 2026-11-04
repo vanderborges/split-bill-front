@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../../../core/routes/exclusive_open.dart';
 import '../../../core/routes/navigation_history.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/theme_mode_provider.dart';
@@ -80,13 +81,15 @@ class ProfilePage extends ConsumerWidget {
               const SizedBox(height: AppSpacing.lg),
               // Mesma aparência do "Alterar senha" (contorno).
               OutlinedButton.icon(
-                onPressed: () => _showEditProfileDialog(context, ref, user),
+                onPressed: () => openExclusive(
+                    () => _showEditProfileDialog(context, ref, user)),
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Editar perfil'),
               ),
               const SizedBox(height: AppSpacing.md),
               OutlinedButton.icon(
-                onPressed: () => _showChangePasswordDialog(context, ref),
+                onPressed: () => openExclusive(
+                    () => _showChangePasswordDialog(context, ref)),
                 icon: const Icon(Icons.lock_reset_outlined),
                 label: const Text('Alterar senha'),
               ),
@@ -116,7 +119,8 @@ class ProfilePage extends ConsumerWidget {
                   style: TextButton.styleFrom(
                     foregroundColor: Theme.of(context).colorScheme.error,
                   ),
-                  onPressed: () => _showDeleteAccountDialog(context, ref, user),
+                  onPressed: () => openExclusive(
+                      () => _showDeleteAccountDialog(context, ref, user)),
                   child: const Text(
                     'Excluir conta',
                     style: TextStyle(decoration: TextDecoration.underline),

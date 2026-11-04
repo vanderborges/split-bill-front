@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/routes/exclusive_open.dart';
 import '../../../core/routes/navigation_history.dart';
 import '../../../core/theme/app_semantic_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -113,8 +114,8 @@ class _ExpensesView extends ConsumerWidget {
               ? null
               : AutoCollapsingFab(
                   label: 'Nova despesa',
-                  onPressed: () =>
-                      openNewExpenseFlow(context, ref, useSelectedEvent: true),
+                  onPressed: () => openExclusive(() =>
+                      openNewExpenseFlow(context, ref, useSelectedEvent: true)),
                 ),
       child: eventAsync.when(
         data: (event) {
@@ -124,7 +125,8 @@ class _ExpensesView extends ConsumerWidget {
               title: 'Nenhuma despesa cadastrada.',
               message: 'Registre o primeiro gasto.',
               actionLabel: 'Nova despesa',
-              onAction: () => openNewExpenseFlow(context, ref),
+              onAction: () =>
+                  openExclusive(() => openNewExpenseFlow(context, ref)),
             );
           }
           final isGroupAdmin =
@@ -202,7 +204,9 @@ class _ExpensesView extends ConsumerWidget {
                     slivers: [
                       SliverToBoxAdapter(child: SizedBox(height: top)),
                       // "Mostrar só minhas despesas" rola junto com a lista.
-                      if (!showBalance)
+                      // Sem nenhuma despesa no evento não há o que filtrar.
+                      if (!showBalance &&
+                          (expensesAsync.valueOrNull?.isNotEmpty ?? false))
                         SliverToBoxAdapter(
                             child: Padding(
                           padding: const EdgeInsets.only(right: AppSpacing.lg),
@@ -264,9 +268,9 @@ class _ExpensesView extends ConsumerWidget {
                                             !selectedEventClosedForExpenses
                                         ? 'Nova despesa'
                                         : null,
-                                    onAction: () => openNewExpenseFlow(
-                                        context, ref,
-                                        useSelectedEvent: true),
+                                    onAction: () => openExclusive(() =>
+                                        openNewExpenseFlow(context, ref,
+                                            useSelectedEvent: true)),
                                   ));
                             }
                             final sortedExpenses = [...visibleExpenses]
@@ -349,7 +353,7 @@ class _ExpensesView extends ConsumerWidget {
                                               .bodySmall,
                                         ),
                                       ),
-                                      onTap: () async {
+                                      onTap: () => openExclusive(() async {
                                         // Sempre abre o detalhe enxuto primeiro; o
                                         // formulário completo só vem pelo "Editar".
                                         final wantsEdit =
@@ -377,7 +381,7 @@ class _ExpensesView extends ConsumerWidget {
                                               event, users, categories,
                                               expense: expense);
                                         }
-                                      },
+                                      }),
                                       title: Text(expense.description),
                                       subtitle: [shareSummary, installmentLabel]
                                               .whereType<String>()
@@ -1149,6 +1153,8 @@ Future<void> _openExpenseForm(
                       category: selectedCategory,
                       monthId: targetEvent.monthId,
                       eventId: targetEvent.id,
+                      installments: installmentsToSave,
+                      subscription: isSubscription,
                       participantIds: selectedParticipants.toList(),
                       participantShareCounts: participantShareCounts,
                       participantShareDescriptions:
@@ -1744,7 +1750,10 @@ Future<void> _openExpenseForm(
                           );
                         },
                       ),
-                    if (expense == null && event.monthId != null) ...[
+                    // Também ao editar despesa comum; série já criada só
+                    // mostra o que ela é (abaixo).
+                    if (expense?.installmentGroupId == null &&
+                        event.monthId != null) ...[
                       const SizedBox(height: AppSpacing.sm),
                       const Divider(),
                       const SizedBox(height: AppSpacing.md),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/routes/exclusive_open.dart';
 import '../../../shared/api_error.dart';
 import '../../../shared/widgets/person_avatar.dart';
 import '../../auth/services/auth_repository.dart';
@@ -180,13 +181,13 @@ class _JoinGroupState extends ConsumerState<_JoinGroup> {
             leading: PersonAvatar(name: option.nickname, seed: option.userId),
             title: Text(option.nickname),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => _confirmPlaceholder(option),
+            onTap: () => openExclusive(() => _confirmPlaceholder(option)),
           ),
         ),
       ),
       const SizedBox(height: 12),
       OutlinedButton(
-        onPressed: joining ? null : _confirmNewPerson,
+        onPressed: joining ? null : () => openExclusive(_confirmNewPerson),
         child: joining
             ? const SizedBox(
                 width: 18,

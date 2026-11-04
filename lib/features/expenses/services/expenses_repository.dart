@@ -120,6 +120,9 @@ class ExpensesRepository {
     required String category,
     String? monthId,
     String? eventId,
+    // Despesa comum virando repetida ou assinatura.
+    int? installments,
+    bool subscription = false,
     required List<String> participantIds,
     required Map<String, int> participantShareCounts,
     required Map<String, String> participantShareDescriptions,
@@ -135,6 +138,8 @@ class ExpensesRepository {
         category: category,
         monthId: monthId,
         eventId: eventId,
+        installments: installments,
+        subscription: subscription,
         participantIds: participantIds,
         participantShareCounts: participantShareCounts,
         participantShareDescriptions: participantShareDescriptions,
