@@ -1255,21 +1255,7 @@ Future<void> confirmStartSettlement(
     settled = await ref
         .read(eventsRepositoryProvider)
         .startSettlement(eventId, receiverUserId: receiverUserId);
-    ref.invalidate(monthsProvider);
-    ref.invalidate(currentMonthProvider);
-    ref.invalidate(currentMonthReportProvider);
-    ref.invalidate(currentMonthExpensesProvider);
-    ref.invalidate(eventsProvider);
-    ref.invalidate(selectedEventProvider);
-    ref.invalidate(selectedEventReportProvider);
-    ref.invalidate(selectedEventExpensesProvider);
-    ref.invalidate(selectedEventSettlementsProvider);
-    ref.invalidate(dashboardGroupBalancesProvider);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Evento fechado, aguardando pagamentos.')),
-      );
-    }
+    _refreshAfterSettlementChange(container);
   } catch (error) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1285,21 +1271,50 @@ Future<void> confirmStartSettlement(
   }
 }
 
+void _refreshAfterSettlementChange(ProviderContainer container) {
+  container.invalidate(monthsProvider);
+  container.invalidate(currentMonthProvider);
+  container.invalidate(currentMonthReportProvider);
+  container.invalidate(currentMonthExpensesProvider);
+  container.invalidate(eventsProvider);
+  container.invalidate(selectedEventProvider);
+  container.invalidate(selectedEventReportProvider);
+  container.invalidate(selectedEventExpensesProvider);
+  container.invalidate(selectedEventSettlementsProvider);
+  container.invalidate(dashboardGroupBalancesProvider);
+}
+
 /// Sem parcela/assinatura o mês seguinte não nasce sozinho: pergunta se quer
-/// criá-lo, aberto e sem despesas. "Agora não" só segue o fluxo do evento.
+/// criá-lo, aberto e sem despesas. "Agora não" só segue o fluxo do evento;
+/// "Cancelar" desfaz o fechamento e o evento volta a ficar aberto.
 Future<void> _offerNextMonth(BuildContext context, ProviderContainer container,
     EventModel settled) async {
+  const closedMessage = 'Evento fechado, aguardando pagamentos.';
+  void showMessage(String message) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  var failureMessage = 'Não foi possível criar o mês seguinte.';
   try {
     final repository = container.read(eventsRepositoryProvider);
     final next = settled.type == 'MONTHLY'
         ? nextMonthToOffer(
             settled, await repository.list(groupId: settled.groupId))
         : null;
-    if (next == null || !context.mounted) {
+    if (!context.mounted) {
+      return;
+    }
+    if (next == null) {
+      showMessage(closedMessage);
       return;
     }
     final (month, year) = next;
     final monthName = '${month.toString().padLeft(2, '0')}/$year';
+    // null = Cancelar (ou o voltar do celular).
     final create = await showDialog<bool>(
       barrierDismissible: false,
       context: context,
@@ -1307,8 +1322,12 @@ Future<void> _offerNextMonth(BuildContext context, ProviderContainer container,
         title: const Text('Criar o mês seguinte?'),
         content: Text('Este mês não tem parcelas nem assinaturas para o '
             'próximo. Deseja criar o evento $monthName agora, aberto e sem '
-            'despesas?'),
+            'despesas?\n\nCancelar desfaz o fechamento e o evento continua '
+            'aberto.'),
         actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar')),
           TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('Agora não')),
@@ -1318,7 +1337,16 @@ Future<void> _offerNextMonth(BuildContext context, ProviderContainer container,
         ],
       ),
     );
-    if (create != true) {
+    if (create == null) {
+      failureMessage =
+          'Não foi possível cancelar: o evento continua aguardando pagamentos.';
+      await repository.reopen(settled.id);
+      _refreshAfterSettlementChange(container);
+      showMessage('Operação cancelada. O evento continua aberto.');
+      return;
+    }
+    if (!create) {
+      showMessage(closedMessage);
       return;
     }
     await repository.create(
@@ -1331,20 +1359,9 @@ Future<void> _offerNextMonth(BuildContext context, ProviderContainer container,
     container.invalidate(monthsProvider);
     container.invalidate(eventsProvider);
     container.invalidate(dashboardGroupBalancesProvider);
-    if (context.mounted) {
-      // Tira o "Evento fechado..." da fila: este aviso aparece na hora.
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Evento $monthName criado.')));
-    }
+    showMessage('Evento fechado e $monthName criado.');
   } catch (error) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-            content: Text(friendlyApiError(error,
-                fallback: 'Não foi possível criar o mês seguinte.'))));
-    }
+    showMessage(friendlyApiError(error, fallback: failureMessage));
   }
 }
 

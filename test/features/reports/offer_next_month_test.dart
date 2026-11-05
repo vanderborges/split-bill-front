@@ -28,6 +28,17 @@ class _FakeEvents extends EventsRepository {
   final List<EventModel> groupEvents;
   final VoidCallback? onList;
   final created = <String>[];
+  final reopened = <String>[];
+  bool failReopen = false;
+
+  @override
+  Future<EventModel> reopen(String id) async {
+    if (failReopen) {
+      throw StateError('sem rede');
+    }
+    reopened.add(id);
+    return _month(11, 'OPEN');
+  }
 
   @override
   Future<EventModel> startSettlement(String id,
@@ -127,7 +138,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(events.created, ['12/2026']);
-    expect(find.text('Evento 12/2026 criado.'), findsOneWidget);
+    expect(find.text('Evento fechado e 12/2026 criado.'), findsOneWidget);
   });
 
   testWidgets('"Agora não" não cria nada', (tester) async {
@@ -138,7 +149,37 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(events.created, isEmpty);
+    expect(events.reopened, isEmpty);
     expect(find.text('Criar o mês seguinte?'), findsNothing);
+    expect(find.text('Evento fechado, aguardando pagamentos.'), findsOneWidget);
+  });
+
+  testWidgets('"Cancelar" reabre o evento e não cria o mês', (tester) async {
+    final events = _FakeEvents([_month(11, 'SETTLING')]);
+    await _pump(tester, events, ValueNotifier(true));
+
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    expect(events.reopened, ['e11']);
+    expect(events.created, isEmpty);
+    expect(find.text('Criar o mês seguinte?'), findsNothing);
+    expect(find.text('Operação cancelada. O evento continua aberto.'),
+        findsOneWidget);
+    expect(find.text('Evento fechado, aguardando pagamentos.'), findsNothing);
+  });
+
+  testWidgets('"Cancelar" sem conseguir reabrir avisa que não cancelou',
+      (tester) async {
+    final events = _FakeEvents([_month(11, 'SETTLING')])..failReopen = true;
+    await _pump(tester, events, ValueNotifier(true));
+
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Não foi possível cancelar'), findsOneWidget);
+    expect(find.text('Operação cancelada. O evento continua aberto.'),
+        findsNothing);
   });
 
   testWidgets('parcela já criou o mês seguinte: não pergunta', (tester) async {
@@ -147,6 +188,7 @@ void main() {
 
     expect(find.text('Criar o mês seguinte?'), findsNothing);
     expect(events.created, isEmpty);
+    expect(find.text('Evento fechado, aguardando pagamentos.'), findsOneWidget);
   });
 
   testWidgets('tela recarrega e tira o botão do ar: pergunta mesmo assim',
@@ -162,6 +204,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(events.created, ['12/2026']);
-    expect(find.text('Evento 12/2026 criado.'), findsOneWidget);
+    expect(find.text('Evento fechado e 12/2026 criado.'), findsOneWidget);
   });
 }

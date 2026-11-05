@@ -20,8 +20,7 @@ import '../../../shared/widgets/status_badge.dart';
 import '../../dashboard/services/dashboard_repository.dart';
 import '../../expenses/services/expenses_repository.dart';
 import '../../groups/models/group_model.dart';
-import '../../groups/pages/groups_page.dart'
-    show openGroupDetail, showTemporaryGuestDialog;
+import '../../groups/pages/groups_page.dart' show showTemporaryGuestDialog;
 import '../../groups/services/groups_repository.dart';
 import '../../groups/services/create_group_intent.dart';
 import '../../months/services/months_repository.dart';
@@ -677,9 +676,9 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
       selectEvent(ref, groupId: event.groupId, eventId: event.id);
     }
     _invalidateEventState(ref);
-    // Evento novo leva pro detalhe do grupo dele.
+    // Evento novo fica em Eventos, com o filtro no grupo dele (selectEvent).
     if (context.mounted) {
-      openGroupDetail(context, ref, event.groupId);
+      context.go('/events');
     }
   } catch (error) {
     if (context.mounted) {
