@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/phone_input_formatter.dart';
 import '../../../shared/validators.dart';
+import '../../../shared/widgets/privacy_policy_link.dart';
 import '../../users/services/users_repository.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
@@ -160,6 +161,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                       onPressed: saving ? null : () => context.go('/login'),
                       child: const Text('Voltar para entrar'),
                     ),
+                    const SizedBox(height: 8),
+                    const PrivacyPolicyLink(
+                        prefix: 'Ao se cadastrar, você concorda com a nossa'),
                   ],
                 ),
               ),

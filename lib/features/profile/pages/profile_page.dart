@@ -15,6 +15,7 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass.dart';
 import '../../../shared/widgets/error_state.dart';
 import '../../../shared/widgets/loading_state.dart';
+import '../../../shared/widgets/privacy_policy_link.dart';
 import '../../../shared/widgets/person_avatar.dart';
 import '../../auth/services/auth_repository.dart';
 import '../../users/models/user_model.dart';
@@ -112,6 +113,7 @@ class ProfilePage extends ConsumerWidget {
               const SizedBox(height: AppSpacing.xl),
               const Divider(),
               const SizedBox(height: AppSpacing.md),
+              const PrivacyPolicyLink(),
               // Só um link (vermelho, sem borda): ação rara e destrutiva,
               // não deve competir com os botões do Perfil.
               Center(
@@ -493,7 +495,7 @@ Future<void> _showDeleteAccountDialog(
   }
 
   try {
-    await ref.read(usersRepositoryProvider).delete(user.id);
+    await ref.read(usersRepositoryProvider).deleteOwnAccount();
     await ref.read(authRepositoryProvider).logout();
     resetSessionScopedProviders(ref);
     if (context.mounted) {

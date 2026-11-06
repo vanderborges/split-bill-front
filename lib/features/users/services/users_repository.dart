@@ -88,6 +88,12 @@ class UsersRepository {
     await dio.delete<void>('/users/$id');
   }
 
+  /// "Excluir conta" do Perfil: a própria pessoa, admin ou não (exigência
+  /// da App Store e do Google Play).
+  Future<void> deleteOwnAccount() async {
+    await dio.delete<void>('/users/me');
+  }
+
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
