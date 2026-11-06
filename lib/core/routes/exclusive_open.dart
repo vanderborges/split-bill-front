@@ -9,7 +9,8 @@ bool get isExclusiveOpen => _opening;
 /// aceitando toques: sem a trava, cada toque abria uma tela por cima da outra.
 ///
 /// Usar no que é aberto a partir da tela de fundo. O que abre de dentro de
-/// um formulário já aberto (ex.: "Nova categoria") não passa por aqui.
+/// um formulário já aberto (ex.: "Adicionar participante temporário") não
+/// passa por aqui.
 Future<void> openExclusive(Future<void> Function() open) async {
   if (_opening) {
     return;

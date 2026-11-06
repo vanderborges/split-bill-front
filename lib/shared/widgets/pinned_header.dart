@@ -31,6 +31,10 @@ class _PinnedHeaderLayoutState extends State<PinnedHeaderLayout> {
   static const double _fade = 28;
 
   double _headerHeight = 0;
+  // A altura do cabeçalho só é conhecida depois do 1º quadro. Antes disso o
+  // conteúdo não é montado: senão ele aparecia por baixo dos campos fixos e
+  // pulava pro lugar no quadro seguinte (a tela "piscava" ao trocar).
+  bool _headerMeasured = false;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +44,10 @@ class _PinnedHeaderLayoutState extends State<PinnedHeaderLayout> {
         header == null ? top + 8 : top + _headerHeight + AppPinnedGap.below;
     return Stack(
       children: [
-        Positioned.fill(child: widget.builder(context, listTop)),
+        Positioned.fill(
+            child: header == null || _headerMeasured
+                ? widget.builder(context, listTop)
+                : const SizedBox.shrink()),
         if (header != null) ...[
           // Fundo desfocado de lado a lado, do topo da tela até embaixo dos
           // campos, sumindo em degradê.
@@ -57,8 +64,14 @@ class _PinnedHeaderLayoutState extends State<PinnedHeaderLayout> {
             right: 16,
             child: _SizeReporter(
               onSize: (size) {
-                if (size.height != _headerHeight) {
-                  setState(() => _headerHeight = size.height);
+                if (!mounted) {
+                  return;
+                }
+                if (size.height != _headerHeight || !_headerMeasured) {
+                  setState(() {
+                    _headerHeight = size.height;
+                    _headerMeasured = true;
+                  });
                 }
               },
               child: header,

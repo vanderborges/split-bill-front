@@ -676,9 +676,9 @@ Future<void> _showCreateEventDialog(BuildContext context, WidgetRef ref) async {
       selectEvent(ref, groupId: event.groupId, eventId: event.id);
     }
     _invalidateEventState(ref);
-    // Evento novo fica em Eventos, com o filtro no grupo dele (selectEvent).
+    // Evento novo abre direto em Despesas dele (já selecionado acima).
     if (context.mounted) {
-      context.go('/events');
+      context.go('/expenses');
     }
   } catch (error) {
     if (context.mounted) {

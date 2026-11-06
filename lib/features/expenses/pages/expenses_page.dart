@@ -846,9 +846,12 @@ Future<void> _openExpenseForm(
   );
   var selectedExpenseDate = expense?.expenseDate ?? DateTime.now();
   final categoryOptions = [...categories];
+  // Despesa nova (ou com tipo que saiu da lista) começa em "Geral".
   var selectedCategory = categoryOptions.contains(expense?.category)
       ? expense!.category
-      : categoryOptions.first;
+      : categoryOptions.contains('Geral')
+          ? 'Geral'
+          : categoryOptions.first;
   // Grupo/evento já chegam escolhidos (menu de "Nova despesa", ou o evento
   // da despesa sendo editada) — o form só mostra onde vai lançar.
   final groups = await ref.read(groupsProvider.future);
@@ -863,6 +866,9 @@ Future<void> _openExpenseForm(
   late Map<String, TextEditingController> payerControllers;
   late String singlePayerId;
   final currentUserId = ref.read(currentUserProvider).valueOrNull?.id;
+  // Só o admin geral cria e exclui tipo de despesa.
+  final isGeneralAdmin =
+      ref.read(currentUserProvider).valueOrNull?.admin ?? false;
   // Divisão por valor: quem teve o valor digitado pelo usuário. Os demais
   // são recalculados com o que falta do total, dividido igualmente.
   final editedShareAmountIds = <String>{};
@@ -1247,6 +1253,9 @@ Future<void> _openExpenseForm(
                     ),
                     const SizedBox(height: AppSpacing.md),
                     GlassDropdownField<String>(
+                      // Recria o campo quando um tipo entra ou sai da lista.
+                      key: ValueKey(
+                          'tipo-$selectedCategory-${categoryOptions.length}'),
                       initialValue: selectedCategory,
                       decoration:
                           const InputDecoration(labelText: 'Tipo de despesa'),
@@ -1260,24 +1269,49 @@ Future<void> _openExpenseForm(
                         }
                       },
                     ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: () async {
-                          final created = await _showCreateCategoryDialog(
-                              routeContext, ref);
-                          if (created != null) {
-                            setState(() {
-                              categoryOptions.add(created);
-                              categoryOptions.sort();
-                              selectedCategory = created;
-                            });
-                          }
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text('Novo tipo'),
+                    if (isGeneralAdmin)
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        children: [
+                          TextButton.icon(
+                            onPressed: selectedCategory == 'Geral'
+                                ? null
+                                : () async {
+                                    final deleted = await _deleteCategory(
+                                        routeContext, ref, selectedCategory);
+                                    if (deleted) {
+                                      setState(() {
+                                        categoryOptions
+                                            .remove(selectedCategory);
+                                        selectedCategory =
+                                            categoryOptions.contains('Geral')
+                                                ? 'Geral'
+                                                : categoryOptions.first;
+                                      });
+                                    }
+                                  },
+                            icon: const Icon(Icons.delete_outline),
+                            label: const Text('Excluir tipo'),
+                          ),
+                          TextButton.icon(
+                            onPressed: () async {
+                              final created = await _showCreateCategoryDialog(
+                                  routeContext, ref);
+                              if (created != null) {
+                                setState(() {
+                                  if (!categoryOptions.contains(created)) {
+                                    categoryOptions.add(created);
+                                    categoryOptions.sort();
+                                  }
+                                  selectedCategory = created;
+                                });
+                              }
+                            },
+                            icon: const Icon(Icons.add),
+                            label: const Text('Novo tipo'),
+                          ),
+                        ],
                       ),
-                    ),
                     const SizedBox(height: AppSpacing.md),
                     const Divider(),
                     const SizedBox(height: AppSpacing.md),
@@ -2122,48 +2156,43 @@ Widget _detailPersonRow(
   );
 }
 
+/// "Novo tipo" (só admin geral). Devolve o nome criado, ou null.
 Future<String?> _showCreateCategoryDialog(
     BuildContext context, WidgetRef ref) async {
   final controller = TextEditingController();
   final saved = await showDialog<bool>(
     barrierDismissible: false,
     context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: const Text('Novo tipo de despesa'),
-        content: TextField(
-          controller: controller,
-          maxLength: 40,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(labelText: 'Nome'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Salvar')),
-        ],
-      );
-    },
+    builder: (context) => AlertDialog(
+      title: const Text('Novo tipo de despesa'),
+      content: TextField(
+        controller: controller,
+        maxLength: 40,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(labelText: 'Nome'),
+        autofocus: true,
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Salvar')),
+      ],
+    ),
   );
-
-  if (saved != true || !context.mounted) {
-    controller.dispose();
-    return null;
-  }
-
   final name = controller.text.trim();
   controller.dispose();
+  if (saved != true || !context.mounted) {
+    return null;
+  }
   if (name.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Informe o nome do tipo de despesa.')),
     );
     return null;
   }
-
   try {
     final category =
         await ref.read(expenseCategoriesRepositoryProvider).create(name);
@@ -2171,13 +2200,55 @@ Future<String?> _showCreateCategoryDialog(
     return category.name;
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyApiError(error,
-                fallback: 'Não foi possível criar o tipo.'))),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível criar o tipo.'))));
     }
     return null;
+  }
+}
+
+/// "Excluir tipo" (só admin geral): sai da lista; as despesas que já usam o
+/// tipo continuam com ele. true = excluiu.
+Future<bool> _deleteCategory(
+    BuildContext context, WidgetRef ref, String name) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Excluir tipo de despesa'),
+      content: Text('Deseja excluir o tipo "$name"? As despesas que já usam '
+          'esse tipo continuam com ele.'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar')),
+        FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Excluir')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) {
+    return false;
+  }
+  try {
+    final categories = await ref.read(expenseCategoriesProvider.future);
+    final category = categories.where((item) => item.name == name);
+    if (category.isEmpty) {
+      return false;
+    }
+    await ref
+        .read(expenseCategoriesRepositoryProvider)
+        .delete(category.first.id);
+    ref.invalidate(expenseCategoriesProvider);
+    return true;
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyApiError(error,
+              fallback: 'Não foi possível excluir o tipo.'))));
+    }
+    return false;
   }
 }
 
