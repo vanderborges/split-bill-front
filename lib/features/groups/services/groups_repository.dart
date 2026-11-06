@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_provider.dart';
+import '../../../core/network/prefetch_cache.dart';
 import '../../../shared/ptbr_sort.dart';
 import '../../auth/services/auth_repository.dart';
 import '../models/group_member_model.dart';
@@ -35,6 +36,12 @@ final groupRoleProvider =
   final user = await ref.watch(currentUserProvider.future);
   if (user == null) {
     return null;
+  }
+  // Extrato: o papel já veio no `GET /statement` (null = saiu do grupo).
+  final cached =
+      ref.read(prefetchCacheProvider).take<String>(statementRoleKey(groupId));
+  if (cached.found) {
+    return cached.value;
   }
   final members =
       await ref.watch(groupsRepositoryProvider).listMembers(groupId);

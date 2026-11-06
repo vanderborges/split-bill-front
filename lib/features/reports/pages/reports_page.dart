@@ -1593,6 +1593,13 @@ class AllEventsStatementView extends ConsumerWidget {
     // Inclui os eventos com despesa da pessoa em grupos de onde ela saiu.
     final eventsAsync = ref.watch(statementEventsProvider);
     final groups = ref.watch(allGroupsProvider).valueOrNull;
+    // Os cards só montam depois da chamada única do Extrato: assim cada um
+    // usa o que ela trouxe em vez de fazer 2 chamadas. Se ela falhar, os
+    // cards buscam um a um, como antes.
+    final prefetch = ref.watch(statementPrefetchProvider);
+    if (prefetch.isLoading && !prefetch.hasValue) {
+      return const LoadingState();
+    }
     return eventsAsync.when(
       data: (events) {
         if (events.isEmpty) {

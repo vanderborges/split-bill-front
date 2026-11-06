@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_provider.dart';
+import '../../../core/network/prefetch_cache.dart';
 import '../../events/services/events_repository.dart';
 import '../models/event_settlement_model.dart';
 import '../models/my_payment_model.dart';
@@ -20,9 +21,17 @@ final selectedEventSettlementsProvider =
   return ref.watch(eventSettlementsRepositoryProvider).listByEvent(event.id);
 });
 
-/// Pagamentos de um evento qualquer (Extrato com "Todos os eventos").
+/// Pagamentos de um evento qualquer (Extrato com "Todos os eventos"). Usa o
+/// que já veio no `GET /statement`, se tiver (ver `PrefetchCache`).
 final eventSettlementsProvider =
-    FutureProvider.family<List<EventSettlementModel>, String>((ref, eventId) {
+    FutureProvider.family<List<EventSettlementModel>, String>(
+        (ref, eventId) async {
+  final cached = ref
+      .read(prefetchCacheProvider)
+      .take<List<EventSettlementModel>>(statementSettlementsKey(eventId));
+  if (cached.found && cached.value != null) {
+    return cached.value!;
+  }
   return ref.watch(eventSettlementsRepositoryProvider).listByEvent(eventId);
 });
 
