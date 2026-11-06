@@ -52,7 +52,10 @@ final eventReportProvider =
 /// e 1 por grupo (113 para quem tem 48 eventos). Mesmo filtro de grupo de
 /// [statementEventsProvider], e recarrega junto com ele.
 final statementPrefetchProvider = FutureProvider<void>((ref) async {
-  await ref.watch(statementEventsProvider.future);
+  // Sem esperar a lista de eventos: as duas chamadas saem juntas (antes era
+  // uma depois da outra, duas idas e voltas ao servidor). Só fica
+  // dependente dela para recarregar junto.
+  ref.watch(statementEventsProvider.future).ignore();
   final groupId = ref.watch(selectedGroupIdProvider);
   final cache = ref.read(prefetchCacheProvider);
   final response = await ref.read(dioProvider).get<Map<String, dynamic>>(
