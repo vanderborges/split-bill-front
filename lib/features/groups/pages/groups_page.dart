@@ -190,6 +190,18 @@ class GroupDetailPage extends ConsumerWidget {
       });
     }
 
+    // Veio de "Novo grupo": abre o "Convidar" assim que o grupo aparece.
+    if (group != null && ref.read(pendingInviteGroupIdProvider) == groupId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted ||
+            ref.read(pendingInviteGroupIdProvider) != groupId) {
+          return;
+        }
+        ref.read(pendingInviteGroupIdProvider.notifier).state = null;
+        openExclusive(() => _showInviteDialog(context, ref, group));
+      });
+    }
+
     return AppScaffold(
       scrollsBehindTopBar: true,
       title: group?.name ?? 'Grupo',
@@ -299,10 +311,13 @@ class _GroupMembers extends ConsumerWidget {
     final isGroupAdmin =
         ref.watch(groupRoleProvider(group.id)).valueOrNull == 'ADMIN';
     final currentUser = ref.watch(currentUserProvider).valueOrNull;
-    return FutureBuilder<List<GroupMemberModel>>(
-      future: ref.watch(groupsRepositoryProvider).listMembers(group.id),
-      builder: (context, snapshot) => Consumer(builder: (context, ref, _) {
-        final allMembers = snapshot.data ?? <GroupMemberModel>[];
+    final membersAsync = ref.watch(groupMembersProvider(group.id));
+    // Carregando só na primeira vez; ao recarregar continua mostrando a lista.
+    final loading = !membersAsync.hasValue && !membersAsync.hasError;
+    final failed = !membersAsync.hasValue && membersAsync.hasError;
+    return Builder(
+      builder: (context) => Consumer(builder: (context, ref, _) {
+        final allMembers = membersAsync.valueOrNull ?? <GroupMemberModel>[];
         final query = ref.watch(groupMembersSearchProvider);
         // Temporários ficam só na lista "Temporários"; ao virar integrante
         // fixo a pessoa sobe pra cá.
@@ -338,16 +353,14 @@ class _GroupMembers extends ConsumerWidget {
                   ),
               ],
             ),
-            if (snapshot.connectionState != ConnectionState.done)
-              const LinearProgressIndicator(),
-            if (snapshot.hasError &&
-                snapshot.connectionState == ConnectionState.done)
+            if (loading) const LinearProgressIndicator(),
+            if (failed)
               ErrorState(
-                message: friendlyApiError(snapshot.error!,
+                message: friendlyApiError(membersAsync.error!,
                     fallback: 'Não foi possível carregar os integrantes.'),
+                onRetry: () => ref.invalidate(groupMembersProvider(group.id)),
               )
-            else if (members.isEmpty &&
-                snapshot.connectionState == ConnectionState.done)
+            else if (members.isEmpty && !loading)
               EmptyState(
                 icon: Icons.person_add_alt_outlined,
                 // Mensagem da seção Integrantes, não da tela.
@@ -709,9 +722,11 @@ Future<void> _showCreateGroupDialog(BuildContext context, WidgetRef ref) async {
     ref.invalidate(groupsProvider);
     ref.invalidate(selectedGroupProvider);
     ref.invalidate(dashboardGroupBalancesProvider);
-    // Grupo novo abre em Eventos, já filtrado nele (pra criar o 1o evento).
+    // Grupo novo abre no detalhe dele com o "Convidar" aberto (o próximo
+    // passo é chamar as pessoas; o evento vem depois).
+    ref.read(pendingInviteGroupIdProvider.notifier).state = group.id;
     if (context.mounted) {
-      context.go('/events');
+      context.go('/groups/${group.id}');
     }
   } catch (error) {
     if (context.mounted) {
@@ -794,24 +809,8 @@ class _GroupTemporaryMembers extends ConsumerStatefulWidget {
 
 class _GroupTemporaryMembersState
     extends ConsumerState<_GroupTemporaryMembers> {
-  Future<List<GroupMemberModel>>? _future;
-
-  Future<List<GroupMemberModel>> _load() => _future ??=
-      ref.read(groupsRepositoryProvider).listTemporaryMembers(widget.group.id);
-
-  void _reload() {
-    setState(() => _future = null);
-    ref.invalidate(selectedGroupProvider);
-  }
-
-  @override
-  void didUpdateWidget(_GroupTemporaryMembers oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Grupo recarregado (ex.: integrante alterado) também recarrega a lista.
-    if (!identical(oldWidget.group, widget.group)) {
-      _future = null;
-    }
-  }
+  // Recarregar o grupo também recarrega esta lista (groupTemporaryMembersProvider).
+  void _reload() => ref.invalidate(selectedGroupProvider);
 
   // Sem o evento do temporário (ex.: "· 10/2026"): só se tem conta.
   String _subtitle(GroupMemberModel member) =>
@@ -822,14 +821,15 @@ class _GroupTemporaryMembersState
     final isGroupAdmin =
         ref.watch(groupRoleProvider(widget.group.id)).valueOrNull == 'ADMIN';
     final query = ref.watch(groupMembersSearchProvider);
+    final temporariesAsync =
+        ref.watch(groupTemporaryMembersProvider(widget.group.id));
     // Todos os integrantes veem e incluem temporários; só o admin altera.
     return Padding(
       padding: const EdgeInsets.only(top: 16),
-      child: FutureBuilder<List<GroupMemberModel>>(
-        future: _load(),
-        builder: (context, snapshot) {
+      child: Builder(
+        builder: (context) {
           final temporaries = [
-            ...(snapshot.data ?? <GroupMemberModel>[])
+            ...(temporariesAsync.valueOrNull ?? <GroupMemberModel>[])
                 .where((member) => matchesSearchPtBr(member.nickname, query))
           ]..sort((first, second) => first.nickname
               .toLowerCase()
@@ -861,13 +861,15 @@ class _GroupTemporaryMembersState
                 'administrador pode torná-la integrante do grupo.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              if (snapshot.connectionState != ConnectionState.done)
+              // Carregando só na primeira vez; ao recarregar mantém a lista.
+              if (!temporariesAsync.hasValue && !temporariesAsync.hasError)
                 const LinearProgressIndicator()
-              else if (snapshot.hasError)
+              else if (!temporariesAsync.hasValue)
                 ErrorState(
-                  message: friendlyApiError(snapshot.error!,
+                  message: friendlyApiError(temporariesAsync.error!,
                       fallback: 'Não foi possível carregar os temporários.'),
-                  onRetry: _reload,
+                  onRetry: () => ref.invalidate(
+                      groupTemporaryMembersProvider(widget.group.id)),
                 )
               else
                 ...temporaries.map(
@@ -929,8 +931,7 @@ class _GroupTemporaryMembersState
               // (é por ele que o temporário cria conta e fica com as
               // despesas).
               if (isGroupAdmin &&
-                  snapshot.connectionState == ConnectionState.done &&
-                  !snapshot.hasError &&
+                  temporariesAsync.hasValue &&
                   temporaries.isNotEmpty)
                 TextButton.icon(
                   style: TextButton.styleFrom(padding: EdgeInsets.zero),

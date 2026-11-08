@@ -5,6 +5,10 @@ import 'package:go_router/go_router.dart';
 /// Sinaliza que a tela Grupos deve abrir o "Novo grupo" assim que montar.
 final pendingCreateGroupProvider = StateProvider<bool>((ref) => false);
 
+/// Grupo recém-criado: o detalhe dele abre já com o "Convidar" aberto
+/// (o próximo passo é chamar as pessoas). Guarda o id do grupo.
+final pendingInviteGroupIdProvider = StateProvider<String?>((ref) => null);
+
 /// Quem ainda não tem nenhum grupo tentou criar evento ou despesa: avisa
 /// que precisa de um grupo antes e leva direto pra criação dele.
 Future<void> showCreateGroupFirstDialog(

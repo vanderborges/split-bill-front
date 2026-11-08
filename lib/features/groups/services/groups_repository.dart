@@ -55,6 +55,24 @@ final groupRoleProvider =
 
 final selectedGroupIdProvider = StateProvider<String?>((ref) => null);
 
+/// Integrantes do detalhe do grupo, guardados em memória: rolar a tela não
+/// busca de novo (antes a lista refazia a chamada toda vez que o bloco
+/// voltava para a tela, e a barra de carregando piscava). Recarrega junto
+/// com o grupo: os mesmos `ref.invalidate(selectedGroupProvider)` de quando
+/// alguém é convidado, removido ou alterado.
+final groupMembersProvider =
+    FutureProvider.family<List<GroupMemberModel>, String>((ref, groupId) {
+  ref.watch(selectedGroupProvider.future).ignore();
+  return ref.watch(groupsRepositoryProvider).listMembers(groupId);
+});
+
+/// Temporários do detalhe do grupo (mesma regra de [groupMembersProvider]).
+final groupTemporaryMembersProvider =
+    FutureProvider.family<List<GroupMemberModel>, String>((ref, groupId) {
+  ref.watch(selectedGroupProvider.future).ignore();
+  return ref.watch(groupsRepositoryProvider).listTemporaryMembers(groupId);
+});
+
 final selectedGroupProvider = FutureProvider<GroupModel?>((ref) async {
   final groups = await ref.watch(groupsProvider.future);
   if (groups.isEmpty) {
