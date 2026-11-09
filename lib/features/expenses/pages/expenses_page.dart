@@ -608,10 +608,14 @@ Future<bool> _confirmCancelSubscription(
 /// Sem nenhum evento aberto, pergunta se quer criar um evento (em vez de
 /// criar um mês em silêncio) — "Sim" leva pra tela de criação de evento,
 /// "Não" só avisa que não dá pra lançar despesa sem evento aberto.
+///
+/// Com [openExpensesOnSave] (CTA da Home), depois de salvar vai pra lista
+/// de Despesas do evento onde a despesa entrou.
 Future<void> openNewExpenseFlow(
   BuildContext context,
   WidgetRef ref, {
   bool useSelectedEvent = false,
+  bool openExpensesOnSave = false,
 }) async {
   final current = await ref.read(selectedEventProvider.future);
   if (!context.mounted) {
@@ -678,16 +682,24 @@ Future<void> openNewExpenseFlow(
     return;
   }
 
-  await _openFormForEvent(context, ref, event);
+  final saved = await _openFormForEvent(context, ref, event);
+  if (saved && openExpensesOnSave && context.mounted) {
+    selectEvent(ref, groupId: event.groupId, eventId: event.id);
+    ref.invalidate(selectedEventProvider);
+    ref.invalidate(selectedEventExpensesProvider);
+    context.go('/expenses');
+  }
 }
 
-Future<void> _openFormForEvent(
+/// true = a despesa foi salva.
+Future<bool> _openFormForEvent(
     BuildContext context, WidgetRef ref, EventModel event) async {
   final users = await _loadEventUsers(ref, event.groupId, eventId: event.id);
   final categories = await _loadCategoryNames(ref);
-  if (context.mounted) {
-    await _openExpenseForm(context, ref, event, users, categories);
+  if (!context.mounted) {
+    return false;
   }
+  return _openExpenseForm(context, ref, event, users, categories);
 }
 
 /// Menu "onde lançar": grupo + evento aberto daquele grupo. null = fechou
@@ -819,8 +831,8 @@ Future<bool?> _confirmCreateEvent(BuildContext context) {
 /// Abre o formulário de despesa em tela cheia (Etapa 8 do roteiro de UX):
 /// valor em destaque primeiro, "quem pagou" e "parcelas" como seções
 /// avançadas que só aparecem quando o usuário pede. Nenhum campo enviado
-/// ao backend mudou — é só reorganização de apresentação.
-Future<void> _openExpenseForm(
+/// ao backend mudou — é só reorganização de apresentação. true = salvou.
+Future<bool> _openExpenseForm(
   BuildContext context,
   WidgetRef ref,
   EventModel event,
@@ -834,7 +846,7 @@ Future<void> _openExpenseForm(
           content:
               Text('Cadastre ao menos um usuário antes de criar despesas.')),
     );
-    return;
+    return false;
   }
 
   final descriptionController =
@@ -954,7 +966,7 @@ Future<void> _openExpenseForm(
 
   if (!context.mounted) {
     disposeControllers();
-    return;
+    return false;
   }
 
   final saved = await Navigator.of(context).push<bool>(
@@ -2010,7 +2022,7 @@ Future<void> _openExpenseForm(
   // real, então só falta avisar e liberar os controllers.
   if (saved != true || !context.mounted) {
     disposeControllers();
-    return;
+    return saved == true;
   }
 
   ScaffoldMessenger.of(context).showSnackBar(
@@ -2021,6 +2033,7 @@ Future<void> _openExpenseForm(
     ),
   );
   disposeControllers();
+  return true;
 }
 
 /// Detalhe enxuto de uma despesa já cadastrada — é o que abre ao tocar numa

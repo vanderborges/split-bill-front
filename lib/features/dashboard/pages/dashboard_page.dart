@@ -53,10 +53,10 @@ class DashboardPage extends ConsumerWidget {
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 customBorder: const StadiumBorder(),
-                // Abre o fluxo por cima da Home — ao salvar/cancelar a
-                // pessoa continua no Início.
-                onTap: () =>
-                    openExclusive(() => openNewExpenseFlow(context, ref)),
+                // Abre o fluxo por cima da Home — ao cancelar a pessoa
+                // continua no Início; ao salvar vai pras Despesas do evento.
+                onTap: () => openExclusive(() =>
+                    openNewExpenseFlow(context, ref, openExpensesOnSave: true)),
                 child: SizedBox(
                   height: 52,
                   child: Row(

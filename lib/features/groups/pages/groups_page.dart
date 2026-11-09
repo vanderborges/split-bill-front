@@ -182,7 +182,9 @@ class GroupDetailPage extends ConsumerWidget {
     final isAdmin =
         ref.watch(groupRoleProvider(groupId)).valueOrNull == 'ADMIN';
 
-    if (groupsAsync.hasValue && group == null) {
+    // Só depois de recarregar: logo após criar um grupo a lista antiga (sem
+    // ele) ainda está em tela e voltaria pra lista por engano.
+    if (groupsAsync.hasValue && !groupsAsync.isLoading && group == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
           context.go('/groups');
